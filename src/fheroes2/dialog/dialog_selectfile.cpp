@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,8 +22,8 @@
  ***************************************************************************/
 
 #include <algorithm>
-#include <cctype>
 #include <ctime>
+#include <iomanip>
 #include <iterator>
 #include <sstream>
 #include <string>
@@ -32,13 +33,18 @@
 #include "dialog.h"
 #include "dir.h"
 #include "game.h"
+#include "game_hotkeys.h"
 #include "icn.h"
 #include "interface_list.h"
 #include "maps_fileinfo.h"
 #include "settings.h"
 #include "system.h"
 #include "text.h"
+#include "tools.h"
+#include "translations.h"
 #include "ui_button.h"
+#include "ui_dialog.h"
+#include "ui_text.h"
 #include "world.h"
 
 namespace
@@ -64,6 +70,15 @@ namespace
 
         return text.size();
     }
+
+    std::string ResizeToShortName( const std::string & str )
+    {
+        std::string res = System::GetBasename( str );
+        size_t it = res.rfind( '.' );
+        if ( std::string::npos != it )
+            res.resize( it );
+        return res;
+    }
 }
 
 std::string SelectFileListSimple( const std::string &, const std::string &, const bool );
@@ -72,22 +87,40 @@ bool RedrawExtraInfo( const fheroes2::Point &, const std::string &, const std::s
 class FileInfoListBox : public Interface::ListBox<Maps::FileInfo>
 {
 public:
-    FileInfoListBox( const fheroes2::Point & pt, bool & edit )
+    using Interface::ListBox<Maps::FileInfo>::ActionListDoubleClick;
+    using Interface::ListBox<Maps::FileInfo>::ActionListSingleClick;
+    using Interface::ListBox<Maps::FileInfo>::ActionListPressRight;
+
+    explicit FileInfoListBox( const fheroes2::Point & pt )
         : Interface::ListBox<Maps::FileInfo>( pt )
-        , edit_mode( edit )
         , _isDoubleClicked( false )
     {}
 
-    void RedrawItem( const Maps::FileInfo &, s32, s32, bool ) override;
+    void RedrawItem( const Maps::FileInfo & info, int32_t dstx, int32_t dsty, bool current ) override;
     void RedrawBackground( const fheroes2::Point & ) override;
 
-    void ActionCurrentUp( void ) override;
-    void ActionCurrentDn( void ) override;
+    void ActionCurrentUp() override;
+    void ActionCurrentDn() override;
     void ActionListDoubleClick( Maps::FileInfo & ) override;
     void ActionListSingleClick( Maps::FileInfo & ) override;
-    void ActionListPressRight( Maps::FileInfo & ) override {}
 
-    bool & edit_mode;
+    void ActionListPressRight( Maps::FileInfo & info ) override
+    {
+        // On some OSes like Windows, the path may contain '\' symbols. This symbol doesn't exist in the resources.
+        // To avoid this we have to replace all '\' symbols by '/' symbols.
+        std::string fullPath = info.file;
+        StringReplace( fullPath, "\\", "/" );
+
+        fheroes2::Text header( ResizeToShortName( info.file ), fheroes2::FontType::normalYellow() );
+
+        fheroes2::MultiFontText body;
+        body.add( { _( "Map: " ), fheroes2::FontType::normalYellow() } );
+        body.add( { info.name, fheroes2::FontType::normalWhite() } );
+        body.add( { _( "\n\nLocation: " ), fheroes2::FontType::normalYellow() } );
+        body.add( { fullPath, fheroes2::FontType::normalWhite() } );
+
+        fheroes2::showMessage( header, body, Dialog::ZERO );
+    }
 
     bool isDoubleClicked() const
     {
@@ -98,22 +131,25 @@ private:
     bool _isDoubleClicked;
 };
 
-void FileInfoListBox::RedrawItem( const Maps::FileInfo & info, s32 dstx, s32 dsty, bool current )
+#define ARRAY_COUNT( A ) sizeof( A ) / sizeof( A[0] )
+
+void FileInfoListBox::RedrawItem( const Maps::FileInfo & info, int32_t dstx, int32_t dsty, bool current )
 {
     char shortDate[20];
     char shortHours[20];
     char shortTime[20];
-    time_t timeval = info.localtime;
 
-    std::fill( shortDate, std::end( shortDate ), 0 );
-    std::fill( shortHours, std::end( shortHours ), 0 );
-    std::fill( shortTime, std::end( shortTime ), 0 );
-    std::strftime( shortDate, ARRAY_COUNT( shortDate ) - 1, "%b %d,", std::localtime( &timeval ) );
-    std::strftime( shortHours, ARRAY_COUNT( shortHours ) - 1, "%H", std::localtime( &timeval ) );
-    std::strftime( shortTime, ARRAY_COUNT( shortTime ) - 1, ":%M", std::localtime( &timeval ) );
+    const tm tmi = System::GetTM( info.localtime );
+
+    std::fill( shortDate, std::end( shortDate ), static_cast<char>( 0 ) );
+    std::fill( shortHours, std::end( shortHours ), static_cast<char>( 0 ) );
+    std::fill( shortTime, std::end( shortTime ), static_cast<char>( 0 ) );
+    std::strftime( shortDate, ARRAY_COUNT( shortDate ) - 1, "%b %d,", &tmi );
+    std::strftime( shortHours, ARRAY_COUNT( shortHours ) - 1, "%H", &tmi );
+    std::strftime( shortTime, ARRAY_COUNT( shortTime ) - 1, ":%M", &tmi );
     std::string savname( System::GetBasename( info.file ) );
 
-    if ( savname.size() ) {
+    if ( !savname.empty() ) {
         Text text;
 
         const std::string saveExtension = Game::GetSaveFileExtension();
@@ -141,37 +177,27 @@ void FileInfoListBox::RedrawBackground( const fheroes2::Point & dst )
     fheroes2::Blit( fheroes2::AGG::GetICN( ICN::REQBKG, 0 ), fheroes2::Display::instance(), dst.x, dst.y );
 }
 
-void FileInfoListBox::ActionCurrentUp( void )
+void FileInfoListBox::ActionCurrentUp()
 {
-    edit_mode = false;
+    // Do nothing.
 }
 
-void FileInfoListBox::ActionCurrentDn( void )
+void FileInfoListBox::ActionCurrentDn()
 {
-    edit_mode = false;
+    // Do nothing.
 }
 
 void FileInfoListBox::ActionListDoubleClick( Maps::FileInfo & )
 {
-    edit_mode = false;
     _isDoubleClicked = true;
 }
 
-void FileInfoListBox::ActionListSingleClick( Maps::FileInfo & )
+void FileInfoListBox::ActionListSingleClick( Maps::FileInfo & /*unused*/ )
 {
-    edit_mode = false;
+    // Do nothing.
 }
 
-std::string ResizeToShortName( const std::string & str )
-{
-    std::string res = System::GetBasename( str );
-    size_t it = res.rfind( '.' );
-    if ( std::string::npos != it )
-        res.resize( it );
-    return res;
-}
-
-MapsFileInfoList GetSortedMapsFileInfoList( void )
+MapsFileInfoList GetSortedMapsFileInfoList()
 {
     ListFiles list1;
     list1.ReadDir( Game::GetSaveDir(), Game::GetSaveFileExtension(), false );
@@ -188,30 +214,23 @@ MapsFileInfoList GetSortedMapsFileInfoList( void )
     return list2;
 }
 
-std::string Dialog::SelectFileSave( void )
+std::string Dialog::SelectFileSave()
 {
-    const Settings & conf = Settings::Get();
-    const std::string & name = conf.CurrentFileInfo().name;
-
-    std::string base = name.size() ? name : "newgame";
-    base.resize( std::distance( base.begin(), std::find_if( base.begin(), base.end(), ::ispunct ) ) );
-    std::replace_if( base.begin(), base.end(), ::isspace, '_' );
     std::ostringstream os;
 
-    os << System::ConcatePath( Game::GetSaveDir(), base ) <<
-        // add postfix:
-        '_' << std::setw( 4 ) << std::setfill( '0' ) << world.CountDay() << Game::GetSaveFileExtension();
-    std::string lastfile = os.str();
-    return SelectFileListSimple( _( "File to Save:" ), lastfile, true );
+    os << System::ConcatePath( Game::GetSaveDir(), Game::GetSaveFileBaseName() ) << '_' << std::setw( 4 ) << std::setfill( '0' ) << world.CountDay()
+       << Game::GetSaveFileExtension();
+
+    return SelectFileListSimple( _( "File to Save:" ), os.str(), true );
 }
 
-std::string Dialog::SelectFileLoad( void )
+std::string Dialog::SelectFileLoad()
 {
     const std::string & lastfile = Game::GetLastSavename();
-    return SelectFileListSimple( _( "File to Load:" ), ( lastfile.size() ? lastfile : "" ), false );
+    return SelectFileListSimple( _( "File to Load:" ), ( !lastfile.empty() ? lastfile : "" ), false );
 }
 
-std::string SelectFileListSimple( const std::string & header, const std::string & lastfile, const bool editor )
+std::string SelectFileListSimple( const std::string & header, const std::string & lastfile, const bool isEditing )
 {
     fheroes2::Display & display = fheroes2::Display::instance();
     LocalEvent & le = LocalEvent::Get();
@@ -235,23 +254,27 @@ std::string SelectFileListSimple( const std::string & header, const std::string 
     fheroes2::Button buttonOk( rt.x + 34, rt.y + 315, ICN::REQUEST, 1, 2 );
     fheroes2::Button buttonCancel( rt.x + 244, rt.y + 315, ICN::REQUEST, 3, 4 );
 
-    bool edit_mode = false;
-
     MapsFileInfoList lists = GetSortedMapsFileInfoList();
-    FileInfoListBox listbox( rt.getPosition(), edit_mode );
+    FileInfoListBox listbox( rt.getPosition() );
 
     listbox.RedrawBackground( rt.getPosition() );
-    listbox.SetScrollButtonUp( ICN::REQUESTS, 5, 6, fheroes2::Point( rt.x + 327, rt.y + 55 ) );
-    listbox.SetScrollButtonDn( ICN::REQUESTS, 7, 8, fheroes2::Point( rt.x + 327, rt.y + 257 ) );
-    listbox.SetScrollBar( fheroes2::AGG::GetICN( ICN::ESCROLL, 3 ), fheroes2::Rect( rt.x + 328, rt.y + 73, 12, 180 ) );
+    listbox.SetScrollButtonUp( ICN::REQUESTS, 5, 6, { rt.x + 327, rt.y + 55 } );
+    listbox.SetScrollButtonDn( ICN::REQUESTS, 7, 8, { rt.x + 327, rt.y + 257 } );
+
+    const fheroes2::Sprite & originalSlider = fheroes2::AGG::GetICN( ICN::ESCROLL, 3 );
+    const fheroes2::Image scrollbarSlider = fheroes2::generateScrollbarSlider( originalSlider, false, 180, 11, static_cast<int32_t>( lists.size() ),
+                                                                               { 0, 0, originalSlider.width(), 8 }, { 0, 7, originalSlider.width(), 8 } );
+
+    listbox.setScrollBarArea( { rt.x + 328, rt.y + 73, 12, 180 } );
+    listbox.setScrollBarImage( scrollbarSlider );
     listbox.SetAreaMaxItems( 11 );
-    listbox.SetAreaItems( fheroes2::Rect( rt.x + 40, rt.y + 55, 265, 215 ) );
+    listbox.SetAreaItems( { rt.x + 40, rt.y + 55, 265, 215 } );
     listbox.SetListContent( lists );
 
     std::string filename;
     size_t charInsertPos = 0;
 
-    if ( lastfile.size() ) {
+    if ( !lastfile.empty() ) {
         filename = ResizeToShortName( lastfile );
         charInsertPos = filename.size();
 
@@ -264,7 +287,7 @@ std::string SelectFileListSimple( const std::string & header, const std::string 
             listbox.SetCurrent( std::distance( lists.begin(), it ) );
         }
         else {
-            if ( !editor ) {
+            if ( !isEditing ) {
                 filename.clear();
                 charInsertPos = 0;
             }
@@ -272,7 +295,7 @@ std::string SelectFileListSimple( const std::string & header, const std::string 
         }
     }
 
-    if ( !editor && lists.empty() )
+    if ( !isEditing && lists.empty() )
         buttonOk.disable();
 
     if ( filename.empty() && listbox.isSelected() ) {
@@ -291,6 +314,7 @@ std::string SelectFileListSimple( const std::string & header, const std::string 
 
     std::string result;
     bool is_limit = false;
+    std::string lastSelectedSaveFileName;
 
     while ( le.HandleEvents() && result.empty() ) {
         le.MousePressLeft( buttonOk.area() ) && buttonOk.isEnabled() ? buttonOk.drawOnPress() : buttonOk.drawOnRelease();
@@ -299,25 +323,26 @@ std::string SelectFileListSimple( const std::string & header, const std::string 
         listbox.QueueEventProcessing();
 
         bool needRedraw = false;
+        bool isListboxSelected = listbox.isSelected();
 
-        if ( ( buttonOk.isEnabled() && le.MouseClickLeft( buttonOk.area() ) ) || Game::HotKeyPressEvent( Game::EVENT_DEFAULT_READY ) || listbox.isDoubleClicked() ) {
-            if ( filename.size() )
+        if ( ( buttonOk.isEnabled() && le.MouseClickLeft( buttonOk.area() ) ) || Game::HotKeyPressEvent( Game::HotKeyEvent::DEFAULT_OKAY )
+             || listbox.isDoubleClicked() ) {
+            if ( !filename.empty() )
                 result = System::ConcatePath( Game::GetSaveDir(), filename + Game::GetSaveFileExtension() );
-            else if ( listbox.isSelected() )
+            else if ( isListboxSelected )
                 result = listbox.GetCurrent().file;
         }
-        else if ( le.MouseClickLeft( buttonCancel.area() ) || Game::HotKeyPressEvent( Game::EVENT_DEFAULT_EXIT ) ) {
+        else if ( le.MouseClickLeft( buttonCancel.area() ) || Game::HotKeyPressEvent( Game::HotKeyEvent::DEFAULT_CANCEL ) ) {
             break;
         }
-        else if ( le.MouseClickLeft( enter_field ) && editor ) {
-            edit_mode = true;
+        else if ( le.MouseClickLeft( enter_field ) && isEditing ) {
             charInsertPos = GetInsertPosition( filename, le.GetMouseCursor().x, enter_field.x );
             if ( filename.empty() )
                 buttonOk.disable();
 
             needRedraw = true;
         }
-        else if ( edit_mode && le.KeyPress() && ( !is_limit || KEY_BACKSPACE == le.KeyValue() || KEY_DELETE == le.KeyValue() ) ) {
+        else if ( isEditing && le.KeyPress() && ( !is_limit || fheroes2::Key::KEY_BACKSPACE == le.KeyValue() || fheroes2::Key::KEY_DELETE == le.KeyValue() ) ) {
             charInsertPos = InsertKeySym( filename, charInsertPos, le.KeyValue(), le.KeyMod() );
             if ( filename.empty() )
                 buttonOk.disable();
@@ -325,8 +350,23 @@ std::string SelectFileListSimple( const std::string & header, const std::string 
                 buttonOk.enable();
 
             needRedraw = true;
+            listbox.Unselect();
+            isListboxSelected = false;
         }
-        if ( !edit_mode && le.KeyPress( KEY_DELETE ) && listbox.isSelected() ) {
+
+        if ( le.MousePressRight( buttonCancel.area() ) ) {
+            Dialog::Message( _( "Cancel" ), _( "Exit this menu without doing anything." ), Font::BIG );
+        }
+        else if ( le.MousePressRight( buttonOk.area() ) ) {
+            if ( isEditing ) {
+                Dialog::Message( _( "Okay" ), _( "Click to save the current game." ), Font::BIG );
+            }
+            else {
+                Dialog::Message( _( "Okay" ), _( "Click to load a previously saved game." ), Font::BIG );
+            }
+        }
+
+        if ( !isEditing && le.KeyPress( fheroes2::Key::KEY_DELETE ) && isListboxSelected ) {
             std::string msg( _( "Are you sure you want to delete file:" ) );
             msg.append( "\n \n" );
             msg.append( System::GetBasename( listbox.GetCurrent().file ) );
@@ -335,6 +375,13 @@ std::string SelectFileListSimple( const std::string & header, const std::string 
                 listbox.RemoveSelected();
                 if ( lists.empty() || filename.empty() )
                     buttonOk.disable();
+
+                const fheroes2::Image updatedScrollbarSlider
+                    = fheroes2::generateScrollbarSlider( originalSlider, false, 180, 11, static_cast<int32_t>( lists.size() ), { 0, 0, originalSlider.width(), 8 },
+                                                         { 0, 7, originalSlider.width(), 8 } );
+
+                listbox.setScrollBarImage( updatedScrollbarSlider );
+
                 listbox.SetListContent( lists );
             }
 
@@ -347,15 +394,20 @@ std::string SelectFileListSimple( const std::string & header, const std::string 
 
         listbox.Redraw();
 
-        if ( edit_mode && editor )
-            is_limit = RedrawExtraInfo( rt.getPosition(), header, InsertString( filename, charInsertPos, "_" ), enter_field );
-        else if ( listbox.isSelected() ) {
-            filename = ResizeToShortName( listbox.GetCurrent().file );
+        std::string selectedFileName = isListboxSelected ? ResizeToShortName( listbox.GetCurrent().file ) : "";
+        if ( isListboxSelected && lastSelectedSaveFileName != selectedFileName ) {
+            lastSelectedSaveFileName = selectedFileName;
+            filename = selectedFileName;
             charInsertPos = filename.size();
-            is_limit = RedrawExtraInfo( rt.getPosition(), header, filename, enter_field );
         }
-        else
-            is_limit = RedrawExtraInfo( rt.getPosition(), header, filename, enter_field );
+        else if ( isEditing ) {
+            // Empty last selected save file name so that we can replace the input field's name if we select the same save file again
+            // but when loading (isEditing == false), this doesn't matter since we cannot write to the input field
+            lastSelectedSaveFileName = "";
+        }
+
+        is_limit = isEditing ? RedrawExtraInfo( rt.getPosition(), header, InsertString( filename, charInsertPos, "_" ), enter_field )
+                             : RedrawExtraInfo( rt.getPosition(), header, filename, enter_field );
 
         buttonOk.draw();
         buttonCancel.draw();
@@ -372,7 +424,7 @@ bool RedrawExtraInfo( const fheroes2::Point & dst, const std::string & header, c
     Text text( header, Font::BIG );
     text.Blit( dst.x + 175 - text.w() / 2, dst.y + 30 );
 
-    if ( filename.size() ) {
+    if ( !filename.empty() ) {
         text.Set( filename, Font::BIG );
         text.Blit( field.x, field.y + 1, field.width );
     }

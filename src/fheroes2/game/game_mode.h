@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2021                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2021 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -29,7 +29,8 @@ namespace fheroes2
         MAIN_MENU,
         NEW_GAME,
         LOAD_GAME,
-        HIGHSCORES,
+        HIGHSCORES_STANDARD,
+        HIGHSCORES_CAMPAIGN,
         CREDITS,
         NEW_STANDARD,
         NEW_CAMPAIGN_SELECTION,
@@ -37,13 +38,11 @@ namespace fheroes2
         NEW_PRICE_OF_LOYALTY_CAMPAIGN,
         NEW_MULTI,
         NEW_HOT_SEAT,
-        NEW_NETWORK,
         NEW_BATTLE_ONLY,
         LOAD_STANDARD,
         LOAD_CAMPAIN,
         LOAD_MULTI,
         LOAD_HOT_SEAT,
-        LOAD_NETWORK,
         SCENARIO_INFO,
         SELECT_SCENARIO,
         START_GAME,

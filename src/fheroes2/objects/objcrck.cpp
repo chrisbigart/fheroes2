@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,17 +22,24 @@
  ***************************************************************************/
 
 #include <algorithm>
+#include <set>
 
 #include "direction.h"
-#include "icn.h"
 #include "mp2.h"
 #include "objcrck.h"
+#include "tools.h"
 
-int ObjCrck::GetPassable( u32 index )
+namespace
 {
-    const u8 disabled[] = {58, 59, 63, 64, 65, 76, 77, 78, 80, 91, 102, 113, 124, 135, 182, 183, 185, 221, 222, 223, 227, 228, 229, 230, 238, 241, 242, 245};
-    const u8 restricted[] = {5,  6,  10, 11, 14, 16, 17, 18,  21,  22,  24,  25,  29,  30,  31,  32,  34,  35,  37,  38,  40,  41,  42,  43,  46,  49,  52, 55,
-                             57, 62, 67, 68, 69, 71, 72, 136, 148, 159, 170, 181, 186, 187, 188, 202, 224, 225, 226, 231, 232, 233, 234, 235, 243, 244, 246};
+    const std::bitset<256> objCrckShadowBitset
+        = fheroes2::makeBitsetFromVector<256>( { 2, 9, 13, 15, 20, 23, 28, 33, 36, 39, 45, 48, 51, 54, 56, 73, 75, 79, 200, 201, 207, 237 } );
+}
+
+int ObjCrck::GetPassable( const uint8_t index )
+{
+    const uint8_t disabled[] = { 58, 59, 63, 64, 65, 76, 77, 78, 80, 91, 102, 113, 124, 135, 182, 183, 185, 221, 222, 223, 227, 228, 229, 230, 238, 241, 242, 245 };
+    const uint8_t restricted[] = { 5,  6,  10, 11, 14, 16, 17, 18,  21,  22,  24,  25,  29,  30,  31,  32,  34,  35,  37,  38,  40,  41,  42,  43,  46,  49,  52, 55,
+                                   57, 62, 67, 68, 69, 71, 72, 136, 148, 159, 170, 181, 186, 187, 188, 202, 224, 225, 226, 231, 232, 233, 234, 235, 243, 244, 246 };
 
     if ( isShadow( index ) )
         return DIRECTION_ALL;
@@ -43,18 +51,17 @@ int ObjCrck::GetPassable( u32 index )
     return std::end( restricted ) != std::find( restricted, std::end( restricted ), index ) ? DIRECTION_CENTER_ROW | DIRECTION_BOTTOM_ROW : DIRECTION_ALL;
 }
 
-bool ObjCrck::isAction( u32 index )
+bool ObjCrck::isAction( uint32_t index )
 {
     return MP2::OBJ_ZERO != GetActionObject( index );
 }
 
-bool ObjCrck::isShadow( u32 index )
+bool ObjCrck::isShadow( const uint8_t index )
 {
-    const u8 shadows[] = {0, 2, 9, 12, 13, 15, 20, 23, 28, 33, 36, 39, 45, 48, 51, 54, 56, 73, 75, 79, 190, 201, 237};
-    return std::end( shadows ) != std::find( shadows, std::end( shadows ), index );
+    return objCrckShadowBitset[index];
 }
 
-int ObjCrck::GetActionObject( u32 index )
+int ObjCrck::GetActionObject( uint32_t index )
 {
     /*
     artesian spring: 3, 4
@@ -85,6 +92,8 @@ int ObjCrck::GetActionObject( u32 index )
         return MP2::OBJ_OBELISK;
     case 245:
         return MP2::OBJ_SAWMILL;
+    default:
+        break;
     }
 
     return MP2::OBJ_ZERO;

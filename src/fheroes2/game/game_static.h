@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,8 +24,11 @@
 #ifndef H2GAMESTATIC_H
 #define H2GAMESTATIC_H
 
-#include "gamedefs.h"
-#include "serialize.h"
+#include <cstdint>
+
+#include "mp2.h"
+
+class StreamBase;
 
 namespace Skill
 {
@@ -35,47 +39,34 @@ namespace Skill
 
 namespace GameStatic
 {
-    struct Data
+    enum class FogDiscoveryType : int32_t
     {
-        static Data & Get( void );
-        // wrapper for stream
+        CASTLE,
+        HEROES,
+        OBSERVATION_TOWER,
+        MAGI_EYES
     };
 
-    StreamBase & operator<<( StreamBase &, const Data & );
-    StreamBase & operator>>( StreamBase &, const Data & );
+    uint32_t GetLostOnWhirlpoolPercent();
+    uint32_t GetGameOverLostDays();
+    uint32_t getFogDiscoveryDistance( const FogDiscoveryType type );
 
-    u32 GetLostOnWhirlpoolPercent( void );
-    u32 GetGameOverLostDays( void );
-    u32 GetOverViewDistance( u32 );
+    uint32_t GetKingdomMaxHeroes();
 
-    u32 GetKingdomMaxHeroes( void );
+    uint32_t GetCastleGrownWell();
+    uint32_t GetCastleGrownWel2();
+    uint32_t GetCastleGrownWeekOf();
+    uint32_t GetCastleGrownMonthOf();
 
-    u32 GetCastleGrownWell( void );
-    u32 GetCastleGrownWel2( void );
-    u32 GetCastleGrownWeekOf( void );
-    u32 GetCastleGrownMonthOf( void );
+    uint32_t GetHeroesRestoreSpellPointsPerDay();
 
-    u32 GetHeroesRestoreSpellPointsPerDay( void );
-    u32 GetMageGuildRestoreSpellPointsPercentDay( int level );
+    int32_t ObjectVisitedModifiers( const MP2::MapObjectType objectType );
 
-    bool isCustomMonsterUpgradeOption();
-    float GetMonsterUpgradeRatio();
-
-    s32 ObjectVisitedModifiers( int obj );
-
-    int GetBattleMoatReduceDefense( void );
+    int GetBattleMoatReduceDefense();
 
     const Skill::stats_t * GetSkillStats( int race );
     const Skill::values_t * GetSkillValues( int skill );
-    const Skill::secondary_t * GetSkillForWitchsHut( void );
-
-    u32 Spell_DD_Distance( void );
-    u32 Spell_DD_SP( void );
-    u32 Spell_DD_HP( void );
-
-    void SetSpell_DD_Distance( int );
-    void SetSpell_DD_SP( int );
-    void SetSpell_DD_HP( int );
+    const Skill::secondary_t * GetSkillForWitchsHut();
 }
 
 #endif

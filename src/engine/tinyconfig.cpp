@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2010 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of SDL++ Engine:                                                 *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2010 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,8 +23,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <iostream>
-#include <iterator>
 
 #include "serialize.h"
 #include "tinyconfig.h"
@@ -39,8 +38,7 @@ std::string ModifyKey( const std::string & str )
     std::string key = StringTrim( StringLower( str ) );
 
     // remove multiple space
-    std::string::iterator it = std::unique( key.begin(), key.end(), SpaceCompare );
-    key.resize( it - key.begin() );
+    key.erase( std::unique( key.begin(), key.end(), SpaceCompare ), key.end() );
 
     // change space
     std::replace_if( key.begin(), key.end(), ::isspace, 0x20 );
@@ -59,10 +57,11 @@ bool TinyConfig::Load( const std::string & cfile )
     if ( !sf.open( cfile, "rb" ) )
         return false;
 
-    std::list<std::string> rows = StringSplit( sf.toString(), "\n" );
+    std::vector<std::string> rows = StringSplit( sf.toString(), "\n" );
 
-    for ( std::list<std::string>::const_iterator it = rows.begin(); it != rows.end(); ++it ) {
+    for ( std::vector<std::string>::const_iterator it = rows.begin(); it != rows.end(); ++it ) {
         std::string str = StringTrim( *it );
+
         if ( str.empty() || str[0] == comment )
             continue;
 
@@ -74,48 +73,11 @@ bool TinyConfig::Load( const std::string & cfile )
             left = StringTrim( left );
             right = StringTrim( right );
 
-            AddEntry( left, right, false );
+            emplace( ModifyKey( left ), right );
         }
     }
 
     return true;
-}
-
-bool TinyConfig::Save( const std::string & cfile ) const
-{
-    StreamFile sf;
-    if ( !sf.open( cfile, "wb" ) )
-        return false;
-
-    for ( const_iterator it = begin(); it != end(); ++it )
-        sf << it->first << ' ' << separator << ' ' << it->second << '\n';
-
-    return true;
-}
-
-void TinyConfig::Clear( void )
-{
-    clear();
-}
-
-void TinyConfig::AddEntry( const std::string & key, const std::string & val, bool uniq )
-{
-    iterator it = end();
-
-    if ( uniq && ( end() != ( it = find( ModifyKey( key ) ) ) ) )
-        it->second = val;
-    else
-        insert( std::pair<std::string, std::string>( ModifyKey( key ), val ) );
-}
-
-void TinyConfig::AddEntry( const std::string & key, int val, bool uniq )
-{
-    iterator it = end();
-
-    if ( uniq && ( end() != ( it = find( ModifyKey( key ) ) ) ) )
-        it->second = std::to_string( val );
-    else
-        emplace( ModifyKey( key ), std::to_string( val ) );
 }
 
 int TinyConfig::IntParams( const std::string & key ) const
@@ -128,28 +90,6 @@ std::string TinyConfig::StrParams( const std::string & key ) const
 {
     const_iterator it = find( ModifyKey( key ) );
     return it != end() ? it->second : "";
-}
-
-std::list<std::string> TinyConfig::ListStr( const std::string & key ) const
-{
-    std::pair<const_iterator, const_iterator> ret = equal_range( ModifyKey( key ) );
-    std::list<std::string> res;
-
-    for ( const_iterator it = ret.first; it != ret.second; ++it )
-        res.push_back( it->second );
-
-    return res;
-}
-
-std::list<int> TinyConfig::ListInt( const std::string & key ) const
-{
-    std::pair<const_iterator, const_iterator> ret = equal_range( ModifyKey( key ) );
-    std::list<int> res;
-
-    for ( const_iterator it = ret.first; it != ret.second; ++it )
-        res.push_back( GetInt( it->second ) );
-
-    return res;
 }
 
 bool TinyConfig::Exists( const std::string & key ) const

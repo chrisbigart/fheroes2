@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,12 +22,12 @@
  ***************************************************************************/
 
 #include <algorithm>
+#include <array>
 
 #include "heroes_base.h"
 #include "mageguild.h"
-#include "race.h"
 #include "rand.h"
-#include "settings.h"
+#include "serialize.h"
 
 Spell GetUniqueSpellCompatibility( const SpellStorage & spells, const int race, const int level );
 Spell GetGuaranteedDamageSpellForMageGuild();
@@ -37,7 +38,7 @@ void MageGuild::initialize( int race, bool libraryCap )
     general.clear();
     library.clear();
 
-    int spellCountByLevel[] = {3, 3, 2, 2, 1};
+    std::array<int, 5> spellCountByLevel = { 3, 3, 2, 2, 1 };
 
     const Spell guaranteedDamageSpell = GetGuaranteedDamageSpellForMageGuild();
     const int guaranteedDamageSpellLevel = guaranteedDamageSpell.Level();
@@ -115,7 +116,7 @@ Spell GetUniqueSpellCompatibility( const SpellStorage & spells, const int race, 
     std::vector<Spell> v;
     v.reserve( 15 );
 
-    for ( int sp = Spell::NONE; sp < Spell::STONE; ++sp ) {
+    for ( int sp = Spell::NONE; sp < Spell::PETRIFY; ++sp ) {
         const Spell spell( sp );
 
         if ( spells.isPresentSpell( spell ) )
@@ -124,14 +125,14 @@ Spell GetUniqueSpellCompatibility( const SpellStorage & spells, const int race, 
         if ( !spell.isRaceCompatible( race ) )
             continue;
 
-        if ( spell.Level() != lvl || !spell.isEnabled() )
+        if ( spell.Level() != lvl )
             continue;
 
         if ( lookForAdv != spell.isCombat() )
             v.push_back( spell );
     }
 
-    return v.size() ? Rand::Get( v ) : Spell( Spell::NONE );
+    return !v.empty() ? Rand::Get( v ) : Spell( Spell::NONE );
 }
 
 Spell GetGuaranteedDamageSpellForMageGuild()

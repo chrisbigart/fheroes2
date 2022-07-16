@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,19 +22,17 @@
  ***************************************************************************/
 
 #include <algorithm>
-#include <cstring>
-#include <sstream>
+#include <iterator>
 
-#include "cursor.h"
-#include "game.h"
 #include "game_static.h"
 #include "heroes.h"
 #include "race.h"
 #include "rand.h"
-#include "settings.h"
+#include "serialize.h"
 #include "skill.h"
 #include "skill_static.h"
-#include "text.h"
+#include "tools.h"
+#include "translations.h"
 #include "world.h"
 
 namespace Skill
@@ -46,7 +45,7 @@ namespace Skill
            Secondary::WISDOM,      Secondary::MYSTICISM, Secondary::LUCK,      Secondary::BALLISTICS, Secondary::EAGLEEYE,  Secondary::NECROMANCY, Secondary::ESTATES};
 }
 
-u32 Skill::Secondary::GetValues( void ) const
+uint32_t Skill::Secondary::GetValues() const
 {
     const values_t * val = GameStatic::GetSkillValues( Skill() );
 
@@ -145,29 +144,30 @@ int Skill::Primary::LevelUp( int race, int level, uint32_t seed )
     return result;
 }
 
-const char * Skill::Primary::String( int skill )
+const char * Skill::Primary::String( const int skillType )
 {
-    const char * str_skill[] = {_( "Attack Skill" ), _( "Defense Skill" ), _( "Spell Power" ), _( "Knowledge" ), "Unknown"};
-
-    switch ( skill ) {
+    switch ( skillType ) {
     case ATTACK:
-        return str_skill[0];
+        return _( "Attack Skill" );
     case DEFENSE:
-        return str_skill[1];
+        return _( "Defense Skill" );
     case POWER:
-        return str_skill[2];
+        return _( "Spell Power" );
     case KNOWLEDGE:
-        return str_skill[3];
+        return _( "Knowledge" );
     default:
+        // Are you sure that you are passing the correct skill type?
+        assert( 0 );
         break;
     }
 
-    return str_skill[4];
+    return "Unknown";
 }
 
 std::string Skill::Primary::StringDescription( int skill, const Heroes * hero )
 {
-    std::string res, ext;
+    std::string res;
+    std::string ext;
 
     switch ( skill ) {
     case ATTACK:
@@ -175,31 +175,29 @@ std::string Skill::Primary::StringDescription( int skill, const Heroes * hero )
         if ( hero )
             hero->GetAttack( &ext );
         break;
-
     case DEFENSE:
         res = _( "Your defense skill is a bonus added to each creature's defense skill." );
         if ( hero )
             hero->GetDefense( &ext );
         break;
-
     case POWER:
         res = _( "Your spell power determines the length or power of a spell." );
         if ( hero )
             hero->GetPower( &ext );
         break;
-
     case KNOWLEDGE:
         res = _(
             "Your knowledge determines how many spell points your hero may have. Under normal circumstances, a hero is limited to 10 spell points per level of knowledge." );
         if ( hero )
             hero->GetKnowledge( &ext );
         break;
-
     default:
+        // Are you sure that you are passing the correct skill type?
+        assert( 0 );
         break;
     }
 
-    if ( ext.size() ) {
+    if ( !ext.empty() ) {
         res.append( "\n \n" );
         res.append( _( "Current Modifiers:" ) );
         res.append( "\n \n" );
@@ -211,26 +209,26 @@ std::string Skill::Primary::StringDescription( int skill, const Heroes * hero )
 
 const char * Skill::Level::String( int level )
 {
-    const char * str_level[] = {"None", _( "skill|Basic" ), _( "skill|Advanced" ), _( "skill|Expert" )};
-
     switch ( level ) {
     case BASIC:
-        return str_level[1];
+        return _( "skill|Basic" );
     case ADVANCED:
-        return str_level[2];
+        return _( "skill|Advanced" );
     case EXPERT:
-        return str_level[3];
+        return _( "skill|Expert" );
     default:
+        // Are you sure that you are passing the correct skill level?
+        assert( 0 );
         break;
     }
 
-    return str_level[0];
+    return "None";
 }
 
-std::string Skill::Level::StringWithBonus( const Heroes & hero, int skill, int level )
+std::string Skill::Level::StringWithBonus( const Heroes & hero, const Secondary & skill )
 {
-    const std::string levelStr = String( level );
-    if ( skill == Skill::Secondary::NECROMANCY && Skill::GetNecromancyBonus( hero ) > 0 ) {
+    const std::string levelStr = String( skill.Level() );
+    if ( skill.Skill() == Skill::Secondary::NECROMANCY && Skill::GetNecromancyBonus( hero ) > 0 ) {
         return levelStr + "+" + std::to_string( Skill::GetNecromancyBonus( hero ) );
     }
     return levelStr;
@@ -247,7 +245,7 @@ Skill::Secondary::Secondary( int skill, int level )
     SetLevel( level );
 }
 
-void Skill::Secondary::Reset( void )
+void Skill::Secondary::Reset()
 {
     first = UNKNOWN;
     second = Level::NONE;
@@ -269,7 +267,7 @@ void Skill::Secondary::SetLevel( int level )
     second = level <= Level::EXPERT ? level : Level::NONE;
 }
 
-void Skill::Secondary::NextLevel( void )
+void Skill::Secondary::NextLevel()
 {
     switch ( second ) {
     case Level::NONE:
@@ -286,27 +284,12 @@ void Skill::Secondary::NextLevel( void )
     }
 }
 
-int Skill::Secondary::Skill( void ) const
-{
-    return first;
-}
-
-int Skill::Secondary::Level( void ) const
-{
-    return second;
-}
-
-bool Skill::Secondary::isSkill( int skill ) const
-{
-    return skill == first;
-}
-
-bool Skill::Secondary::isValid( void ) const
+bool Skill::Secondary::isValid() const
 {
     return Skill() != UNKNOWN && Level() != Level::NONE;
 }
 
-int Skill::Secondary::RandForWitchsHut( void )
+int Skill::Secondary::RandForWitchsHut()
 {
     const Skill::secondary_t * sec = GameStatic::GetSkillForWitchsHut();
     std::vector<int> v;
@@ -348,61 +331,58 @@ int Skill::Secondary::RandForWitchsHut( void )
 }
 
 /* index sprite from SECSKILL */
-int Skill::Secondary::GetIndexSprite1( void ) const
+int Skill::Secondary::GetIndexSprite1() const
 {
     return Skill() <= ESTATES ? Skill() : 0;
 }
 
 /* index sprite from MINISS */
-int Skill::Secondary::GetIndexSprite2( void ) const
+int Skill::Secondary::GetIndexSprite2() const
 {
     return Skill() <= ESTATES ? Skill() - 1 : 0xFF;
 }
 
 const char * Skill::Secondary::String( int skill )
 {
-    const char * str_skill[]
-        = {_( "Pathfinding" ), _( "Archery" ), _( "Logistics" ),  _( "Scouting" ),  _( "Diplomacy" ),  _( "Navigation" ), _( "Leadership" ), _( "Wisdom" ),
-           _( "Mysticism" ),   _( "Luck" ),    _( "Ballistics" ), _( "Eagle Eye" ), _( "Necromancy" ), _( "Estates" ),    "Unknown"};
-
     switch ( skill ) {
     case PATHFINDING:
-        return str_skill[0];
+        return _( "Pathfinding" );
     case ARCHERY:
-        return str_skill[1];
+        return _( "Archery" );
     case LOGISTICS:
-        return str_skill[2];
+        return _( "Logistics" );
     case SCOUTING:
-        return str_skill[3];
+        return _( "Scouting" );
     case DIPLOMACY:
-        return str_skill[4];
+        return _( "Diplomacy" );
     case NAVIGATION:
-        return str_skill[5];
+        return _( "Navigation" );
     case LEADERSHIP:
-        return str_skill[6];
+        return _( "Leadership" );
     case WISDOM:
-        return str_skill[7];
+        return _( "Wisdom" );
     case MYSTICISM:
-        return str_skill[8];
+        return _( "Mysticism" );
     case LUCK:
-        return str_skill[9];
+        return _( "Luck" );
     case BALLISTICS:
-        return str_skill[10];
+        return _( "Ballistics" );
     case EAGLEEYE:
-        return str_skill[11];
+        return _( "Eagle Eye" );
     case NECROMANCY:
-        return str_skill[12];
+        return _( "Necromancy" );
     case ESTATES:
-        return str_skill[13];
-
+        return _( "Estates" );
     default:
+        // Are you sure that you are passing the correct secondary skill type?
+        assert( 0 );
         break;
     }
 
-    return str_skill[14];
+    return "Unknown";
 }
 
-std::string Skill::Secondary::GetName( void ) const
+std::string Skill::Secondary::GetName() const
 {
     const char * name_skill[]
         = {_( "Basic Pathfinding" ),  _( "Advanced Pathfinding" ), _( "Expert Pathfinding" ),  _( "Basic Archery" ),      _( "Advanced Archery" ),
@@ -421,55 +401,50 @@ std::string Skill::Secondary::GetName( void ) const
 std::string Skill::Secondary::GetNameWithBonus( const Heroes & hero ) const
 {
     if ( Skill() == NECROMANCY && Skill::GetNecromancyBonus( hero ) > 0 ) {
-        return GetName() + " (+" + std::to_string( Skill::GetNecromancyBonus( hero ) ) + ")";
+        return GetName() + " (+" + std::to_string( Skill::GetNecromancyBonus( hero ) ) + ')';
     }
     return GetName();
 }
 
 std::string Skill::Secondary::GetDescription( const Heroes & hero ) const
 {
-    u32 count = GetValues();
+    uint32_t count = GetValues();
+    std::string name = GetName();
     std::string str = "unknown";
 
     switch ( Skill() ) {
     case PATHFINDING:
         switch ( Level() ) {
         case Level::BASIC:
-        case Level::ADVANCED: {
-            const std::string tmpDescription( std::string( GetName() ) + std::string( " reduces the movement penalty for rough terrain by %{count} percent." ) );
-            str = _n( tmpDescription.c_str(), tmpDescription.c_str(), count );
-        } break;
+        case Level::ADVANCED:
+            str = _( "%{skill} reduces the movement penalty for rough terrain by %{count} percent." );
+            break;
         case Level::EXPERT:
-            str = _( GetName() + std::string( " eliminates the movement penalty for rough terrain." ) );
+            str = _( "%{skill} eliminates the movement penalty for rough terrain." );
             break;
         default:
             break;
         }
         break;
     case ARCHERY: {
-        const std::string tmpDescription( std::string( GetName() ) + std::string( " increases the damage done by range attacking creatures by %{count} percent." ) );
-        str = _n( tmpDescription.c_str(), tmpDescription.c_str(), count );
+        str = _( "%{skill} increases the damage done by range attacking creatures by %{count} percent." );
         break;
     }
     case LOGISTICS: {
-        const std::string tmpDescription( std::string( GetName() ) + std::string( " increases your hero's movement points by %{count} percent." ) );
-        str = _n( tmpDescription.c_str(), tmpDescription.c_str(), count );
+        str = _( "%{skill} increases your hero's movement points by %{count} percent." );
         break;
     }
     case SCOUTING: {
-        const std::string tmpDescription( std::string( GetName() ) + std::string( " increases your hero's viewable area by %{count} square." ) );
-        str = _n( tmpDescription.c_str(), tmpDescription.c_str(), count );
+        str = _n( "%{skill} increases your hero's viewable area by one square.", "%{skill} increases your hero's viewable area by %{count} squares.", count );
         break;
     }
     case DIPLOMACY:
-        str = std::string( GetName() ) + _( " allows you to negotiate with monsters who are weaker than your group." );
-        str.append( " " );
+        str = _( "%{skill} allows you to negotiate with monsters who are weaker than your group. " );
         switch ( Level() ) {
         case Level::BASIC:
-        case Level::ADVANCED: {
-            str.append( _n( "Approximately %{count} percent of the creatures may offer to join you.",
-                            "Approximately %{count} percent of the creatures may offer to join you.", count ) );
-        } break;
+        case Level::ADVANCED:
+            str.append( _( "Approximately %{count} percent of the creatures may offer to join you." ) );
+            break;
         case Level::EXPERT:
             str.append( _( "All of the creatures may offer to join you." ) );
             break;
@@ -478,26 +453,23 @@ std::string Skill::Secondary::GetDescription( const Heroes & hero ) const
         }
         break;
     case NAVIGATION: {
-        const std::string tmpDescription( std::string( GetName() ) + std::string( " increases your hero's movement points over water by %{count} percent." ) );
-        str = _n( tmpDescription.c_str(), tmpDescription.c_str(), count );
+        str = _( "%{skill} increases your hero's movement points over water by %{count} percent." );
         break;
     }
     case LEADERSHIP: {
-        const std::string tmpDescription( std::string( GetName() ) + std::string( " increases your hero's troops morale by %{count}." ) );
-        str = _n( tmpDescription.c_str(), tmpDescription.c_str(), count );
+        str = _( "%{skill} increases your hero's troops morale by %{count}." );
         break;
     }
     case WISDOM: {
-        str = GetName();
         switch ( Level() ) {
         case Level::BASIC:
-            str += _( " allows your hero to learn third level spells." );
+            str = _( "%{skill} allows your hero to learn third level spells." );
             break;
         case Level::ADVANCED:
-            str += _( " allows your hero to learn fourth level spells." );
+            str = _( "%{skill} allows your hero to learn fourth level spells." );
             break;
         case Level::EXPERT:
-            str += _( " allows your hero to learn fifth level spells." );
+            str = _( "%{skill} allows your hero to learn fifth level spells." );
             break;
         default:
             break;
@@ -505,67 +477,59 @@ std::string Skill::Secondary::GetDescription( const Heroes & hero ) const
         break;
     }
     case MYSTICISM: {
-        const std::string tmpDescription( std::string( GetName() ) + std::string( " regenerates %{count} of your hero's spell point per day." ) );
-        str = _n( tmpDescription.c_str(), tmpDescription.c_str(), count );
+        str = _n( "%{skill} regenerates one of your hero's spell points per day.", "%{skill} regenerates %{count} of your hero's spell points per day.", count );
         break;
     }
     case LUCK: {
-        const std::string tmpDescription( std::string( GetName() ) + std::string( " increases your hero's luck by %{count}." ) );
-        str = _n( tmpDescription.c_str(), tmpDescription.c_str(), count );
+        str = _( "%{skill} increases your hero's luck by %{count}." );
         break;
     }
     case BALLISTICS:
-        str = GetName();
         switch ( Level() ) {
         case Level::BASIC:
-            str += _( " gives your hero's catapult shots a greater chance to hit and do damage to castle walls." );
+            str = _( "%{skill} gives your hero's catapult shots a greater chance to hit and do damage to castle walls." );
             break;
         case Level::ADVANCED:
-            str += _( " gives your hero's catapult an extra shot, and each shot has a greater chance to hit and do damage to castle walls." );
+            str = _( "%{skill} gives your hero's catapult an extra shot, and each shot has a greater chance to hit and do damage to castle walls." );
             break;
         case Level::EXPERT:
-            str += _( " gives your hero's catapult an extra shot, and each shot automatically destroys any wall, except a fortified wall in a Knight town." );
+            str = _( "%{skill} gives your hero's catapult an extra shot, and each shot automatically destroys any wall, except a fortified wall in a Knight castle." );
             break;
         default:
             break;
         }
         break;
     case EAGLEEYE:
-        str = GetName();
         switch ( Level() ) {
         case Level::BASIC:
-            str += _n( " gives your hero a %{count} percent chance to learn any given 1st or 2nd level enemy spell used against him in a combat.",
-                       " gives your hero a %{count} percent chance to learn any given 1st or 2nd level enemy spell used against him in a combat.", count );
+            str = _( "%{skill} gives your hero a %{count} percent chance to learn any given 1st or 2nd level enemy spell used against him in a combat." );
             break;
         case Level::ADVANCED:
-            str += _n( " gives your hero a %{count} percent chance to learn any given 3rd level spell (or below) used against him in combat.",
-                       " gives your hero a %{count} percent chance to learn any given 3rd level spell (or below) used against him in combat.", count );
+            str = _( "%{skill} gives your hero a %{count} percent chance to learn any given 3rd level spell (or below) used against him in combat." );
             break;
         case Level::EXPERT:
-            str += _n( " gives your hero a %{count} percent chance to learn any given 4th level spell (or below) used against him in combat.",
-                       " gives your hero a %{count} percent chance to learn any given 4th level spell (or below) used against him in combat.", count );
+            str = _( "%{skill} gives your hero a %{count} percent chance to learn any given 4th level spell (or below) used against him in combat." );
             break;
         default:
             break;
         }
         break;
     case NECROMANCY: {
-        const uint32_t necroCount = Skill::GetNecromancyPercent( hero ) - hero.GetSecondaryValues( Skill::Secondary::NECROMANCY ) + count;
-        const std::string tmpDescription(
-            std::string( GetNameWithBonus( hero ) )
-            + std::string( " allows %{necrocount} percent of the creatures killed in combat to be brought back from the dead as Skeletons." ) );
-        str = _n( tmpDescription.c_str(), tmpDescription.c_str(), necroCount );
-        StringReplace( str, "%{necrocount}", necroCount );
+        count += Skill::GetNecromancyPercent( hero ) - hero.GetSecondaryValues( Skill::Secondary::NECROMANCY );
+        name = GetNameWithBonus( hero );
+        str = _( "%{skill} allows %{count} percent of the creatures killed in combat to be brought back from the dead as Skeletons." );
         break;
     }
     case ESTATES:
-        str = _n( "Your hero produces %{count} gold pieces per turn as tax revenue from estates.",
-                  "Your hero produces %{count} gold pieces per turn as tax revenue from estates.", count );
+        str = _( "Your hero produces %{count} gold pieces per day as tax revenue from estates." );
         break;
     default:
+        // Are you sure that you are passing the correct secondary skill type?
+        assert( 0 );
         break;
     }
 
+    StringReplace( str, "%{skill}", name );
     StringReplace( str, "%{count}", count );
 
     return str;
@@ -586,30 +550,30 @@ Skill::SecSkills::SecSkills( int race )
         if ( ptr ) {
             if ( ptr->initial_secondary.archery )
                 AddSkill( Secondary( Secondary::ARCHERY, ptr->initial_secondary.archery ) );
-            if ( ptr->initial_secondary.ballistics )
-                AddSkill( Secondary( Secondary::BALLISTICS, ptr->initial_secondary.ballistics ) );
             if ( ptr->initial_secondary.diplomacy )
                 AddSkill( Secondary( Secondary::DIPLOMACY, ptr->initial_secondary.diplomacy ) );
             if ( ptr->initial_secondary.eagleeye )
                 AddSkill( Secondary( Secondary::EAGLEEYE, ptr->initial_secondary.eagleeye ) );
             if ( ptr->initial_secondary.estates )
                 AddSkill( Secondary( Secondary::ESTATES, ptr->initial_secondary.estates ) );
-            if ( ptr->initial_secondary.leadership )
-                AddSkill( Secondary( Secondary::LEADERSHIP, ptr->initial_secondary.leadership ) );
             if ( ptr->initial_secondary.logistics )
                 AddSkill( Secondary( Secondary::LOGISTICS, ptr->initial_secondary.logistics ) );
             if ( ptr->initial_secondary.luck )
                 AddSkill( Secondary( Secondary::LUCK, ptr->initial_secondary.luck ) );
             if ( ptr->initial_secondary.mysticism )
                 AddSkill( Secondary( Secondary::MYSTICISM, ptr->initial_secondary.mysticism ) );
-            if ( ptr->initial_secondary.navigation )
-                AddSkill( Secondary( Secondary::NAVIGATION, ptr->initial_secondary.navigation ) );
-            if ( ptr->initial_secondary.necromancy )
-                AddSkill( Secondary( Secondary::NECROMANCY, ptr->initial_secondary.necromancy ) );
             if ( ptr->initial_secondary.pathfinding )
                 AddSkill( Secondary( Secondary::PATHFINDING, ptr->initial_secondary.pathfinding ) );
+            if ( ptr->initial_secondary.leadership )
+                AddSkill( Secondary( Secondary::LEADERSHIP, ptr->initial_secondary.leadership ) );
+            if ( ptr->initial_secondary.ballistics )
+                AddSkill( Secondary( Secondary::BALLISTICS, ptr->initial_secondary.ballistics ) );
+            if ( ptr->initial_secondary.navigation )
+                AddSkill( Secondary( Secondary::NAVIGATION, ptr->initial_secondary.navigation ) );
             if ( ptr->initial_secondary.scouting )
                 AddSkill( Secondary( Secondary::SCOUTING, ptr->initial_secondary.scouting ) );
+            if ( ptr->initial_secondary.necromancy )
+                AddSkill( Secondary( Secondary::NECROMANCY, ptr->initial_secondary.necromancy ) );
             if ( ptr->initial_secondary.wisdom )
                 AddSkill( Secondary( Secondary::WISDOM, ptr->initial_secondary.wisdom ) );
         }
@@ -623,14 +587,14 @@ int Skill::SecSkills::GetLevel( int skill ) const
     return it == end() ? Level::NONE : ( *it ).Level();
 }
 
-u32 Skill::SecSkills::GetValues( int skill ) const
+uint32_t Skill::SecSkills::GetValues( int skill ) const
 {
     const_iterator it = std::find_if( begin(), end(), [skill]( const Secondary & v ) { return v.isSkill( skill ); } );
 
     return it == end() ? 0 : ( *it ).GetValues();
 }
 
-int Skill::SecSkills::Count( void ) const
+int Skill::SecSkills::Count() const
 {
     return static_cast<int>( std::count_if( begin(), end(), []( const Secondary & v ) { return v.isValid(); } ) ); // it's safe to cast as number is small
 }
@@ -669,20 +633,22 @@ Skill::Secondary * Skill::SecSkills::FindSkill( int skill )
     return it != end() ? &( *it ) : nullptr;
 }
 
-std::vector<Skill::Secondary> & Skill::SecSkills::ToVector( void )
+std::vector<Skill::Secondary> & Skill::SecSkills::ToVector()
 {
     std::vector<Secondary> & v = *this;
     return v;
 }
 
-std::string Skill::SecSkills::String( void ) const
+std::string Skill::SecSkills::String() const
 {
-    std::ostringstream os;
+    std::string output;
 
-    for ( const_iterator it = begin(); it != end(); ++it )
-        os << ( *it ).GetName() << ", ";
+    for ( const_iterator it = begin(); it != end(); ++it ) {
+        output += it->GetName();
+        output += ", ";
+    }
 
-    return os.str();
+    return output;
 }
 
 void Skill::SecSkills::FillMax( const Skill::Secondary & skill )
@@ -733,9 +699,9 @@ int Skill::SecondaryPriorityFromRace( int race, const std::vector<int> & exclude
 {
     Rand::Queue parts( MAXSECONDARYSKILL );
 
-    for ( u32 ii = 0; ii < ARRAY_COUNT( secskills ); ++ii )
-        if ( exclude.end() == std::find( exclude.begin(), exclude.end(), secskills[ii] ) )
-            parts.Push( secskills[ii], SecondaryGetWeightSkillFromRace( race, secskills[ii] ) );
+    for ( auto skill : secskills )
+        if ( exclude.end() == std::find( exclude.begin(), exclude.end(), skill ) )
+            parts.Push( skill, SecondaryGetWeightSkillFromRace( race, skill ) );
 
     return parts.Size() ? parts.GetWithSeed( seed ) : Secondary::UNKNOWN;
 }
@@ -753,9 +719,7 @@ void Skill::SecSkills::FindSkillsForLevelUp( int race, uint32_t seedSkill1, uint
 
     // exclude is full, add other.
     if ( HEROESMAXSKILL <= Count() ) {
-        for ( u32 ii = 0; ii < ARRAY_COUNT( secskills ); ++ii )
-            if ( Level::NONE == GetLevel( secskills[ii] ) )
-                exclude_skills.push_back( secskills[ii] );
+        std::copy_if( secskills, std::end( secskills ), std::back_inserter( exclude_skills ), [this]( int skill ) { return Level::NONE == GetLevel( skill ); } );
     }
 
     sec1.SetSkill( SecondaryPriorityFromRace( race, exclude_skills, seedSkill1 ) );
@@ -811,9 +775,9 @@ int Skill::GetLuckModifiers( int level, std::string * strs = nullptr )
 uint32_t Skill::GetNecromancyBonus( const HeroBase & hero )
 {
     const uint32_t shrineCount = world.GetKingdom( hero.GetColor() ).GetCountNecromancyShrineBuild();
-    const uint32_t artifactCount = hero.HasArtifact( Artifact::SPADE_NECROMANCY );
+    const uint32_t artifactEffect = hero.GetBagArtifacts().isArtifactBonusPresent( fheroes2::ArtifactBonusType::NECROMANCY_SKILL ) ? 1 : 0;
     // cap bonus at 7
-    return std::min( 7u, shrineCount + artifactCount );
+    return std::min( 7u, shrineCount + artifactEffect );
 }
 
 uint32_t Skill::GetNecromancyPercent( const HeroBase & hero )

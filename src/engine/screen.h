@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2020                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2020 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,6 +22,7 @@
 #include "image.h"
 
 #include <memory>
+#include <string>
 
 namespace fheroes2
 {
@@ -33,6 +34,7 @@ namespace fheroes2
     public:
         friend class Cursor;
         friend class Display;
+
         virtual ~BaseRenderEngine() = default;
 
         virtual void toggleFullScreen()
@@ -47,12 +49,18 @@ namespace fheroes2
 
         virtual std::vector<Size> getAvailableResolutions() const
         {
-            return std::vector<Size>();
+            return {};
         }
 
-        virtual void setTitle( const std::string & ) {}
+        virtual void setTitle( const std::string & )
+        {
+            // Do nothing.
+        }
 
-        virtual void setIcon( const Image & ) {}
+        virtual void setIcon( const Image & )
+        {
+            // Do nothing.
+        }
 
         virtual fheroes2::Rect getActiveWindowROI() const
         {
@@ -64,13 +72,28 @@ namespace fheroes2
             return fheroes2::Size();
         }
 
+        virtual void setVSync( const bool )
+        {
+            // Do nothing.
+        }
+
     protected:
         BaseRenderEngine()
             : _isFullScreen( false )
-        {}
+        {
+            // Do nothing.
+        }
 
-        virtual void clear() {}
-        virtual void render( const Display &, const Rect & ) {}
+        virtual void clear()
+        {
+            // Do nothing.
+        }
+
+        virtual void render( const Display &, const Rect & )
+        {
+            // Do nothing.
+        }
+
         virtual bool allocate( int32_t &, int32_t &, bool )
         {
             return false;
@@ -81,8 +104,11 @@ namespace fheroes2
             return false;
         }
 
-        // to support color cycling we need to update palette
-        virtual void updatePalette( const std::vector<uint8_t> & ) {}
+        // To support color cycling we need to update palette.
+        virtual void updatePalette( const std::vector<uint8_t> & )
+        {
+            // Do nothing.
+        }
 
         void linkRenderSurface( uint8_t * surface ) const; // declaration of this method is in source file
 
@@ -105,16 +131,30 @@ namespace fheroes2
 
         ~Display() override = default;
 
-        void render(); // render full image on screen
+        // Render a full frame on screen.
+        void render()
+        {
+            render( { 0, 0, width(), height() } );
+        }
+
         void render( const Rect & roi ); // render a part of image on screen. Prefer this method over full image if you don't draw full screen.
 
         void resize( int32_t width_, int32_t height_ ) override;
-        bool isDefaultSize() const;
+
+        bool isDefaultSize() const
+        {
+            return width() == DEFAULT_WIDTH && height() == DEFAULT_HEIGHT;
+        }
 
         // this function must return true if new palette has been generated
         using PreRenderProcessing = bool ( * )( std::vector<uint8_t> & palette );
         using PostRenderProcessing = void ( * )();
-        void subscribe( PreRenderProcessing preprocessing, PostRenderProcessing postprocessing );
+
+        void subscribe( PreRenderProcessing preprocessing, PostRenderProcessing postprocessing )
+        {
+            _preprocessing = preprocessing;
+            _postprocessing = postprocessing;
+        }
 
         // For 8-bit mode we return a pointer to direct surface which we draw on screen
         uint8_t * image() override;
@@ -122,15 +162,12 @@ namespace fheroes2
 
         void release(); // to release all allocated resources. Should be used at the end of the application
 
-        // Change whole color representation on the screen. Make sure that palette exists all the time!!!
-        // nullptr input parameters means to set to default value
-        void changePalette( const uint8_t * palette = nullptr ) const;
+        // Change the whole color representation on the screen. Make sure that palette exists all the time!!!
+        // nullptr input parameter is used to reset pallette to default one.
+        void changePalette( const uint8_t * palette = nullptr, const bool forceDefaultPaletteUpdate = false ) const;
 
         friend BaseRenderEngine & engine();
         friend Cursor & cursor();
-
-        void setEngine( std::unique_ptr<BaseRenderEngine> & engine );
-        void setCursor( std::unique_ptr<Cursor> & cursor );
 
     private:
         std::unique_ptr<BaseRenderEngine> _engine;
@@ -143,7 +180,11 @@ namespace fheroes2
         // Previous area drawn on the screen.
         Rect _prevRoi;
 
-        void linkRenderSurface( uint8_t * surface ); // only for cases of direct drawing on rendered 8-bit image
+        // Only for cases of direct drawing on rendered 8-bit image.
+        void linkRenderSurface( uint8_t * surface )
+        {
+            _renderSurface = surface;
+        }
 
         Display();
 
@@ -179,7 +220,10 @@ namespace fheroes2
         }
 
         // Default implementation of Cursor uses software emulation.
-        virtual void enableSoftwareEmulation( const bool ) {}
+        virtual void enableSoftwareEmulation( const bool )
+        {
+            // Do nothing.
+        }
 
         bool isSoftwareEmulation() const
         {

@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2020                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2020 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -69,7 +69,7 @@ namespace
     bool AppendIfFarEnough( std::vector<int> & dataSet, int value, uint32_t distance )
     {
         for ( const int current : dataSet ) {
-            if ( Maps::GetApproximateDistance( current, value ) < distance )
+            if ( Maps::GetStraightLineDistance( current, value ) < distance )
                 return false;
         }
 
@@ -85,8 +85,8 @@ namespace
         for ( uint8_t direction = 0; direction < 8; ++direction ) {
             const int newIndex = ConvertExtendedIndex( nodeIndex, rawDataWidth ) + offsets[direction];
             MapRegionNode & newTile = rawData[newIndex];
-            if ( newTile.passable & GetDirectionBitmask( direction, true ) ) {
-                if ( newTile.type == REGION_NODE_OPEN && newTile.isWater == region._isWater ) {
+            if ( newTile.passable & GetDirectionBitmask( direction, true ) && newTile.isWater == region._isWater ) {
+                if ( newTile.type == REGION_NODE_OPEN ) {
                     newTile.type = region._id;
                     region._nodes.push_back( newTile );
                 }
@@ -166,6 +166,9 @@ void World::ComputeStaticAnalysis()
     const uint32_t extraRegionSize = 18;
     const uint32_t emptyLineFrequency = 7;
 
+    // Reset the region information for all tiles
+    std::for_each( vec_tiles.begin(), vec_tiles.end(), []( Maps::Tiles & tile ) { tile.UpdateRegion( REGION_NODE_BLOCKED ); } );
+
     // Step 1. Split map into terrain, water and ground points
     // Initialize the obstacles vector
     TileDataVector obstacles[4];
@@ -240,7 +243,7 @@ void World::ComputeStaticAnalysis()
     const size_t totalMapTiles = vec_tiles.size();
     for ( const TileData & castleTile : castleCenters ) {
         // Check if a lot of players next to each other? (Slugfest map)
-        // GetCastle( fheroes2::Point( val % width, val / width ) )->GetColor();
+        // getCastle( fheroes2::Point( val % width, val / width ) )->GetColor();
         const int castleIndex = castleTile.first + width;
         AppendIfFarEnough( regionCenters, ( castleIndex >= 0 && static_cast<size_t>( castleIndex ) > totalMapTiles ) ? castleTile.first : castleIndex, castleRegionSize );
     }
@@ -292,8 +295,8 @@ void World::ComputeStaticAnalysis()
             node.passable = tile.GetPassable();
             node.isWater = tile.isWater();
 
-            const int object = tile.GetObject();
-            node.mapObject = MP2::isActionObject( object, node.isWater ) ? object : 0;
+            const MP2::MapObjectType objectType = tile.GetObject();
+            node.mapObject = MP2::isActionObject( objectType, node.isWater ) ? objectType : 0;
             if ( node.passable != 0 ) {
                 node.type = REGION_NODE_OPEN;
             }
@@ -327,7 +330,7 @@ void World::ComputeStaticAnalysis()
     }
 
     // Step 8. Fill missing data (if there's a small island/lake or unreachable terrain)
-    FindMissingRegions( data, fheroes2::Size( width, height ), _regions );
+    FindMissingRegions( data, { width, height }, _regions );
 
     // Step 9. Assign regions to the map tiles and finalize the data
     for ( MapRegion & reg : _regions ) {
@@ -337,14 +340,25 @@ void World::ComputeStaticAnalysis()
         for ( const MapRegionNode & node : reg._nodes ) {
             vec_tiles[node.index].UpdateRegion( node.type );
 
-            // connect regions through teleporters
+            // connect regions through teleports
+            MapsIndexes exits;
+
             if ( node.mapObject == MP2::OBJ_STONELITHS ) {
-                const MapsIndexes & exits = GetTeleportEndPoints( node.index );
-                for ( const int exitIndex : exits ) {
-                    // neighbours is a set that will force the uniqness
-                    reg._neighbours.insert( vec_tiles[exitIndex].GetRegion() );
-                }
+                exits = GetTeleportEndPoints( node.index );
             }
+            else if ( node.mapObject == MP2::OBJ_WHIRLPOOL ) {
+                exits = GetWhirlpoolEndPoints( node.index );
+            }
+
+            for ( const int exitIndex : exits ) {
+                // neighbours is a set that will force the uniqness
+                reg._neighbours.insert( vec_tiles[exitIndex].GetRegion() );
+            }
+        }
+
+        // Fix missing references
+        for ( uint32_t adjacent : reg._neighbours ) {
+            _regions[adjacent]._neighbours.insert( reg._id );
         }
     }
 }

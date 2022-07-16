@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -20,36 +21,35 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#include <sstream>
-
 #include "color.h"
-#include "game.h"
 #include "players.h"
+#include "serialize.h"
+#include "tools.h"
 #include "translations.h"
 #include "world.h"
 
-const std::string & Color::String( int color )
+std::string Color::String( int color )
 {
-    static const std::string str_color[] = {"None", _( "Blue" ), _( "Green" ), _( "Red" ), _( "Yellow" ), _( "Orange" ), _( "Purple" ), "uknown"};
-
     switch ( color ) {
     case Color::BLUE:
-        return str_color[1];
+        return _( "Blue" );
     case Color::GREEN:
-        return str_color[2];
+        return _( "Green" );
     case Color::RED:
-        return str_color[3];
+        return _( "Red" );
     case Color::YELLOW:
-        return str_color[4];
+        return _( "Yellow" );
     case Color::ORANGE:
-        return str_color[5];
+        return _( "Orange" );
     case Color::PURPLE:
-        return str_color[6];
+        return _( "Purple" );
     case Color::UNUSED:
-        return str_color[7];
+        return "Unknown";
+    default:
+        break;
     }
 
-    return str_color[0];
+    return "None";
 }
 
 int Color::GetIndex( int color )
@@ -115,25 +115,51 @@ int Color::GetFirst( int colors )
     return NONE;
 }
 
-const char * BarrierColor::String( int val )
+const char * fheroes2::getBarrierColorName( const int color )
 {
-    switch ( val ) {
+    switch ( color ) {
     case AQUA:
-        return _( "Aqua" );
+        return _( "barrier|Aqua" );
     case BLUE:
-        return _( "Blue" );
+        return _( "barrier|Blue" );
     case BROWN:
-        return _( "Brown" );
+        return _( "barrier|Brown" );
     case GOLD:
-        return _( "Gold" );
+        return _( "barrier|Gold" );
     case GREEN:
-        return _( "Green" );
+        return _( "barrier|Green" );
     case ORANGE:
-        return _( "Orange" );
+        return _( "barrier|Orange" );
     case PURPLE:
-        return _( "Purple" );
+        return _( "barrier|Purple" );
     case RED:
-        return _( "Red" );
+        return _( "barrier|Red" );
+    default:
+        break;
+    }
+
+    return "None";
+}
+
+const char * fheroes2::getTentColorName( const int color )
+{
+    switch ( color ) {
+    case AQUA:
+        return _( "tent|Aqua" );
+    case BLUE:
+        return _( "tent|Blue" );
+    case BROWN:
+        return _( "tent|Brown" );
+    case GOLD:
+        return _( "tent|Gold" );
+    case GREEN:
+        return _( "tent|Green" );
+    case ORANGE:
+        return _( "tent|Orange" );
+    case PURPLE:
+        return _( "tent|Purple" );
+    case RED:
+        return _( "tent|Red" );
     default:
         break;
     }
@@ -159,16 +185,6 @@ Colors::Colors( int colors )
         push_back( Color::PURPLE );
 }
 
-std::string Colors::String( void ) const
-{
-    std::ostringstream os;
-
-    for ( const_iterator it = begin(); it != end(); ++it )
-        os << Color::String( *it ) << ", ";
-
-    return os.str();
-}
-
 bool ColorBase::isFriends( int col ) const
 {
     return ( col & Color::ALL ) && ( color == col || Players::isFriends( color, col ) );
@@ -179,7 +195,7 @@ void ColorBase::SetColor( int col )
     color = Color::FromInt( col );
 }
 
-Kingdom & ColorBase::GetKingdom( void ) const
+Kingdom & ColorBase::GetKingdom() const
 {
     return world.GetKingdom( color );
 }

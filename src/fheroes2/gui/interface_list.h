@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2010 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2010 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -31,12 +32,30 @@
 
 namespace Interface
 {
-    struct ListBasic
+    class ListBasic
     {
+    public:
+        ListBasic()
+            : _currentId( -1 )
+            , _topId( -1 )
+        {
+            // Do nothing.
+        }
+
         virtual ~ListBasic() = default;
         virtual bool IsNeedRedraw() const = 0;
-        virtual void Redraw( void ) = 0;
-        virtual bool QueueEventProcessing( void ) = 0;
+        virtual void Redraw() = 0;
+        virtual bool QueueEventProcessing() = 0;
+
+        int getTopId() const
+        {
+            return _topId;
+        }
+
+    protected:
+        int _currentId;
+
+        int _topId;
     };
 
     template <class Item>
@@ -46,19 +65,23 @@ namespace Interface
         explicit ListBox( const fheroes2::Point & pt = fheroes2::Point() )
             : needRedraw( false )
             , content( nullptr )
-            , _currentId( -1 )
-            , _topId( -1 )
             , maxItems( 0 )
             , ptRedraw( pt )
             , useHotkeys( true )
-        {}
+            , _updateScrollbar( false )
+            , _timedButtonPgUp( [this]() { return buttonPgUp.isPressed(); } )
+            , _timedButtonPgDn( [this]() { return buttonPgDn.isPressed(); } )
+        {
+            buttonPgUp.subscribe( &_timedButtonPgUp );
+            buttonPgDn.subscribe( &_timedButtonPgDn );
+        }
         ~ListBox() override = default;
 
-        virtual void RedrawItem( const Item &, s32 ox, s32 oy, bool current ) = 0;
+        virtual void RedrawItem( const Item &, int32_t ox, int32_t oy, bool current ) = 0;
         virtual void RedrawBackground( const fheroes2::Point & ) = 0;
 
-        virtual void ActionCurrentUp( void ) = 0;
-        virtual void ActionCurrentDn( void ) = 0;
+        virtual void ActionCurrentUp() = 0;
+        virtual void ActionCurrentDn() = 0;
 
         virtual void ActionListDoubleClick( Item & ) = 0;
         virtual void ActionListSingleClick( Item & ) = 0;
@@ -89,25 +112,29 @@ namespace Interface
             ptRedraw = tl;
         }
 
-        void SetScrollButtonUp( int icn, u32 index1, u32 index2, const fheroes2::Point & pos )
+        void SetScrollButtonUp( int icn, uint32_t index1, uint32_t index2, const fheroes2::Point & pos )
         {
             buttonPgUp.setICNInfo( icn, index1, index2 );
             buttonPgUp.setPosition( pos.x, pos.y );
         }
 
-        void SetScrollButtonDn( int icn, u32 index1, u32 index2, const fheroes2::Point & pos )
+        void SetScrollButtonDn( int icn, uint32_t index1, uint32_t index2, const fheroes2::Point & pos )
         {
             buttonPgDn.setICNInfo( icn, index1, index2 );
             buttonPgDn.setPosition( pos.x, pos.y );
         }
 
-        void SetScrollBar( const fheroes2::Image & image, const fheroes2::Rect & area )
+        void setScrollBarArea( const fheroes2::Rect & area )
         {
             _scrollbar.setArea( area );
+        }
+
+        void setScrollBarImage( const fheroes2::Image & image )
+        {
             _scrollbar.setImage( image );
         }
 
-        fheroes2::Scrollbar & GetScrollbar( void )
+        fheroes2::Scrollbar & GetScrollbar()
         {
             return _scrollbar;
         }
@@ -132,7 +159,7 @@ namespace Interface
                 _currentId = 0;
         }
 
-        void Reset( void )
+        void Reset()
         {
             if ( content == nullptr || content->empty() ) { // empty content. Must be non-initialized array
                 _currentId = -1;
@@ -157,7 +184,7 @@ namespace Interface
             useHotkeys = !f;
         }
 
-        void Redraw( void ) override
+        void Redraw() override
         {
             needRedraw = false;
 
@@ -187,7 +214,7 @@ namespace Interface
             return needRedraw;
         }
 
-        Item & GetCurrent( void ) // always call this function only after IsValid()!
+        Item & GetCurrent() // always call this function only after IsValid()!
         {
             return ( *content )[_currentId];
         }
@@ -219,7 +246,7 @@ namespace Interface
             SetCurrentVisible();
         }
 
-        void SetCurrentVisible( void )
+        void SetCurrentVisible()
         {
             Verify();
 
@@ -235,10 +262,26 @@ namespace Interface
                 else if ( _topId + maxItems <= _currentId ) { // scroll down, put current id at bottom
                     _topId = _currentId + 1 - maxItems;
                 }
-
-                UpdateScrollbarRange();
-                _scrollbar.moveToIndex( _topId );
             }
+
+            UpdateScrollbarRange();
+            _scrollbar.moveToIndex( _topId );
+        }
+
+        // Move visible area to the position with given element ID being on the top of the list.
+        void setTopVisibleItem( const int topId )
+        {
+            Verify();
+
+            if ( !IsValid() ) {
+                Reset();
+                return;
+            }
+
+            _topId = std::max( 0, std::min( topId, _size() - maxItems ) );
+
+            UpdateScrollbarRange();
+            _scrollbar.moveToIndex( _topId );
         }
 
         void SetCurrent( const Item & item )
@@ -252,25 +295,25 @@ namespace Interface
             SetCurrentVisible();
         }
 
-        void RemoveSelected( void )
+        void RemoveSelected()
         {
             if ( content != nullptr && _currentId >= 0 && _currentId < _size() )
                 content->erase( content->begin() + _currentId );
         }
 
-        bool isSelected( void ) const
+        bool isSelected() const
         {
             return IsValid() && _currentId >= 0;
         }
 
-        void Unselect( void )
+        void Unselect()
         {
             Verify();
             if ( IsValid() )
                 _currentId = -1;
         }
 
-        bool QueueEventProcessing( void ) override
+        bool QueueEventProcessing() override
         {
             LocalEvent & le = LocalEvent::Get();
 
@@ -280,7 +323,7 @@ namespace Interface
             if ( !IsValid() )
                 return false;
 
-            if ( useHotkeys && le.KeyPress( KEY_PAGEUP ) && ( _topId > 0 ) ) {
+            if ( useHotkeys && le.KeyPress( fheroes2::Key::KEY_PAGE_UP ) && ( _topId > 0 ) ) {
                 needRedraw = true;
 
                 if ( _topId > maxItems )
@@ -293,7 +336,7 @@ namespace Interface
 
                 return true;
             }
-            else if ( useHotkeys && le.KeyPress( KEY_PAGEDOWN ) && ( _topId + maxItems < _size() ) ) {
+            if ( useHotkeys && le.KeyPress( fheroes2::Key::KEY_PAGE_DOWN ) && ( _topId + maxItems < _size() ) ) {
                 needRedraw = true;
 
                 _topId += maxItems;
@@ -305,7 +348,7 @@ namespace Interface
 
                 return true;
             }
-            else if ( useHotkeys && le.KeyPress( KEY_UP ) && ( _currentId > 0 ) ) {
+            if ( useHotkeys && le.KeyPress( fheroes2::Key::KEY_UP ) && ( _currentId > 0 ) ) {
                 needRedraw = true;
 
                 --_currentId;
@@ -314,7 +357,7 @@ namespace Interface
 
                 return true;
             }
-            else if ( useHotkeys && le.KeyPress( KEY_DOWN ) && ( _currentId + 1 < _size() ) ) {
+            if ( useHotkeys && le.KeyPress( fheroes2::Key::KEY_DOWN ) && ( _currentId + 1 < _size() ) ) {
                 needRedraw = true;
 
                 ++_currentId;
@@ -323,7 +366,9 @@ namespace Interface
 
                 return true;
             }
-            else if ( ( le.MouseClickLeft( buttonPgUp.area() ) || le.MouseWheelUp( rtAreaItems ) || le.MouseWheelUp( _scrollbar.getArea() ) ) && ( _topId > 0 ) ) {
+            if ( ( le.MouseClickLeft( buttonPgUp.area() ) || le.MouseWheelUp( rtAreaItems ) || le.MouseWheelUp( _scrollbar.getArea() )
+                   || _timedButtonPgUp.isDelayPassed() )
+                 && ( _topId > 0 ) ) {
                 needRedraw = true;
 
                 --_topId;
@@ -331,8 +376,9 @@ namespace Interface
 
                 return true;
             }
-            else if ( ( le.MouseClickLeft( buttonPgDn.area() ) || le.MouseWheelDn( rtAreaItems ) || le.MouseWheelDn( _scrollbar.getArea() ) )
-                      && ( _topId + maxItems < _size() ) ) {
+            if ( ( le.MouseClickLeft( buttonPgDn.area() ) || le.MouseWheelDn( rtAreaItems ) || le.MouseWheelDn( _scrollbar.getArea() )
+                   || _timedButtonPgDn.isDelayPassed() )
+                 && ( _topId + maxItems < _size() ) ) {
                 needRedraw = true;
 
                 ++_topId;
@@ -340,7 +386,7 @@ namespace Interface
 
                 return true;
             }
-            else if ( le.MousePressLeft( _scrollbar.getArea() ) && ( _size() > maxItems ) ) {
+            if ( le.MousePressLeft( _scrollbar.getArea() ) && ( _size() > maxItems ) ) {
                 needRedraw = true;
 
                 UpdateScrollbarRange();
@@ -349,7 +395,17 @@ namespace Interface
                 _scrollbar.moveToPos( mousePos );
                 _topId = _scrollbar.currentIndex();
 
+                _updateScrollbar = true;
+
                 return true;
+            }
+
+            if ( _updateScrollbar ) {
+                _updateScrollbar = false;
+                if ( _scrollbar.updatePosition() ) {
+                    needRedraw = true;
+                    return true;
+                }
             }
 
             const fheroes2::Point & mousePos = le.GetMouseCursor();
@@ -402,15 +458,23 @@ namespace Interface
             return maxItems;
         }
 
+        int _size() const
+        {
+            return content == nullptr ? 0 : static_cast<int>( content->size() );
+        }
+
     private:
         std::vector<Item> * content;
-        int _currentId;
-        int _topId;
         int maxItems;
 
         fheroes2::Point ptRedraw;
 
         bool useHotkeys;
+
+        bool _updateScrollbar;
+
+        fheroes2::TimedEventValidator _timedButtonPgUp;
+        fheroes2::TimedEventValidator _timedButtonPgDn;
 
         void Verify()
         {
@@ -424,11 +488,6 @@ namespace Interface
                 if ( _topId < 0 || _topId >= _size() )
                     _topId = 0;
             }
-        }
-
-        int _size() const
-        {
-            return content == nullptr ? 0 : static_cast<int>( content->size() );
         }
 
         void UpdateScrollbarRange()

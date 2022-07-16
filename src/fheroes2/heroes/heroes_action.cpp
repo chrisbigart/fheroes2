@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,130 +23,78 @@
 
 #include <cassert>
 
-#include "agg.h"
 #include "agg_image.h"
 #include "ai.h"
-#include "audio_mixer.h"
+#include "audio.h"
+#include "audio_manager.h"
 #include "battle.h"
 #include "castle.h"
-#include "cursor.h"
 #include "game.h"
 #include "game_delays.h"
 #include "game_interface.h"
+#include "game_static.h"
 #include "heroes.h"
 #include "icn.h"
 #include "kingdom.h"
 #include "logging.h"
 #include "maps_actions.h"
+#include "maps_objects.h"
 #include "monster.h"
-#include "morale.h"
 #include "mp2.h"
 #include "mus.h"
 #include "payment.h"
 #include "profit.h"
 #include "race.h"
+#include "settings.h"
 #include "skill.h"
 #include "text.h"
+#include "tools.h"
+#include "translations.h"
+#include "ui_dialog.h"
+#include "ui_monster.h"
+#include "ui_text.h"
 #include "world.h"
 
-void ActionToCastle( Heroes & hero, s32 dst_index );
-void ActionToHeroes( Heroes & hero, s32 dst_index );
-void ActionToMonster( Heroes & hero, int obj, s32 dst_index );
-void ActionToBoat( Heroes & hero, s32 dst_index );
-void ActionToCoast( Heroes & hero, s32 dst_index );
-void ActionToWagon( Heroes & hero, s32 dst_index );
-void ActionToSkeleton( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToObjectResource( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToPickupResource( const Heroes & hero, int obj, s32 dst_index );
-void ActionToFlotSam( const Heroes & hero, u32 obj, s32 dst_index );
-void ActionToArtifact( Heroes & hero, int obj, s32 dst_index );
-void ActionToShipwreckSurvivor( Heroes & hero, int obj, s32 dst_index );
-void ActionToShrine( Heroes & hero, s32 dst_index );
-void ActionToWitchsHut( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToGoodLuckObject( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToPyramid( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToSign( const Heroes & hero, s32 dst_index );
-void ActionToMagicWell( Heroes & hero, s32 dst_index );
-void ActionToTradingPost( const Heroes & hero );
-void ActionToPrimarySkillObject( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToPoorMoraleObject( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToGoodMoraleObject( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToExperienceObject( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToTreasureChest( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToAncientLamp( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToTeleports( Heroes & hero, s32 dst_index );
-void ActionToWhirlpools( Heroes & hero, s32 dst_index );
-void ActionToObservationTower( const Heroes & hero, u32 obj, s32 dst_index );
-void ActionToCaptureObject( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToDwellingJoinMonster( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToDwellingRecruitMonster( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToDwellingBattleMonster( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToArtesianSpring( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToAbandoneMine( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToXanadu( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToUpgradeArmyObject( Heroes & hero, u32 obj );
-void ActionToMagellanMaps( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToEvent( Heroes & hero, s32 dst_index );
-void ActionToObelisk( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToTreeKnowledge( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToOracle( const Heroes & hero, uint32_t obj );
-void ActionToDaemonCave( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToAlchemistsTower( Heroes & hero );
-void ActionToStables( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToArena( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToSirens( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToJail( const Heroes & hero, u32 obj, s32 dst_index );
-void ActionToHutMagi( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToEyeMagi( const Heroes & hero, u32 obj );
-void ActionToSphinx( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToBarrier( Heroes & hero, u32 obj, s32 dst_index );
-void ActionToTravellersTent( const Heroes & hero, u32 obj, s32 dst_index );
-
-u32 DialogCaptureResourceObject( const std::string & hdr, const std::string & str, u32 res, u32 buttons = Dialog::OK )
+namespace
 {
-    const fheroes2::Sprite & sprite = fheroes2::AGG::GetICN( ICN::RESOURCE, Resource::GetIndexSprite2( res ) );
-    std::string msg = str;
+    void DialogCaptureResourceObject( const std::string & hdr, const std::string & str, const int32_t resourceType )
+    {
+        const payment_t info = ProfitConditions::FromMine( resourceType );
+        int32_t resouceCount = 0;
 
-    // sprite resource with x / day test
-    fheroes2::Image sf( sprite.width() + 30, sprite.height() + 14 );
-    sf.reset();
+        switch ( resourceType ) {
+        case Resource::MERCURY:
+            resouceCount = info.mercury;
+            break;
+        case Resource::WOOD:
+            resouceCount = info.wood;
+            break;
+        case Resource::ORE:
+            resouceCount = info.ore;
+            break;
+        case Resource::SULFUR:
+            resouceCount = info.sulfur;
+            break;
+        case Resource::CRYSTAL:
+            resouceCount = info.crystal;
+            break;
+        case Resource::GEMS:
+            resouceCount = info.gems;
+            break;
+        case Resource::GOLD:
+            resouceCount = info.gold;
+            break;
+        default:
+            // You're passing an invalid resource type. Check your logic!
+            assert( 0 );
+            break;
+        }
 
-    fheroes2::Blit( sprite, sf, 15, 0 );
+        std::string perday = _( "%{count} / day" );
+        StringReplace( perday, "%{count}", resouceCount );
 
-    std::string perday = _( "%{count} / day" );
-    payment_t info = ProfitConditions::FromMine( res );
-    const s32 * current = nullptr;
-
-    switch ( res ) {
-    case Resource::MERCURY:
-        current = &info.mercury;
-        break;
-    case Resource::WOOD:
-        current = &info.wood;
-        break;
-    case Resource::ORE:
-        current = &info.ore;
-        break;
-    case Resource::SULFUR:
-        current = &info.sulfur;
-        break;
-    case Resource::CRYSTAL:
-        current = &info.crystal;
-        break;
-    case Resource::GEMS:
-        current = &info.gems;
-        break;
-    case Resource::GOLD:
-        current = &info.gold;
-        break;
-    default:
-        break;
-    }
-
-    if ( current ) {
-        StringReplace( perday, "%{count}", *current );
-
-        switch ( *current ) {
+        std::string msg = str;
+        switch ( resouceCount ) {
         case 1:
             StringReplace( msg, "%{count}", _( "one" ) );
             break;
@@ -153,146 +102,76 @@ u32 DialogCaptureResourceObject( const std::string & hdr, const std::string & st
             StringReplace( msg, "%{count}", _( "two" ) );
             break;
         default:
-            StringReplace( msg, "%{count}", *current );
+            StringReplace( msg, "%{count}", resouceCount );
             break;
         }
+
+        fheroes2::ResourceDialogElement resourceUI( resourceType, std::move( perday ) );
+
+        fheroes2::showMessage( fheroes2::Text( hdr, fheroes2::FontType::normalYellow() ), fheroes2::Text( std::move( msg ), fheroes2::FontType::normalWhite() ),
+                               Dialog::OK, { &resourceUI } );
     }
-
-    Text text( perday, Font::SMALL );
-    text.Blit( ( sf.width() - text.w() ) / 2, sf.height() - 12, sf );
-
-    return Dialog::SpriteInfo( hdr, msg, sf, buttons );
 }
 
-u32 DialogGoldWithExp( const std::string & hdr, const std::string & msg, u32 count, u32 exp, u32 buttons = Dialog::OK )
-{
-    const fheroes2::Sprite & gold = fheroes2::AGG::GetICN( ICN::RESOURCE, 6 );
-    const fheroes2::Sprite & sprite = fheroes2::AGG::GetICN( ICN::EXPMRL, 4 );
-    fheroes2::Image image( sprite.width() + gold.width() + 50, sprite.width() + 10 );
-    image.reset();
+void ActionToCastle( Heroes & hero, int32_t dst_index );
+void ActionToHeroes( Heroes & hero, int32_t dst_index );
+void ActionToMonster( Heroes & hero, int32_t dst_index );
+void ActionToBoat( Heroes & hero, int32_t dst_index );
+void ActionToCoast( Heroes & hero, int32_t dst_index );
+void ActionToWagon( Heroes & hero, int32_t dst_index );
+void ActionToSkeleton( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToObjectResource( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToPickupResource( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToFlotSam( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToArtifact( Heroes & hero, int32_t dst_index );
+void ActionToShipwreckSurvivor( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToShrine( Heroes & hero, int32_t dst_index );
+void ActionToWitchsHut( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToGoodLuckObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToPyramid( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToSign( const Heroes & hero, int32_t dst_index );
+void ActionToMagicWell( Heroes & hero, int32_t dst_index );
+void ActionToTradingPost( const Heroes & hero );
+void ActionToPrimarySkillObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToPoorMoraleObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToGoodMoraleObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToExperienceObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToTreasureChest( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToAncientLamp( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToTeleports( Heroes & hero, int32_t index_from );
+void ActionToWhirlpools( Heroes & hero, int32_t index_from );
+void ActionToObservationTower( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToCaptureObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToDwellingJoinMonster( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToDwellingRecruitMonster( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToDwellingBattleMonster( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToArtesianSpring( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToAbandonedMine( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToXanadu( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToUpgradeArmyObject( Heroes & hero, const MP2::MapObjectType objectType, const std::string & defaultMessage );
+void ActionToMagellanMaps( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToEvent( Heroes & hero, int32_t dst_index );
+void ActionToObelisk( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToTreeKnowledge( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToOracle( const Heroes & hero, const MP2::MapObjectType objectType );
+void ActionToDaemonCave( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToAlchemistsTower( Heroes & hero );
+void ActionToStables( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToArena( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToSirens( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToJail( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToHutMagi( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToEyeMagi( const Heroes & hero, const MP2::MapObjectType objectType );
+void ActionToSphinx( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToBarrier( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
+void ActionToTravellersTent( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index );
 
-    fheroes2::Blit( gold, image, 0, image.height() - gold.height() - 12 );
-    fheroes2::Blit( sprite, image, gold.width() + 50, 0 );
-
-    Text text( std::to_string( count ), Font::SMALL );
-    text.Blit( ( gold.width() - text.w() ) / 2, image.height() - 12, image );
-    text.Set( std::to_string( exp ) );
-    text.Blit( gold.width() + 50 + ( sprite.width() - text.w() ) / 2, image.height() - 12, image );
-
-    return Dialog::SpriteInfo( hdr, msg, image, buttons );
-}
-
-u32 DialogArtifactWithExp( const std::string & hdr, const std::string & msg, const Artifact & art, u32 exp, u32 buttons = Dialog::OK )
-{
-    const fheroes2::Sprite & sprite = fheroes2::AGG::GetICN( ICN::EXPMRL, 4 );
-    const fheroes2::Sprite & border = fheroes2::AGG::GetICN( ICN::RESOURCE, 7 );
-    const fheroes2::Sprite & artifact = fheroes2::AGG::GetICN( ICN::ARTIFACT, art.IndexSprite64() );
-
-    fheroes2::Image image( border.width() + sprite.width() + 50, border.height() );
-    image.reset();
-
-    fheroes2::Blit( border, image );
-    fheroes2::Blit( artifact, image, 5, 5 );
-    fheroes2::Blit( sprite, image, border.width() + 50, ( border.height() - sprite.height() ) / 2 );
-
-    Text text( std::to_string( exp ), Font::SMALL );
-    text.Blit( border.width() + 50 + ( sprite.width() - text.w() ) / 2, image.height() - 12, image );
-
-    return Dialog::SpriteInfo( hdr, msg, image, buttons );
-}
-
-u32 DialogWithExp( const std::string & hdr, const std::string & msg, u32 exp, u32 buttons = Dialog::OK )
-{
-    const fheroes2::Sprite & sprite = fheroes2::AGG::GetICN( ICN::EXPMRL, 4 );
-
-    fheroes2::Image image( sprite.width(), sprite.height() + 12 );
-    image.reset();
-
-    fheroes2::Blit( sprite, image );
-    Text text( std::to_string( exp ), Font::SMALL );
-    text.Blit( ( sprite.width() - text.w() ) / 2, sprite.height(), image );
-
-    return Dialog::SpriteInfo( hdr, msg, image, buttons );
-}
-
-u32 DialogWithArtifactAndGold( const std::string & hdr, const std::string & msg, const Artifact & art, u32 count, u32 buttons = Dialog::OK )
-{
-    const fheroes2::Sprite & gold = fheroes2::AGG::GetICN( ICN::RESOURCE, 6 );
-    const fheroes2::Sprite & border = fheroes2::AGG::GetICN( ICN::RESOURCE, 7 );
-    const fheroes2::Sprite & artifact = fheroes2::AGG::GetICN( ICN::ARTIFACT, art.IndexSprite64() );
-
-    fheroes2::Image image( border.width() + gold.width() + 50, border.height() );
-    image.reset();
-
-    fheroes2::Blit( border, image );
-    fheroes2::Blit( artifact, image, 5, 5 );
-    fheroes2::Blit( gold, image, border.width() + 50, ( border.height() - gold.height() ) / 2 );
-
-    Text text( std::to_string( count ), Font::SMALL );
-    text.Blit( border.width() + 50 + ( gold.width() - text.w() ) / 2, border.height() - 25, image );
-
-    return Dialog::SpriteInfo( hdr, msg, image, buttons );
-}
-
-u32 DialogWithGold( const std::string & hdr, const std::string & msg, u32 count, u32 buttons = Dialog::OK )
-{
-    const fheroes2::Sprite & gold = fheroes2::AGG::GetICN( ICN::RESOURCE, 6 );
-
-    fheroes2::Image image( gold.width(), gold.height() + 12 );
-    image.reset();
-
-    fheroes2::Blit( gold, image );
-
-    Text text( std::to_string( count ), Font::SMALL );
-    text.Blit( ( gold.width() - text.w() ) / 2, gold.height(), image );
-
-    return Dialog::SpriteInfo( hdr, msg, image, buttons );
-}
-
-u32 DialogMorale( const std::string & hdr, const std::string & msg, bool good, u32 count )
-{
-    if ( 1 > count )
-        count = 1;
-    if ( 3 < count )
-        count = 3;
-    const fheroes2::Sprite & sprite = fheroes2::AGG::GetICN( ICN::EXPMRL, ( good ? 2 : 3 ) );
-    u32 offset = sprite.width() * 4 / 3;
-
-    fheroes2::Image image( sprite.width() + offset * ( count - 1 ), sprite.height() );
-    image.reset();
-
-    for ( u32 ii = 0; ii < count; ++ii )
-        fheroes2::Blit( sprite, image, offset * ii, 0 );
-
-    return Dialog::SpriteInfo( hdr, msg, image );
-}
-
-uint32_t DialogLuck( const std::string & hdr, const std::string & msg, bool good, uint32_t count )
-{
-    if ( 1 > count )
-        count = 1;
-    else if ( 3 < count )
-        count = 3;
-
-    const fheroes2::Sprite & sprite = fheroes2::AGG::GetICN( ICN::EXPMRL, ( good ? 0 : 1 ) );
-    const uint32_t offset = sprite.width() * 2;
-
-    fheroes2::Image image( sprite.width() + offset * ( count - 1 ), sprite.height() );
-    image.reset();
-
-    for ( uint32_t i = 0; i < count; ++i )
-        fheroes2::Blit( sprite, image, offset * i, 0 );
-
-    return Dialog::SpriteInfo( hdr, msg, image );
-}
-
-void BattleLose( Heroes & hero, const Battle::Result & res, bool attacker, int color = Color::NONE )
+void BattleLose( Heroes & hero, const Battle::Result & res, bool attacker )
 {
     const uint32_t reason = attacker ? res.AttackerResult() : res.DefenderResult();
 
-    AGG::PlaySound( M82::KILLFADE );
+    AudioManager::PlaySound( M82::KILLFADE );
     hero.FadeOut();
-    hero.SetKillerColor( color );
     hero.SetFreeman( reason );
 
     Interface::Basic & I = Interface::Basic::Get();
@@ -305,7 +184,7 @@ void RecruitMonsterFromTile( Heroes & hero, Maps::Tiles & tile, const std::strin
     if ( !hero.GetArmy().CanJoinTroop( troop ) )
         Dialog::Message( msg, _( "You are unable to recruit at this time, your ranks are full." ), Font::BIG, Dialog::OK );
     else {
-        const u32 recruit = Dialog::RecruitMonster( troop(), troop.GetCount(), false ).GetCount();
+        const uint32_t recruit = Dialog::RecruitMonster( troop.GetMonster(), troop.GetCount(), false, 0 ).GetCount();
 
         if ( recruit ) {
             if ( remove && recruit == troop.GetCount() ) {
@@ -322,26 +201,28 @@ void RecruitMonsterFromTile( Heroes & hero, Maps::Tiles & tile, const std::strin
             else
                 tile.MonsterSetCount( troop.GetCount() - recruit );
 
-            const payment_t paymentCosts = troop().GetCost() * recruit;
+            const payment_t paymentCosts = troop.GetMonster().GetCost() * recruit;
             hero.GetKingdom().OddFundsResource( paymentCosts );
 
-            hero.GetArmy().JoinTroop( troop(), recruit );
-            hero.MovePointsScaleFixed();
+            hero.GetArmy().JoinTroop( troop.GetMonster(), recruit );
 
-            Interface::Basic::Get().GetStatusWindow().SetRedraw();
+            Interface::Basic::Get().SetRedraw( Interface::REDRAW_STATUS );
         }
     }
 }
 
-static void WhirlpoolTroopLooseEffect( Heroes & hero )
+static void WhirlpoolTroopLoseEffect( Heroes & hero )
 {
-    Troop * troop = hero.GetArmy().GetWeakestTroop();
-    assert( troop );
-    if ( !troop )
+    const Army & heroArmy = hero.GetArmy();
+
+    Troop * weakestTroop = heroArmy.GetWeakestTroop();
+    assert( weakestTroop != nullptr );
+    if ( weakestTroop == nullptr ) {
         return;
+    }
 
     // Whirlpool effect affects heroes only with more than one creature in more than one slot
-    if ( hero.GetArmy().GetCount() == 1 && troop->GetCount() == 1 ) {
+    if ( heroArmy.GetCount() == 1 && weakestTroop->GetCount() == 1 ) {
         return;
     }
 
@@ -349,29 +230,48 @@ static void WhirlpoolTroopLooseEffect( Heroes & hero )
         // TODO: Do we really have this dialog in-game in OG?
         Dialog::Message( _( "A whirlpool engulfs your ship." ), _( "Some of your army has fallen overboard." ), Font::BIG, Dialog::OK );
 
-        if ( troop->GetCount() == 1 ) {
-            troop->Reset();
+        if ( weakestTroop->GetCount() == 1 ) {
+            weakestTroop->Reset();
         }
         else {
-            troop->SetCount( Monster::GetCountFromHitPoints( troop->GetID(), troop->GetHitPoints() - troop->GetHitPoints() * Game::GetWhirlpoolPercent() / 100 ) );
+            weakestTroop->SetCount( Monster::GetCountFromHitPoints( weakestTroop->GetID(),
+                                                                    weakestTroop->GetHitPoints() - weakestTroop->GetHitPoints() * Game::GetWhirlpoolPercent() / 100 ) );
         }
+
+        Interface::Basic::Get().SetRedraw( Interface::REDRAW_STATUS );
     }
 }
 
 // action to next cell
 void Heroes::Action( int tileIndex, bool isDestination )
 {
-    if ( GetKingdom().isControlAI() )
-        return AI::HeroesAction( *this, tileIndex, isDestination );
+    if ( GetKingdom().isControlAI() ) {
+        // Restore the original music after the action is completed.
+        const AudioManager::MusicRestorer musicRestorer;
+
+        return AI::HeroesAction( *this, tileIndex );
+    }
+
+    // Update environment sounds and music before doing the action. Interface::Basic::SetFocus() function is responsible for update them after the action.
+    const int32_t heroPosIndex = GetIndex();
+    assert( heroPosIndex >= 0 );
+    if ( Game::UpdateSoundsOnFocusUpdate() ) {
+        Game::EnvironmentSoundMixer();
+        AudioManager::PlayMusicAsync( MUS::FromGround( world.GetTiles( heroPosIndex ).GetGround() ), Music::PlaybackMode::RESUME_AND_PLAY_INFINITE );
+    }
+
+    // Restore the original music after the action is completed.
+    const AudioManager::MusicRestorer musicRestorer;
 
     Maps::Tiles & tile = world.GetTiles( tileIndex );
-    const int object = ( tileIndex == GetIndex() ? tile.GetObject( false ) : tile.GetObject() );
+    const MP2::MapObjectType objectType = tile.GetObject( tileIndex != heroPosIndex );
 
-    if ( MUS::FromMapObject( object ) != MUS::UNKNOWN )
-        AGG::PlayMusic( MUS::FromMapObject( object ), false );
+    const int objectMusicTrack = MUS::FromMapObject( objectType );
+    if ( objectMusicTrack != MUS::UNKNOWN ) {
+        AudioManager::PlayMusic( objectMusicTrack, Music::PlaybackMode::PLAY_ONCE );
+    }
 
-    if ( MP2::isActionObject( object, isShipMaster() ) ) {
-        Interface::StatusWindow::ResetTimer();
+    if ( MP2::isActionObject( objectType, isShipMaster() ) ) {
         SetModes( ACTION );
     }
 
@@ -384,9 +284,7 @@ void Heroes::Action( int tileIndex, bool isDestination )
         Interface::Basic & I = Interface::Basic::Get();
 
         I.GetGameArea().SetCenter( GetCenter() );
-
-        I.SetRedraw( Interface::REDRAW_GAMEAREA | Interface::REDRAW_RADAR );
-        I.Redraw();
+        I.Redraw( Interface::REDRAW_GAMEAREA | Interface::REDRAW_RADAR );
     }
 
     if ( list ) {
@@ -422,7 +320,7 @@ void Heroes::Action( int tileIndex, bool isDestination )
 
     /* default actions */
     if ( cancel_default ) {
-        if ( MP2::isPickupObject( object ) ) {
+        if ( MP2::isPickupObject( objectType ) ) {
             Game::ObjectFadeAnimation::PrepareFadeTask( tile.GetObject(), tile.GetIndex(), -1, true, false );
 
             tile.RemoveObjectSprite();
@@ -433,9 +331,9 @@ void Heroes::Action( int tileIndex, bool isDestination )
         }
     }
     else
-        switch ( object ) {
+        switch ( objectType ) {
         case MP2::OBJ_MONSTER:
-            ActionToMonster( *this, object, tileIndex );
+            ActionToMonster( *this, tileIndex );
             break;
 
         case MP2::OBJ_CASTLE:
@@ -452,47 +350,47 @@ void Heroes::Action( int tileIndex, bool isDestination )
             ActionToCoast( *this, tileIndex );
             break;
 
-            // resource object
+        // resource object
         case MP2::OBJ_WINDMILL:
         case MP2::OBJ_WATERWHEEL:
         case MP2::OBJ_MAGICGARDEN:
         case MP2::OBJ_LEANTO:
-            ActionToObjectResource( *this, object, tileIndex );
+            ActionToObjectResource( *this, objectType, tileIndex );
             break;
 
         case MP2::OBJ_WAGON:
             ActionToWagon( *this, tileIndex );
             break;
         case MP2::OBJ_SKELETON:
-            ActionToSkeleton( *this, object, tileIndex );
+            ActionToSkeleton( *this, objectType, tileIndex );
             break;
 
         // pickup object
         case MP2::OBJ_RESOURCE:
         case MP2::OBJ_BOTTLE:
         case MP2::OBJ_CAMPFIRE:
-            ActionToPickupResource( *this, object, tileIndex );
+            ActionToPickupResource( *this, objectType, tileIndex );
             break;
 
         case MP2::OBJ_WATERCHEST:
         case MP2::OBJ_TREASURECHEST:
-            ActionToTreasureChest( *this, object, tileIndex );
+            ActionToTreasureChest( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_ANCIENTLAMP:
-            ActionToAncientLamp( *this, object, tileIndex );
+            ActionToAncientLamp( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_FLOTSAM:
-            ActionToFlotSam( *this, object, tileIndex );
+            ActionToFlotSam( *this, objectType, tileIndex );
             break;
 
-        case MP2::OBJ_SHIPWRECKSURVIROR:
-            ActionToShipwreckSurvivor( *this, object, tileIndex );
+        case MP2::OBJ_SHIPWRECKSURVIVOR:
+            ActionToShipwreckSurvivor( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_ARTIFACT:
-            ActionToArtifact( *this, object, tileIndex );
+            ActionToArtifact( *this, tileIndex );
             break;
 
-            // shrine circle
+        // shrine circle
         case MP2::OBJ_SHRINE1:
         case MP2::OBJ_SHRINE2:
         case MP2::OBJ_SHRINE3:
@@ -501,7 +399,7 @@ void Heroes::Action( int tileIndex, bool isDestination )
 
         // witchs hut
         case MP2::OBJ_WITCHSHUT:
-            ActionToWitchsHut( *this, object, tileIndex );
+            ActionToWitchsHut( *this, objectType, tileIndex );
             break;
 
         // info message
@@ -513,11 +411,11 @@ void Heroes::Action( int tileIndex, bool isDestination )
         case MP2::OBJ_FOUNTAIN:
         case MP2::OBJ_FAERIERING:
         case MP2::OBJ_IDOL:
-            ActionToGoodLuckObject( *this, object, tileIndex );
+            ActionToGoodLuckObject( *this, objectType, tileIndex );
             break;
 
         case MP2::OBJ_PYRAMID:
-            ActionToPyramid( *this, object, tileIndex );
+            ActionToPyramid( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_MAGICWELL:
             ActionToMagicWell( *this, tileIndex );
@@ -531,7 +429,7 @@ void Heroes::Action( int tileIndex, bool isDestination )
         case MP2::OBJ_MERCENARYCAMP:
         case MP2::OBJ_DOCTORHUT:
         case MP2::OBJ_STANDINGSTONES:
-            ActionToPrimarySkillObject( *this, object, tileIndex );
+            ActionToPrimarySkillObject( *this, objectType, tileIndex );
             break;
 
         // morale modification
@@ -539,24 +437,24 @@ void Heroes::Action( int tileIndex, bool isDestination )
         case MP2::OBJ_TEMPLE:
         case MP2::OBJ_WATERINGHOLE:
         case MP2::OBJ_BUOY:
-            ActionToGoodMoraleObject( *this, object, tileIndex );
+            ActionToGoodMoraleObject( *this, objectType, tileIndex );
             break;
 
         case MP2::OBJ_SHIPWRECK:
         case MP2::OBJ_GRAVEYARD:
         case MP2::OBJ_DERELICTSHIP:
-            ActionToPoorMoraleObject( *this, object, tileIndex );
+            ActionToPoorMoraleObject( *this, objectType, tileIndex );
             break;
 
         // experience modification
         case MP2::OBJ_GAZEBO:
-            ActionToExperienceObject( *this, object, tileIndex );
+            ActionToExperienceObject( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_DAEMONCAVE:
-            ActionToDaemonCave( *this, object, tileIndex );
+            ActionToDaemonCave( *this, objectType, tileIndex );
             break;
 
-            // teleports
+        // teleports
         case MP2::OBJ_STONELITHS:
             ActionToTeleports( *this, tileIndex );
             break;
@@ -567,10 +465,10 @@ void Heroes::Action( int tileIndex, bool isDestination )
 
         // obsv tower
         case MP2::OBJ_OBSERVATIONTOWER:
-            ActionToObservationTower( *this, object, tileIndex );
+            ActionToObservationTower( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_MAGELLANMAPS:
-            ActionToMagellanMaps( *this, object, tileIndex );
+            ActionToMagellanMaps( *this, objectType, tileIndex );
             break;
 
         // capture color object
@@ -578,14 +476,14 @@ void Heroes::Action( int tileIndex, bool isDestination )
         case MP2::OBJ_MINES:
         case MP2::OBJ_SAWMILL:
         case MP2::OBJ_LIGHTHOUSE:
-            ActionToCaptureObject( *this, object, tileIndex );
+            ActionToCaptureObject( *this, objectType, tileIndex );
             break;
 
         case MP2::OBJ_ABANDONEDMINE:
-            ActionToAbandoneMine( *this, object, tileIndex );
+            ActionToAbandonedMine( *this, objectType, tileIndex );
             break;
 
-            // accept army
+        // accept army
         case MP2::OBJ_WATCHTOWER:
         case MP2::OBJ_EXCAVATION:
         case MP2::OBJ_CAVE:
@@ -596,35 +494,35 @@ void Heroes::Action( int tileIndex, bool isDestination )
         case MP2::OBJ_HALFLINGHOLE:
         case MP2::OBJ_PEASANTHUT:
         case MP2::OBJ_THATCHEDHUT:
-            ActionToDwellingJoinMonster( *this, object, tileIndex );
+            ActionToDwellingJoinMonster( *this, objectType, tileIndex );
             break;
 
-            // recruit army
+        // recruit army
         case MP2::OBJ_RUINS:
         case MP2::OBJ_TREECITY:
         case MP2::OBJ_WAGONCAMP:
         case MP2::OBJ_DESERTTENT:
-            ActionToDwellingRecruitMonster( *this, object, tileIndex );
+            ActionToDwellingRecruitMonster( *this, objectType, tileIndex );
             break;
 
         // battle and recruit army
         case MP2::OBJ_DRAGONCITY:
         case MP2::OBJ_CITYDEAD:
         case MP2::OBJ_TROLLBRIDGE:
-            ActionToDwellingBattleMonster( *this, object, tileIndex );
+            ActionToDwellingBattleMonster( *this, objectType, tileIndex );
             break;
 
         case MP2::OBJ_ARTESIANSPRING:
-            ActionToArtesianSpring( *this, object, tileIndex );
+            ActionToArtesianSpring( *this, objectType, tileIndex );
             break;
 
         case MP2::OBJ_XANADU:
-            ActionToXanadu( *this, object, tileIndex );
+            ActionToXanadu( *this, objectType, tileIndex );
             break;
 
         case MP2::OBJ_HILLFORT:
         case MP2::OBJ_FREEMANFOUNDRY:
-            ActionToUpgradeArmyObject( *this, object );
+            ActionToUpgradeArmyObject( *this, objectType, "" );
             break;
 
         case MP2::OBJ_EVENT:
@@ -632,130 +530,141 @@ void Heroes::Action( int tileIndex, bool isDestination )
             break;
 
         case MP2::OBJ_OBELISK:
-            ActionToObelisk( *this, object, tileIndex );
+            ActionToObelisk( *this, objectType, tileIndex );
             break;
 
         case MP2::OBJ_TREEKNOWLEDGE:
-            ActionToTreeKnowledge( *this, object, tileIndex );
+            ActionToTreeKnowledge( *this, objectType, tileIndex );
             break;
 
         case MP2::OBJ_ORACLE:
-            ActionToOracle( *this, object );
+            ActionToOracle( *this, objectType );
             break;
         case MP2::OBJ_SPHINX:
-            ActionToSphinx( *this, object, tileIndex );
+            ActionToSphinx( *this, objectType, tileIndex );
             break;
 
-            // loyalty version
+        // loyalty version
         case MP2::OBJ_WATERALTAR:
         case MP2::OBJ_AIRALTAR:
         case MP2::OBJ_FIREALTAR:
         case MP2::OBJ_EARTHALTAR:
         case MP2::OBJ_BARROWMOUNDS:
-            ActionToDwellingRecruitMonster( *this, object, tileIndex );
+            ActionToDwellingRecruitMonster( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_ALCHEMYTOWER:
             ActionToAlchemistsTower( *this );
             break;
         case MP2::OBJ_STABLES:
-            ActionToStables( *this, object, tileIndex );
+            ActionToStables( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_ARENA:
-            ActionToArena( *this, object, tileIndex );
+            ActionToArena( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_MERMAID:
-            ActionToGoodLuckObject( *this, object, tileIndex );
+            ActionToGoodLuckObject( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_SIRENS:
-            ActionToSirens( *this, object, tileIndex );
+            ActionToSirens( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_JAIL:
-            ActionToJail( *this, object, tileIndex );
+            ActionToJail( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_HUTMAGI:
-            ActionToHutMagi( *this, object, tileIndex );
+            ActionToHutMagi( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_EYEMAGI:
-            ActionToEyeMagi( *this, object );
+            ActionToEyeMagi( *this, objectType );
             break;
 
         case MP2::OBJ_BARRIER:
-            ActionToBarrier( *this, object, tileIndex );
+            ActionToBarrier( *this, objectType, tileIndex );
             break;
         case MP2::OBJ_TRAVELLERTENT:
-            ActionToTravellersTent( *this, object, tileIndex );
+            ActionToTravellersTent( *this, objectType, tileIndex );
             break;
 
-            // object
+        // other object
         default:
             break;
         }
 }
 
-void ActionToMonster( Heroes & hero, int obj, s32 dst_index )
+void ActionToMonster( Heroes & hero, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
-    MapMonster * map_troop = tile.GetObject() == obj ? dynamic_cast<MapMonster *>( world.GetMapObject( tile.GetObjectUID() ) ) : nullptr;
-    Troop troop = map_troop ? map_troop->QuantityTroop() : tile.QuantityTroop();
+    Troop troop = tile.QuantityTroop();
 
     Interface::Basic & I = Interface::Basic::Get();
 
-    JoinCount join = Army::GetJoinSolution( hero, tile, troop );
+    bool destroy = false;
 
-    // free join
-    if ( JOIN_FREE == join.first ) {
-        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " join monster " << troop.GetName() );
+    const NeutralMonsterJoiningCondition join = Army::GetJoinSolution( hero, tile, troop );
+
+    if ( join.reason == NeutralMonsterJoiningCondition::Reason::Alliance ) {
+        if ( hero.GetArmy().CanJoinTroop( troop ) ) {
+            assert( join.joiningMessage != nullptr );
+            Dialog::Message( "", join.joiningMessage, Font::BIG, Dialog::OK );
+            hero.GetArmy().JoinTroop( troop );
+        }
+        else {
+            assert( join.fleeingMessage != nullptr );
+            Dialog::Message( "", join.fleeingMessage, Font::BIG, Dialog::OK );
+        }
+
+        destroy = true;
+    }
+    else if ( join.reason == NeutralMonsterJoiningCondition::Reason::Bane ) {
+        assert( join.fleeingMessage != nullptr );
+        Dialog::Message( "", join.fleeingMessage, Font::BIG, Dialog::OK );
+        destroy = true;
+    }
+    else if ( join.reason == NeutralMonsterJoiningCondition::Reason::Free ) {
+        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " join monster " << troop.GetName() )
 
         if ( Dialog::YES == Dialog::ArmyJoinFree( troop, hero ) ) {
             hero.GetArmy().JoinTroop( troop );
 
-            I.GetStatusWindow().SetRedraw();
+            I.SetRedraw( Interface::REDRAW_STATUS );
+            destroy = true;
         }
         else {
             Dialog::Message( "", _( "Insulted by your refusal of their offer, the monsters attack!" ), Font::BIG, Dialog::OK );
-
-            join.first = JOIN_NONE;
         }
     }
-    // join with cost
-    else if ( JOIN_COST == join.first ) {
-        const u32 gold = troop.GetCost().gold;
+    else if ( join.reason == NeutralMonsterJoiningCondition::Reason::ForMoney ) {
+        const int32_t joiningCost = troop.GetTotalCost().gold;
 
-        if ( Dialog::YES == Dialog::ArmyJoinWithCost( troop, join.second, gold, hero ) ) {
-            DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " join monster " << troop.GetName() << ", count: " << join.second << ", cost: " << gold );
+        if ( Dialog::YES == Dialog::ArmyJoinWithCost( troop, join.monsterCount, joiningCost, hero ) ) {
+            DEBUG_LOG( DBG_GAME, DBG_INFO, join.monsterCount << " " << troop.GetName() << " join " << hero.GetName() << " for " << joiningCost << " gold." )
 
-            hero.GetArmy().JoinTroop( troop(), join.second );
-            hero.GetKingdom().OddFundsResource( Funds( Resource::GOLD, gold ) );
+            hero.GetArmy().JoinTroop( troop.GetMonster(), join.monsterCount );
+            hero.GetKingdom().OddFundsResource( Funds( Resource::GOLD, joiningCost ) );
 
-            I.GetStatusWindow().SetRedraw();
+            I.SetRedraw( Interface::REDRAW_STATUS );
+            destroy = true;
         }
         else {
             Dialog::Message( "", _( "Insulted by your refusal of their offer, the monsters attack!" ), Font::BIG, Dialog::OK );
-
-            join.first = JOIN_NONE;
         }
     }
-    // flee
-    else if ( JOIN_FLEE == join.first ) {
+    else if ( join.reason == NeutralMonsterJoiningCondition::Reason::RunAway ) {
         std::string message = _( "The %{monster}, awed by the power of your forces, begin to scatter.\nDo you wish to pursue and engage them?" );
-        StringReplace( message, "%{monster}", StringLower( troop.GetMultiName() ) );
+        StringReplace( message, "%{monster}", Translation::StringLower( troop.GetMultiName() ) );
 
-        if ( Dialog::Message( "", message, Font::BIG, Dialog::YES | Dialog::NO ) == Dialog::YES ) {
-            join.first = JOIN_NONE;
+        if ( Dialog::Message( "", message, Font::BIG, Dialog::YES | Dialog::NO ) == Dialog::NO ) {
+            destroy = true;
         }
     }
-
-    bool destroy = false;
 
     // fight
-    if ( JOIN_NONE == join.first ) {
-        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " attack monster " << troop.GetName() );
+    if ( !destroy ) {
+        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " attack monster " << troop.GetName() )
 
         // set the hero's attacked monster tile index and immediately redraw game area to show an attacking sprite for this monster
         hero.SetAttackedMonsterTileIndex( dst_index );
 
-        I.SetRedraw( Interface::REDRAW_GAMEAREA );
-        I.Redraw();
+        I.Redraw( Interface::REDRAW_GAMEAREA );
 
         Army army( tile );
 
@@ -769,30 +678,17 @@ void ActionToMonster( Heroes & hero, int obj, s32 dst_index )
         else {
             BattleLose( hero, res, true );
 
-            tile.MonsterSetCount( army.GetCountMonsters( troop() ) );
+            tile.MonsterSetCount( army.GetCountMonsters( troop.GetMonster() ) );
 
             // reset join condition
             if ( tile.MonsterJoinConditionFree() ) {
                 tile.MonsterSetJoinCondition( Monster::JOIN_CONDITION_MONEY );
             }
-
-            if ( map_troop ) {
-                map_troop->count = army.GetCountMonsters( troop() );
-
-                // reset join condition
-                if ( map_troop->JoinConditionFree() ) {
-                    map_troop->condition = Monster::JOIN_CONDITION_MONEY;
-                }
-            }
         }
-    }
-    // just remove group of monsters
-    else {
-        destroy = true;
     }
 
     if ( destroy ) {
-        AGG::PlaySound( M82::KILLFADE );
+        AudioManager::PlaySound( M82::KILLFADE );
 
         Game::ObjectFadeAnimation::PrepareFadeTask( tile.GetObject(), tile.GetIndex(), -1, true, false );
 
@@ -801,30 +697,25 @@ void ActionToMonster( Heroes & hero, int obj, s32 dst_index )
         tile.setAsEmpty();
 
         Game::ObjectFadeAnimation::PerformFadeTask();
-
-        if ( map_troop ) {
-            world.RemoveMapObject( map_troop );
-        }
     }
 
     // clear the hero's attacked monster tile index
     hero.SetAttackedMonsterTileIndex( -1 );
 }
 
-void ActionToHeroes( Heroes & hero, s32 dst_index )
+void ActionToHeroes( Heroes & hero, int32_t dst_index )
 {
     Heroes * other_hero = world.GetTiles( dst_index ).GetHeroes();
-    const Settings & conf = Settings::Get();
 
     if ( !other_hero )
         return;
 
-    if ( hero.GetColor() == other_hero->GetColor() || ( conf.ExtUnionsAllowHeroesMeetings() && Players::isFriends( hero.GetColor(), other_hero->GetColor() ) ) ) {
-        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " meeting " << other_hero->GetName() );
+    if ( hero.GetColor() == other_hero->GetColor() ) {
+        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " meeting " << other_hero->GetName() )
         hero.MeetingDialog( *other_hero );
     }
     else if ( hero.isFriends( other_hero->GetColor() ) ) {
-        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " disable meeting" );
+        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " disable meeting" )
     }
     else {
         const Castle * other_hero_castle = other_hero->inCastle();
@@ -833,18 +724,18 @@ void ActionToHeroes( Heroes & hero, s32 dst_index )
             return;
         }
 
-        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " attack enemy hero " << other_hero->GetName() );
+        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " attack enemy hero " << other_hero->GetName() )
 
         // new battle
         Battle::Result res = Battle::Loader( hero.GetArmy(), other_hero->GetArmy(), dst_index );
 
         // loss defender
         if ( !res.DefenderWins() )
-            BattleLose( *other_hero, res, false, hero.GetColor() );
+            BattleLose( *other_hero, res, false );
 
         // loss attacker
         if ( !res.AttackerWins() )
-            BattleLose( hero, res, true, other_hero->GetColor() );
+            BattleLose( hero, res, true );
 
         // wins attacker
         if ( res.AttackerWins() ) {
@@ -858,23 +749,20 @@ void ActionToHeroes( Heroes & hero, s32 dst_index )
     }
 }
 
-void ActionToCastle( Heroes & hero, s32 dst_index )
+void ActionToCastle( Heroes & hero, int32_t dst_index )
 {
-    Castle * castle = world.GetCastle( Maps::GetPoint( dst_index ) );
-    const Settings & conf = Settings::Get();
+    Castle * castle = world.getCastleEntrance( Maps::GetPoint( dst_index ) );
 
     if ( !castle ) {
-        DEBUG_LOG( DBG_GAME, DBG_INFO, "castle not found " << dst_index );
+        DEBUG_LOG( DBG_GAME, DBG_INFO, "castle not found " << dst_index )
     }
-    else if ( hero.GetColor() == castle->GetColor() || ( conf.ExtUnionsAllowCastleVisiting() && Players::isFriends( hero.GetColor(), castle->GetColor() ) ) ) {
-        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " goto castle " << castle->GetName() );
-        Mixer::Reduce();
+    else if ( hero.GetColor() == castle->GetColor() ) {
+        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " goto castle " << castle->GetName() )
         castle->MageGuildEducateHero( hero );
         Game::OpenCastleDialog( *castle );
-        Mixer::Enhance();
     }
     else if ( hero.isFriends( castle->GetColor() ) ) {
-        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " disable visiting" );
+        DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " disable visiting" )
     }
     else {
         CastleHeroes heroes = castle->GetHeroes();
@@ -888,7 +776,7 @@ void ActionToCastle( Heroes & hero, s32 dst_index )
         Army & army = castle->GetActualArmy();
 
         if ( army.isValid() && army.GetColor() != hero.GetColor() ) {
-            DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " attack enemy castle " << castle->GetName() );
+            DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " attack enemy castle " << castle->GetName() )
 
             Heroes * defender = heroes.GuardFirst();
             castle->ActionPreBattle();
@@ -900,11 +788,11 @@ void ActionToCastle( Heroes & hero, s32 dst_index )
 
             // loss defender
             if ( !res.DefenderWins() && defender )
-                BattleLose( *defender, res, false, hero.GetColor() );
+                BattleLose( *defender, res, false );
 
             // loss attacker
             if ( !res.AttackerWins() )
-                BattleLose( hero, res, true, castle->GetColor() );
+                BattleLose( hero, res, true );
 
             // wins attacker
             if ( res.AttackerWins() ) {
@@ -923,7 +811,7 @@ void ActionToCastle( Heroes & hero, s32 dst_index )
             }
         }
         else {
-            DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " capture enemy castle " << castle->GetName() );
+            DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " capture enemy castle " << castle->GetName() )
 
             castle->GetKingdom().RemoveCastle( castle );
             hero.GetKingdom().AddCastle( castle );
@@ -931,15 +819,13 @@ void ActionToCastle( Heroes & hero, s32 dst_index )
             castle->Scoute();
             Interface::Basic::Get().SetRedraw( Interface::REDRAW_CASTLES );
 
-            Mixer::Reduce();
             castle->MageGuildEducateHero( hero );
             Game::OpenCastleDialog( *castle );
-            Mixer::Enhance();
         }
     }
 }
 
-void ActionToBoat( Heroes & hero, s32 dst_index )
+void ActionToBoat( Heroes & hero, int32_t dst_index )
 {
     // If the hero is already on a ship do nothing
     if ( hero.isShipMaster() )
@@ -954,9 +840,9 @@ void ActionToBoat( Heroes & hero, s32 dst_index )
     const Maps::Tiles & from = world.GetTiles( dst_index );
     const int boatDirection = from.getBoatDirection();
 
-    AGG::PlaySound( M82::KILLFADE );
+    AudioManager::PlaySound( M82::KILLFADE );
     hero.GetPath().Hide();
-    hero.FadeOut( fheroes2::Point( offset.x * Game::HumanHeroAnimSkip(), offset.y * Game::HumanHeroAnimSkip() ) );
+    hero.FadeOut( offset );
     hero.ResetMovePoints();
     hero.Move2Dest( dst_index );
     // Set the direction of the hero to the one of the boat as the boat does not move when boarding it
@@ -966,10 +852,10 @@ void ActionToBoat( Heroes & hero, s32 dst_index )
     hero.SetShipMaster( true );
     hero.GetPath().Reset();
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToCoast( Heroes & hero, s32 dst_index )
+void ActionToCoast( Heroes & hero, int32_t dst_index )
 {
     if ( !hero.isShipMaster() )
         return;
@@ -984,37 +870,34 @@ void ActionToCoast( Heroes & hero, s32 dst_index )
     hero.Move2Dest( dst_index );
     from.setBoat( Maps::GetDirection( fromIndex, dst_index ) );
     hero.SetShipMaster( false );
-    AGG::PlaySound( M82::KILLFADE );
+    AudioManager::PlaySound( M82::KILLFADE );
     hero.GetPath().Hide();
     hero.FadeIn( fheroes2::Point( offset.x * Game::HumanHeroAnimSkip(), offset.y * Game::HumanHeroAnimSkip() ) );
     hero.GetPath().Reset();
     hero.ActionNewPosition( true );
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToPickupResource( const Heroes & hero, int obj, s32 dst_index )
+void ActionToPickupResource( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
-    const MapResource * map_resource = nullptr;
 
-    if ( tile.GetObject() == obj )
-        map_resource = dynamic_cast<MapResource *>( world.GetMapObject( tile.GetObjectUID() ) );
-
-    if ( obj == MP2::OBJ_BOTTLE ) {
+    if ( objectType == MP2::OBJ_BOTTLE ) {
         const MapSign * sign = dynamic_cast<MapSign *>( world.GetMapObject( dst_index ) );
-        Dialog::Message( MP2::StringObject( obj ), ( sign ? sign->message : "No message provided" ), Font::BIG, Dialog::OK );
+        Dialog::Message( MP2::StringObject( objectType ), ( sign ? sign->message : "No message provided" ), Font::BIG, Dialog::OK );
     }
     else {
-        Funds funds = map_resource ? Funds( map_resource->resource ) : tile.QuantityFunds();
+        const Funds funds = tile.QuantityFunds();
 
-        if ( obj == MP2::OBJ_CAMPFIRE ) {
-            Dialog::ResourceInfo( MP2::StringObject( obj ), _( "Ransacking an enemy camp, you discover a hidden cache of treasures." ), funds );
+        if ( objectType == MP2::OBJ_CAMPFIRE ) {
+            const fheroes2::Text header( MP2::StringObject( objectType ), fheroes2::FontType::normalYellow() );
+            const fheroes2::Text body( _( "Ransacking an enemy camp, you discover a hidden cache of treasures." ), fheroes2::FontType::normalWhite() );
+
+            fheroes2::showResourceMessage( header, body, Dialog::OK, funds );
         }
         else {
             ResourceCount rc = tile.QuantityResourceCount();
-            if ( map_resource )
-                rc = map_resource->resource;
 
             Interface::Basic & I = Interface::Basic::Get();
             I.GetStatusWindow().SetResource( rc.first, rc.second );
@@ -1033,13 +916,10 @@ void ActionToPickupResource( const Heroes & hero, int obj, s32 dst_index )
 
     Game::ObjectFadeAnimation::PerformFadeTask();
 
-    if ( map_resource )
-        world.RemoveMapObject( map_resource );
-
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToObjectResource( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToObjectResource( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
     ResourceCount rc = tile.QuantityResourceCount();
@@ -1047,10 +927,10 @@ void ActionToObjectResource( Heroes & hero, u32 obj, s32 dst_index )
     bool showinvalid = cancapture && hero.GetColor() == tile.QuantityColor() ? false : true;
 
     std::string msg;
-    const std::string & caption = MP2::StringObject( obj );
+    const std::string & caption = MP2::StringObject( objectType );
 
     // dialog
-    switch ( obj ) {
+    switch ( objectType ) {
     case MP2::OBJ_WINDMILL:
         msg = rc.isValid()
                   ? _( "The keeper of the mill announces:\n\"Milord, I have been working very hard to provide you with these resources, come back next week for more.\"" )
@@ -1083,17 +963,31 @@ void ActionToObjectResource( Heroes & hero, u32 obj, s32 dst_index )
     }
 
     if ( rc.isValid() ) {
+        // The Magic Garden has a special sound
+        if ( !Settings::Get().MusicMIDI() && objectType == MP2::OBJ_MAGICGARDEN ) {
+            AudioManager::PlayMusic( MUS::TREEHOUSE, Music::PlaybackMode::PLAY_ONCE );
+        }
+        // The Lean-To has a special sound
+        else if ( objectType == MP2::OBJ_LEANTO ) {
+            AudioManager::PlaySound( M82::EXPERNCE );
+        }
+        else {
+            AudioManager::PlaySound( M82::TREASURE );
+        }
+
         const Funds funds( rc );
-        AGG::PlaySound( M82::TREASURE );
-        Dialog::ResourceInfo( caption, msg, funds );
+
+        fheroes2::showResourceMessage( fheroes2::Text( caption, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ),
+                                       Dialog::OK, funds );
+
         hero.GetKingdom().AddFundsResource( funds );
 
         if ( cancapture )
-            ActionToCaptureObject( hero, obj, dst_index );
+            ActionToCaptureObject( hero, objectType, dst_index );
     }
     else {
         if ( cancapture )
-            ActionToCaptureObject( hero, obj, dst_index );
+            ActionToCaptureObject( hero, objectType, dst_index );
 
         if ( showinvalid )
             Dialog::Message( caption, msg, Font::BIG, Dialog::OK );
@@ -1102,106 +996,129 @@ void ActionToObjectResource( Heroes & hero, u32 obj, s32 dst_index )
     tile.QuantityReset();
     hero.setVisitedForAllies( dst_index );
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToSkeleton( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToSkeleton( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
     std::string message( _( "You come upon the remains of an unfortunate adventurer." ) );
+    const std::string title( MP2::StringObject( objectType ) );
 
     // artifact
     if ( tile.QuantityIsValid() ) {
-        Game::PlayPickupSound();
-
         if ( hero.IsFullBagArtifacts() ) {
-            u32 gold = GoldInsteadArtifact( obj );
+            uint32_t gold = GoldInsteadArtifact( objectType );
             const Funds funds( Resource::GOLD, gold );
-            Dialog::ResourceInfo( "", _( "Treasure" ), funds, Dialog::OK );
+            AudioManager::PlaySound( M82::EXPERNCE );
+
+            fheroes2::showResourceMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ),
+                                           fheroes2::Text( _( "Treasure" ), fheroes2::FontType::normalWhite() ), Dialog::OK, funds );
+
             hero.GetKingdom().AddFundsResource( funds );
         }
         else {
             const Artifact & art = tile.QuantityArtifact();
-            message.append( "\n" );
-            message.append( _( "Searching through the tattered clothing, you find %{artifact}." ) );
+            message += '\n';
+            message.append( _( "Searching through the tattered clothing, you find the %{artifact}." ) );
             StringReplace( message, "%{artifact}", art.GetName() );
-            Dialog::ArtifactInfo( "", message, art );
+            AudioManager::PlaySound( M82::TREASURE );
+
+            const fheroes2::ArtifactDialogElement artifactUI( art );
+
+            fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( message, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                   { &artifactUI } );
+
             hero.PickupArtifact( art );
         }
 
         tile.QuantityReset();
     }
     else {
-        message.append( "\n" );
+        message += '\n';
         message.append( _( "Searching through the tattered clothing, you find nothing." ) );
-        Dialog::Message( "", message, Font::BIG, Dialog::OK );
+        Dialog::Message( title, message, Font::BIG, Dialog::OK );
     }
 
-    hero.SetVisitedWideTile( dst_index, obj, Visit::GLOBAL );
+    hero.SetVisitedWideTile( dst_index, objectType, Visit::GLOBAL );
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToWagon( Heroes & hero, s32 dst_index )
+void ActionToWagon( Heroes & hero, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
     std::string message( _( "You come across an old wagon left by a trader who didn't quite make it to safe terrain." ) );
+    const std::string title( MP2::StringObject( MP2::OBJ_WAGON ) );
 
     if ( tile.QuantityIsValid() ) {
         const Artifact & art = tile.QuantityArtifact();
 
         if ( art.isValid() ) {
             if ( hero.IsFullBagArtifacts() ) {
-                message.append( "\n" );
+                message += '\n';
                 message.append( _( "Unfortunately, others have found it first, and the wagon is empty." ) );
-                Dialog::Message( "", message, Font::BIG, Dialog::OK );
+                Dialog::Message( title, message, Font::BIG, Dialog::OK );
             }
             else {
-                AGG::PlaySound( M82::EXPERNCE );
-                message.append( "\n" );
+                message += '\n';
                 message.append( _( "Searching inside, you find the %{artifact}." ) );
                 StringReplace( message, "%{artifact}", art.GetName() );
-                Dialog::ArtifactInfo( "", message, art );
+                AudioManager::PlaySound( M82::TREASURE );
+
+                const fheroes2::ArtifactDialogElement artifactUI( art );
+
+                fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( message, fheroes2::FontType::normalWhite() ),
+                                       Dialog::OK, { &artifactUI } );
+
                 hero.PickupArtifact( art );
             }
         }
         else {
             const Funds & funds = tile.QuantityFunds();
-            AGG::PlaySound( M82::EXPERNCE );
-            message.append( "\n" );
+            AudioManager::PlaySound( M82::EXPERNCE );
+            message += '\n';
             message.append( _( "Inside, you find some of the wagon's cargo still intact." ) );
-            Dialog::ResourceInfo( "", message, funds );
+
+            fheroes2::showResourceMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( message, fheroes2::FontType::normalWhite() ),
+                                           Dialog::OK, funds );
+
             hero.GetKingdom().AddFundsResource( funds );
         }
 
         tile.QuantityReset();
     }
     else {
-        message.append( "\n" );
+        message += '\n';
         message.append( _( "Unfortunately, others have found it first, and the wagon is empty." ) );
-        Dialog::Message( "", message, Font::BIG, Dialog::OK );
+        Dialog::Message( title, message, Font::BIG, Dialog::OK );
     }
 
     hero.SetVisited( dst_index, Visit::GLOBAL );
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToFlotSam( const Heroes & hero, u32 obj, s32 dst_index )
+void ActionToFlotSam( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
     std::string msg;
+    const std::string title( MP2::StringObject( objectType ) );
+
     const Funds & funds = tile.QuantityFunds();
 
     if ( 0 < funds.GetValidItemsCount() ) {
         msg = funds.wood && funds.gold ? _( "You search through the flotsam, and find some wood and some gold." )
                                        : _( "You search through the flotsam, and find some wood." );
-        Dialog::ResourceInfo( MP2::StringObject( obj ), msg, funds );
+
+        fheroes2::showResourceMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                       funds );
+
         hero.GetKingdom().AddFundsResource( funds );
     }
     else {
         msg = _( "You search through the flotsam, but find nothing." );
-        Dialog::Message( MP2::StringObject( obj ), msg, Font::BIG, Dialog::OK );
+        Dialog::Message( title, msg, Font::BIG, Dialog::OK );
     }
 
     Game::PlayPickupSound();
@@ -1213,13 +1130,13 @@ void ActionToFlotSam( const Heroes & hero, u32 obj, s32 dst_index )
 
     Game::ObjectFadeAnimation::PerformFadeTask();
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToShrine( Heroes & hero, s32 dst_index )
+void ActionToShrine( Heroes & hero, int32_t dst_index )
 {
     const Spell & spell = world.GetTiles( dst_index ).QuantitySpell();
-    const u32 spell_level = spell.Level();
+    const uint32_t spell_level = spell.Level();
 
     std::string head;
     std::string body;
@@ -1241,6 +1158,8 @@ void ActionToShrine( Heroes & hero, s32 dst_index )
             "You come across a lavish shrine attended by a group of high priests.\nIn exchange for your protection, they agree to teach you a sophisticated spell - '%{spell}'." );
         break;
     default:
+        // Did you add a new level shrine? Add the logic above.
+        assert( 0 );
         return;
     }
 
@@ -1262,63 +1181,72 @@ void ActionToShrine( Heroes & hero, s32 dst_index )
         }
         else
             // already know (skip bag artifacts)
-            if ( hero.HaveSpell( spell(), true ) ) {
+            if ( hero.HaveSpell( spell.GetID(), true ) ) {
             body += _( "\nUnfortunately, you already have knowledge of this spell, so there is nothing more for them to teach you." );
             Dialog::Message( head, body, Font::BIG, Dialog::OK );
         }
         else {
-            AGG::PlaySound( M82::TREASURE );
-            hero.AppendSpellToBook( spell() );
-            Dialog::SpellInfo( head, body, spell() );
+            AudioManager::PlaySound( M82::TREASURE );
+            hero.AppendSpellToBook( spell.GetID() );
+
+            const fheroes2::SpellDialogElement spellUI( spell, &hero );
+            fheroes2::showMessage( fheroes2::Text( head, fheroes2::FontType::normalYellow() ), fheroes2::Text( body, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                   { &spellUI } );
         }
     }
 
     hero.SetVisited( dst_index, Visit::GLOBAL );
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToWitchsHut( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToWitchsHut( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     const Skill::Secondary & skill = world.GetTiles( dst_index ).QuantitySkill();
 
-    AGG::PlayMusic( MUS::SKILL, false );
+    // If this assertion blows up the object is not set properly.
+    assert( skill.isValid() );
 
     if ( skill.isValid() ) {
         std::string msg = _( "You approach the hut and observe a witch inside studying an ancient tome on %{skill}.\n \n" );
         const std::string & skill_name = Skill::Secondary::String( skill.Skill() );
         StringReplace( msg, "%{skill}", skill_name );
 
+        const std::string title( MP2::StringObject( objectType ) );
+
         // check full
         if ( hero.HasMaxSecondarySkill() ) {
             msg.append( _(
                 "As you approach, she turns and focuses her one glass eye on you.\n\"You already know everything you deserve to learn!\" the witch screeches. \"NOW GET OUT OF MY HOUSE!\"" ) );
-            Dialog::Message( MP2::StringObject( obj ), msg, Font::BIG, Dialog::OK );
+            Dialog::Message( title, msg, Font::BIG, Dialog::OK );
         }
         else
             // check present skill
             if ( hero.HasSecondarySkill( skill.Skill() ) ) {
             msg.append( _( "As you approach, she turns and speaks.\n\"You already know that which I would teach you. I can help you no further.\"" ) );
-            Dialog::Message( MP2::StringObject( obj ), msg, Font::BIG, Dialog::OK );
+            Dialog::Message( title, msg, Font::BIG, Dialog::OK );
         }
         else {
             hero.LearnSkill( skill );
 
             msg.append( _( "An ancient and immortal witch living in a hut with bird's legs for stilts teaches you %{skill} for her own inscrutable purposes." ) );
             StringReplace( msg, "%{skill}", skill_name );
-            Dialog::SecondarySkillInfo( MP2::StringObject( obj ), msg, skill, hero );
+
+            const fheroes2::SecondarySkillDialogElement secondarySkillUI( skill, hero );
+            fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                   { &secondarySkillUI } );
         }
     }
 
     hero.SetVisited( dst_index, Visit::GLOBAL );
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToGoodLuckObject( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToGoodLuckObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
-    bool visited = hero.isObjectTypeVisited( obj );
+    bool visited = hero.isObjectTypeVisited( objectType );
     std::string msg;
 
-    switch ( obj ) {
+    switch ( objectType ) {
     case MP2::OBJ_FOUNTAIN:
         msg = visited ? _( "You drink from the enchanted fountain, but nothing happens." ) : _( "As you drink the sweet water, you gain luck for your next battle." );
         break;
@@ -1344,65 +1272,73 @@ void ActionToGoodLuckObject( Heroes & hero, u32 obj, s32 dst_index )
         break;
     }
 
+    const std::string title( MP2::StringObject( objectType ) );
+
     // check already visited
     if ( visited ) {
-        Dialog::Message( MP2::StringObject( obj ), msg, Font::BIG, Dialog::OK );
+        Dialog::Message( title, msg, Font::BIG, Dialog::OK );
     }
     else {
         // modify luck
         hero.SetVisited( dst_index );
-        AGG::PlaySound( M82::GOODLUCK );
-        DialogLuck( MP2::StringObject( obj ), msg, true, 1 );
+        AudioManager::PlaySound( M82::GOODLUCK );
+
+        const fheroes2::LuckDialogElement luckUI( true );
+        fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                               { &luckUI } );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToPyramid( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToPyramid( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
     const Spell & spell = tile.QuantitySpell();
-    std::string ask, msg;
+    const std::string ask = _(
+        "You come upon the pyramid of a great and ancient king.\nYou are tempted to search it for treasure, but all the old stories warn of fearful curses and undead "
+        "guardians.\nWill you search?" );
 
-    switch ( obj ) {
-    case MP2::OBJ_PYRAMID:
-        ask = _(
-            "You come upon the pyramid of a great and ancient king.\nYou are tempted to search it for treasure, but all the old stories warn of fearful curses and undead guardians.\nWill you search?" );
-        msg = _( "You come upon the pyramid of a great and ancient king.\nRoutine exploration reveals that the pyramid is completely empty." );
-        break;
+    const std::string title( MP2::StringObject( objectType ) );
 
-    default:
-        break;
-    }
-
-    if ( Dialog::YES == Dialog::Message( "", ask, Font::BIG, Dialog::YES | Dialog::NO ) ) {
+    if ( Dialog::YES == Dialog::Message( title, ask, Font::BIG, Dialog::YES | Dialog::NO ) ) {
         if ( spell.isValid() ) {
             // battle
             Army army( tile );
 
-            Battle::Result res = Battle::Loader( hero.GetArmy(), army, dst_index );
+            const Battle::Result res = Battle::Loader( hero.GetArmy(), army, dst_index );
             if ( res.AttackerWins() ) {
                 hero.IncreaseExperience( res.GetExperienceAttacker() );
                 bool valid = false;
 
-                // check magick book
-                if ( !hero.HaveSpellBook() )
-                    msg = _( "Unfortunately, you have no Magic Book to record the spell with." );
-                else
+                std::string msg = _( "Upon defeating the monsters, you decipher an ancient glyph on the wall, telling the secret of the spell - '" );
+                msg += spell.GetName();
+                msg += "'.";
+
+                // Check Magic Book.
+                if ( !hero.HaveSpellBook() ) {
+                    msg += '\n';
+                    msg += _( "Unfortunately, you have no Magic Book to record the spell with." );
+                }
+                else if ( Skill::Level::EXPERT > hero.GetLevelSkill( Skill::Secondary::WISDOM ) ) {
                     // check skill level for wisdom
-                    if ( Skill::Level::EXPERT > hero.GetLevelSkill( Skill::Secondary::WISDOM ) )
-                    msg = _( "Unfortunately, you do not have the wisdom to understand the spell, and you are unable to learn it." );
+                    msg += '\n';
+                    msg += _( "Unfortunately, you do not have the wisdom to understand the spell, and you are unable to learn it." );
+                }
                 else {
                     valid = true;
-                    msg = _( "Upon defeating the monsters, you decipher an ancient glyph on the wall, telling the secret of the spell." );
                 }
 
                 if ( valid ) {
-                    Dialog::SpellInfo( spell.GetName(), msg, spell, true );
+                    const fheroes2::SpellDialogElement spellUI( spell, &hero );
+                    fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ),
+                                           Dialog::OK, { &spellUI } );
+
                     hero.AppendSpellToBook( spell );
                 }
-                else
-                    Dialog::Message( MP2::StringObject( obj ), msg, Font::BIG, Dialog::OK );
+                else {
+                    Dialog::Message( title, msg, Font::BIG, Dialog::OK );
+                }
 
                 tile.QuantityReset();
                 hero.SetVisited( dst_index, Visit::GLOBAL );
@@ -1413,56 +1349,60 @@ void ActionToPyramid( Heroes & hero, u32 obj, s32 dst_index )
         }
         else {
             // modify luck
-            AGG::PlaySound( M82::BADLUCK );
-            DialogLuck( MP2::StringObject( obj ), msg, false, 2 );
+            AudioManager::PlaySound( M82::BADLUCK );
+            const std::string msg = _( "You come upon the pyramid of a great and ancient king.\nRoutine exploration reveals that the pyramid is completely empty." );
+
+            const fheroes2::LuckDialogElement luckUI( false );
+            fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                   { &luckUI, &luckUI } );
 
             hero.SetVisited( dst_index, Visit::LOCAL );
             hero.SetVisited( dst_index, Visit::GLOBAL );
         }
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToSign( const Heroes & hero, s32 dst_index )
+void ActionToSign( const Heroes & hero, int32_t dst_index )
 {
     const MapSign * sign = dynamic_cast<MapSign *>( world.GetMapObject( dst_index ) );
-    Dialog::Message( _( "Sign" ), ( sign ? sign->message : "" ), Font::BIG, Dialog::OK );
+    Dialog::Message( MP2::StringObject( MP2::OBJ_SIGN ), ( sign ? sign->message : "" ), Font::BIG, Dialog::OK );
 
     (void)hero;
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToMagicWell( Heroes & hero, s32 dst_index )
+void ActionToMagicWell( Heroes & hero, int32_t dst_index )
 {
-    const u32 max = hero.GetMaxSpellPoints();
+    const uint32_t max = hero.GetMaxSpellPoints();
+    const std::string title( MP2::StringObject( MP2::OBJ_MAGICWELL ) );
 
-    if ( hero.GetSpellPoints() == max ) {
-        Dialog::Message( MP2::StringObject( MP2::OBJ_MAGICWELL ), _( "A drink at the well is supposed to restore your spell points, but you are already at maximum." ),
-                         Font::BIG, Dialog::OK );
+    if ( hero.GetSpellPoints() >= max ) {
+        Dialog::Message( title, _( "A drink at the well is supposed to restore your spell points, but you are already at maximum." ), Font::BIG, Dialog::OK );
     }
     else
         // check already visited
         if ( hero.isObjectTypeVisited( MP2::OBJ_MAGICWELL ) ) {
-        Dialog::Message( MP2::StringObject( MP2::OBJ_MAGICWELL ), _( "A second drink at the well in one day will not help you." ), Font::BIG, Dialog::OK );
+        Dialog::Message( title, _( "A second drink at the well in one day will not help you." ), Font::BIG, Dialog::OK );
     }
     else {
         hero.SetVisited( dst_index );
         hero.SetSpellPoints( max );
-        Dialog::Message( MP2::StringObject( MP2::OBJ_MAGICWELL ), _( "A drink from the well has restored your spell points to maximum." ), Font::BIG, Dialog::OK );
+        Dialog::Message( title, _( "A drink from the well has restored your spell points to maximum." ), Font::BIG, Dialog::OK );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
 void ActionToTradingPost( const Heroes & hero )
 {
     Dialog::Marketplace( hero.GetKingdom(), true );
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToPrimarySkillObject( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToPrimarySkillObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     const Maps::Tiles & tile = world.GetTiles( dst_index );
 
@@ -1470,7 +1410,7 @@ void ActionToPrimarySkillObject( Heroes & hero, u32 obj, s32 dst_index )
     int skill = Skill::Primary::ATTACK;
     bool visited = hero.isVisited( tile );
 
-    switch ( obj ) {
+    switch ( objectType ) {
     case MP2::OBJ_FORT:
         skill = Skill::Primary::DEFENSE;
         msg = visited ? _( "\"I'm sorry sir,\" The leader of the soldiers says, \"but you already know everything we have to teach.\"" )
@@ -1503,50 +1443,58 @@ void ActionToPrimarySkillObject( Heroes & hero, u32 obj, s32 dst_index )
         return;
     }
 
+    const std::string title( MP2::StringObject( objectType ) );
     // check already visited
     if ( visited ) {
-        Dialog::Message( MP2::StringObject( obj ), msg, Font::BIG, Dialog::OK );
+        Dialog::Message( title, msg, Font::BIG, Dialog::OK );
     }
     else {
         // increase skill
         hero.IncreasePrimarySkill( skill );
         hero.SetVisited( dst_index );
-        Dialog::PrimarySkillInfo( MP2::StringObject( obj ), msg, skill );
+
+        const fheroes2::PrimarySkillDialogElement primarySkillUI( skill, "+1" );
+        fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                               { &primarySkillUI } );
 
         // fix double action tile
-        hero.SetVisitedWideTile( dst_index, obj );
+        hero.SetVisitedWideTile( dst_index, objectType );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToPoorMoraleObject( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToPoorMoraleObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
-    u32 gold = tile.QuantityGold();
-    std::string ask, msg, win;
+    uint32_t gold = tile.QuantityGold();
+    std::string ask;
+    std::string msg;
+    std::string win;
 
-    switch ( obj ) {
+    switch ( objectType ) {
     case MP2::OBJ_GRAVEYARD:
         ask = _( "You tentatively approach the burial ground of ancient warriors. Do you want to search the graves?" );
-        msg = _( "Upon defeating the Zombies you spend several hours searching the graves and find nothing. Such a despicable act reduces your army's morale." );
+        msg = _( "You spend several hours searching the graves and find nothing. Such a despicable act reduces your army's morale." );
         win = _( "Upon defeating the Zombies you search the graves and find something!" );
         break;
     case MP2::OBJ_SHIPWRECK:
         ask = _( "The rotting hulk of a great pirate ship creaks eerily as it is pushed against the rocks. Do you wish to search the shipwreck?" );
-        msg = _( "Upon defeating the Ghosts you spend several hours sifting through the debris and find nothing. Such a despicable act reduces your army's morale." );
+        msg = _( "You spend several hours sifting through the debris and find nothing. Such a despicable act reduces your army's morale." );
         win = _( "Upon defeating the Ghosts you sift through the debris and find something!" );
         break;
     case MP2::OBJ_DERELICTSHIP:
         ask = _( "The rotting hulk of a great pirate ship creaks eerily as it is pushed against the rocks. Do you wish to search the ship?" );
-        msg = _( "Upon defeating the Skeletons you spend several hours sifting through the debris and find nothing. Such a despicable act reduces your army's morale." );
+        msg = _( "You spend several hours sifting through the debris and find nothing. Such a despicable act reduces your army's morale." );
         win = _( "Upon defeating the Skeletons you sift through the debris and find something!" );
         break;
     default:
         break;
     }
 
-    if ( Dialog::YES == Dialog::Message( MP2::StringObject( obj ), ask, Font::BIG, Dialog::YES | Dialog::NO ) ) {
+    const std::string title( MP2::StringObject( objectType ) );
+
+    if ( Dialog::YES == Dialog::Message( title, ask, Font::BIG, Dialog::YES | Dialog::NO ) ) {
         bool complete = false;
 
         if ( gold ) {
@@ -1560,16 +1508,29 @@ void ActionToPoorMoraleObject( Heroes & hero, u32 obj, s32 dst_index )
 
                 if ( art.isValid() ) {
                     if ( hero.IsFullBagArtifacts() ) {
-                        gold = GoldInsteadArtifact( obj );
-                        DialogWithGold( MP2::StringObject( obj ), win, gold );
+                        gold = GoldInsteadArtifact( objectType );
+
+                        const fheroes2::ResourceDialogElement goldUI( Resource::GOLD, std::to_string( gold ) );
+
+                        fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( win, fheroes2::FontType::normalWhite() ),
+                                               Dialog::OK, { &goldUI } );
                     }
                     else {
-                        DialogWithArtifactAndGold( MP2::StringObject( obj ), win, art, gold );
+                        const fheroes2::ResourceDialogElement goldUI( Resource::GOLD, std::to_string( gold ) );
+                        const fheroes2::ArtifactDialogElement artifactUI( art );
+
+                        fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( win, fheroes2::FontType::normalWhite() ),
+                                               Dialog::OK, { &artifactUI, &goldUI } );
+
                         hero.PickupArtifact( art );
                     }
                 }
-                else
-                    DialogWithGold( MP2::StringObject( obj ), win, gold );
+                else {
+                    const fheroes2::ResourceDialogElement goldUI( Resource::GOLD, std::to_string( gold ) );
+
+                    fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( win, fheroes2::FontType::normalWhite() ),
+                                           Dialog::OK, { &goldUI } );
+                }
 
                 hero.GetKingdom().AddFundsResource( Funds( Resource::GOLD, gold ) );
             }
@@ -1586,21 +1547,24 @@ void ActionToPoorMoraleObject( Heroes & hero, u32 obj, s32 dst_index )
             // modify morale
             hero.SetVisited( dst_index, Visit::LOCAL );
             hero.SetVisited( dst_index, Visit::GLOBAL );
-            AGG::PlaySound( M82::BADMRLE );
-            DialogMorale( MP2::StringObject( obj ), msg, false, 1 );
+            AudioManager::PlaySound( M82::BADMRLE );
+
+            const fheroes2::MoraleDialogElement moraleUI( false );
+            fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                   { &moraleUI } );
         }
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToGoodMoraleObject( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToGoodMoraleObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     std::string msg;
-    u32 move = 0;
-    bool visited = hero.isObjectTypeVisited( obj );
+    uint32_t move = 0;
+    bool visited = hero.isObjectTypeVisited( objectType );
 
-    switch ( obj ) {
+    switch ( objectType ) {
     case MP2::OBJ_BUOY:
         msg = visited ? _( "Your men spot a navigational buoy, confirming that you are on course." )
                       : _( "Your men spot a navigational buoy, confirming that you are on course and increasing their morale." );
@@ -1628,34 +1592,44 @@ void ActionToGoodMoraleObject( Heroes & hero, u32 obj, s32 dst_index )
         return;
     }
 
+    const std::string title( MP2::StringObject( objectType ) );
     // check already visited
     if ( visited ) {
-        Dialog::Message( MP2::StringObject( obj ), msg, Font::BIG, Dialog::OK );
+        Dialog::Message( title, msg, Font::BIG, Dialog::OK );
     }
     else {
         // modify morale
         hero.SetVisited( dst_index );
-        AGG::PlaySound( M82::GOODMRLE );
-        DialogMorale( MP2::StringObject( obj ), msg, true, ( obj == MP2::OBJ_TEMPLE ? 2 : 1 ) );
+        AudioManager::PlaySound( M82::GOODMRLE );
+
+        const fheroes2::MoraleDialogElement moraleUI( true );
+        std::vector<const fheroes2::DialogElement *> elementUI{ &moraleUI };
+        if ( objectType == MP2::OBJ_TEMPLE ) {
+            elementUI.emplace_back( &moraleUI );
+        }
+
+        fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                               elementUI );
+
         hero.IncreaseMovePoints( move );
 
         // fix double action tile
-        hero.SetVisitedWideTile( dst_index, obj );
+        hero.SetVisitedWideTile( dst_index, objectType );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToExperienceObject( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToExperienceObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     const Maps::Tiles & tile = world.GetTiles( dst_index );
 
     bool visited = hero.isVisited( tile );
     std::string msg;
 
-    u32 exp = 0;
+    int32_t exp = 0;
 
-    switch ( obj ) {
+    switch ( objectType ) {
     case MP2::OBJ_GAZEBO:
         msg = visited ? _( "An old Knight appears on the steps of the gazebo. \"I am sorry, my liege, I have taught you all I can.\"" )
                       : _( "An old Knight appears on the steps of the gazebo. \"My liege, I will teach you all that I know to aid you in your travels.\"" );
@@ -1663,40 +1637,53 @@ void ActionToExperienceObject( Heroes & hero, u32 obj, s32 dst_index )
         break;
 
     default:
+        // Are you calling this function for a new object? Add the logic above!
+        assert( 0 );
         return;
     }
 
+    const std::string title( MP2::StringObject( objectType ) );
     // check already visited
     if ( visited ) {
-        Dialog::Message( MP2::StringObject( obj ), msg, Font::BIG, Dialog::OK );
+        Dialog::Message( title, msg, Font::BIG, Dialog::OK );
     }
     else {
         if ( Settings::Get().MusicMIDI() ) {
-            AGG::PlaySound( M82::EXPERNCE );
+            AudioManager::PlaySound( M82::EXPERNCE );
         }
         else {
-            AGG::PlayMusic( MUS::EXPERIENCE, false );
+            AudioManager::PlayMusic( MUS::EXPERIENCE, Music::PlaybackMode::PLAY_ONCE );
         }
-        DialogWithExp( MP2::StringObject( obj ), msg, exp );
+
+        const fheroes2::ExperienceDialogElement experienceUI( exp );
+        fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                               { &experienceUI } );
 
         // visit
         hero.SetVisited( dst_index );
         hero.IncreaseExperience( exp );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToShipwreckSurvivor( Heroes & hero, int obj, s32 dst_index )
+void ActionToShipwreckSurvivor( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
 
+    const std::string title( MP2::StringObject( objectType ) );
+
     if ( hero.IsFullBagArtifacts() ) {
-        const u32 gold = GoldInsteadArtifact( obj );
-        DialogWithGold(
-            MP2::StringObject( obj ),
-            _( "You've pulled a shipwreck survivor from certain death in an unforgiving ocean. Grateful, he says, \"I would give you an artifact as a reward, but you're all full.\"" ),
-            gold, Dialog::OK );
+        const uint32_t gold = GoldInsteadArtifact( objectType );
+
+        const fheroes2::ResourceDialogElement goldUI( Resource::GOLD, std::to_string( gold ) );
+
+        fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ),
+                               fheroes2::Text( _( "You've pulled a shipwreck survivor from certain death in an unforgiving ocean. Grateful, he says, "
+                                                  "\"I would give you an artifact as a reward, but you're all full.\"" ),
+                                               fheroes2::FontType::normalWhite() ),
+                               Dialog::OK, { &goldUI } );
+
         hero.GetKingdom().AddFundsResource( Funds( Resource::GOLD, gold ) );
     }
     else {
@@ -1704,7 +1691,13 @@ void ActionToShipwreckSurvivor( Heroes & hero, int obj, s32 dst_index )
         std::string str = _(
             "You've pulled a shipwreck survivor from certain death in an unforgiving ocean. Grateful, he rewards you for your act of kindness by giving you the %{art}." );
         StringReplace( str, "%{art}", art.GetName() );
-        Dialog::ArtifactInfo( "", str, art );
+        AudioManager::PlaySound( M82::TREASURE );
+
+        const fheroes2::ArtifactDialogElement artifactUI( art );
+
+        fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( str, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                               { &artifactUI } );
+
         hero.PickupArtifact( art );
     }
 
@@ -1717,34 +1710,26 @@ void ActionToShipwreckSurvivor( Heroes & hero, int obj, s32 dst_index )
 
     Game::ObjectFadeAnimation::PerformFadeTask();
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToArtifact( Heroes & hero, int obj, s32 dst_index )
+void ActionToArtifact( Heroes & hero, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
-    const MapArtifact * map_artifact = nullptr;
-
-    if ( tile.GetObject() == obj )
-        map_artifact = dynamic_cast<MapArtifact *>( world.GetMapObject( tile.GetObjectUID() ) );
+    const std::string title( MP2::StringObject( MP2::OBJ_ARTIFACT ) );
 
     if ( hero.IsFullBagArtifacts() )
-        Dialog::Message( "", _( "You cannot pick up this artifact, you already have a full load!" ), Font::BIG, Dialog::OK );
+        Dialog::Message( title, _( "You cannot pick up this artifact, you already have a full load!" ), Font::BIG, Dialog::OK );
     else {
-        u32 cond = tile.QuantityVariant();
+        uint32_t cond = tile.QuantityVariant();
         Artifact art = tile.QuantityArtifact();
-
-        if ( map_artifact ) {
-            cond = map_artifact->condition;
-            art = map_artifact->artifact;
-        }
 
         bool result = false;
         std::string msg;
 
         // 1,2,3 - gold, gold + res
         if ( 0 < cond && cond < 4 ) {
-            Funds payment = map_artifact ? map_artifact->QuantityFunds() : tile.QuantityFunds();
+            Funds payment = tile.QuantityFunds();
 
             if ( 1 == cond ) {
                 msg = _( "A leprechaun offers you the %{art} for the small price of %{gold} Gold." );
@@ -1754,27 +1739,33 @@ void ActionToArtifact( Heroes & hero, int obj, s32 dst_index )
                 msg = _( "A leprechaun offers you the %{art} for the small price of %{gold} Gold and %{count} %{res}." );
 
                 StringReplace( msg, "%{gold}", payment.Get( Resource::GOLD ) );
-                ResourceCount rc = map_artifact ? map_artifact->QuantityResourceCount() : tile.QuantityResourceCount();
+                ResourceCount rc = tile.QuantityResourceCount();
                 StringReplace( msg, "%{count}", rc.second );
                 StringReplace( msg, "%{res}", Resource::String( rc.first ) );
             }
             StringReplace( msg, "%{art}", art.GetName() );
-            msg.append( "\n" );
+            msg += '\n';
             msg.append( _( "Do you wish to buy this artifact?" ) );
 
-            AGG::PlaySound( M82::EXPERNCE );
-            if ( Dialog::YES == Dialog::ArtifactInfo( "", msg, art, Dialog::YES | Dialog::NO ) ) {
+            AudioManager::PlaySound( M82::EXPERNCE );
+
+            const fheroes2::ArtifactDialogElement artifactUI( art );
+            const fheroes2::Text titleText( title, fheroes2::FontType::normalYellow() );
+            const fheroes2::Text bodyText( msg, fheroes2::FontType::normalWhite() );
+
+            if ( Dialog::YES == fheroes2::showMessage( titleText, bodyText, Dialog::YES | Dialog::NO, { &artifactUI } ) ) {
                 if ( hero.GetKingdom().AllowPayment( payment ) ) {
                     result = true;
                     hero.GetKingdom().OddFundsResource( payment );
                 }
                 else {
-                    Dialog::Message( "", _( "You try to pay the leprechaun, but realize that you can't afford it. The leprechaun stamps his foot and ignores you." ),
+                    Dialog::Message( title, _( "You try to pay the leprechaun, but realize that you can't afford it. The leprechaun stamps his foot and ignores you." ),
                                      Font::BIG, Dialog::OK );
                 }
             }
-            else
-                Dialog::Message( "", _( "Insulted by your refusal of his generous offer, the leprechaun stamps his foot and ignores you." ), Font::BIG, Dialog::OK );
+            else {
+                Dialog::Message( title, _( "Insulted by your refusal of his generous offer, the leprechaun stamps his foot and ignores you." ), Font::BIG, Dialog::OK );
+            }
         }
         else
             // 4,5 - need have skill wisard or leadership,
@@ -1782,23 +1773,42 @@ void ActionToArtifact( Heroes & hero, int obj, s32 dst_index )
             const Skill::Secondary & skill = tile.QuantitySkill();
 
             if ( hero.HasSecondarySkill( skill.Skill() ) ) {
-                msg = _( "You've found the artifact: " );
-                msg.append( art.GetName() );
-                Dialog::ArtifactInfo( "", msg, art, Dialog::OK );
+                const char * artifactDiscoveryDescription = Artifact::getDiscoveryDescription( art );
+                if ( artifactDiscoveryDescription != nullptr ) {
+                    msg = artifactDiscoveryDescription;
+                }
+                else {
+                    msg = _( "You've found the artifact: " );
+                    msg += '\n';
+                    msg.append( art.GetName() );
+                }
+                AudioManager::PlaySound( M82::TREASURE );
+
+                const fheroes2::ArtifactDialogElement artifactUI( art );
+
+                fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                       { &artifactUI } );
+
                 result = true;
             }
             else {
-                if ( skill.Skill() == Skill::Secondary::WISDOM )
+                if ( skill.Skill() == Skill::Secondary::WISDOM ) {
                     msg = _(
                         "You've found the humble dwelling of a withered hermit. The hermit tells you that he is willing to give the %{art} to the first wise person he meets." );
-                else if ( skill.Skill() == Skill::Secondary::LEADERSHIP )
+                }
+                else if ( skill.Skill() == Skill::Secondary::LEADERSHIP ) {
                     msg = _(
                         "You've come across the spartan quarters of a retired soldier. The soldier tells you that he is willing to pass on the %{art} to the first true leader he meets." );
-                else
-                    msg = "FIXME: (unknown condition): %{art}";
+                }
+                else {
+                    // Did you add a new condition? If yes add a proper if-else branch.
+                    assert( 0 );
+                    msg = _( "You've encountered a strange person with a hat and an owl on it. He tells you that he is willing to give %{art} if you have %{skill}." );
+                    StringReplace( msg, "%{skill}", skill.GetName() );
+                }
 
                 StringReplace( msg, "%{art}", art.GetName() );
-                Dialog::Message( "", msg, Font::BIG, Dialog::OK );
+                Dialog::Message( title, msg, Font::BIG, Dialog::OK );
             }
         }
         else
@@ -1810,14 +1820,14 @@ void ActionToArtifact( Heroes & hero, int obj, s32 dst_index )
 
             if ( troop ) {
                 if ( Monster::ROGUE == troop->GetID() )
-                    Dialog::Message( "",
+                    Dialog::Message( title,
                                      _( "You come upon an ancient artifact. As you reach for it, a pack of Rogues leap out of the brush to guard their stolen loot." ),
                                      Font::BIG, Dialog::OK );
                 else {
                     msg = _(
                         "Through a clearing you observe an ancient artifact. Unfortunately, it's guarded by a nearby %{monster}. Do you want to fight the %{monster} for the artifact?" );
                     StringReplace( msg, "%{monster}", troop->GetName() );
-                    battle = ( Dialog::YES == Dialog::Message( "", msg, Font::BIG, Dialog::YES | Dialog::NO ) );
+                    battle = ( Dialog::YES == Dialog::Message( title, msg, Font::BIG, Dialog::YES | Dialog::NO ) );
                 }
             }
 
@@ -1825,31 +1835,40 @@ void ActionToArtifact( Heroes & hero, int obj, s32 dst_index )
                 // new battle
                 Battle::Result res = Battle::Loader( hero.GetArmy(), army, dst_index );
                 if ( res.AttackerWins() ) {
-                    AGG::PlaySound( M82::EXPERNCE );
                     hero.IncreaseExperience( res.GetExperienceAttacker() );
                     result = true;
                     msg = _( "Victorious, you take your prize, the %{art}." );
                     StringReplace( msg, "%{art}", art.GetName() );
-                    Dialog::ArtifactInfo( "", msg, art() );
+                    AudioManager::PlaySound( M82::TREASURE );
+
+                    const fheroes2::ArtifactDialogElement artifactUI( art );
+
+                    fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ),
+                                           Dialog::OK, { &artifactUI } );
                 }
                 else {
                     BattleLose( hero, res, true );
                 }
             }
             else {
-                Dialog::Message( "", _( "Discretion is the better part of valor, and you decide to avoid this fight for today." ), Font::BIG, Dialog::OK );
+                Dialog::Message( title, _( "Discretion is the better part of valor, and you decide to avoid this fight for today." ), Font::BIG, Dialog::OK );
             }
         }
         else {
-            if ( Artifact::GetScenario( art ) )
-                msg = Artifact::GetScenario( art );
+            const char * artifactDiscoveryDescription = Artifact::getDiscoveryDescription( art );
+            if ( artifactDiscoveryDescription != nullptr ) {
+                msg = artifactDiscoveryDescription;
+            }
             else {
                 msg = _( "You've found the artifact: " );
-                msg.append( "\n" );
+                msg += '\n';
                 msg.append( art.GetName() );
             }
+            AudioManager::PlaySound( M82::TREASURE );
 
-            Dialog::ArtifactInfo( "", msg, art );
+            const fheroes2::ArtifactDialogElement artifactUI( art );
+            fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                   { &artifactUI } );
             result = true;
         }
 
@@ -1865,16 +1884,16 @@ void ActionToArtifact( Heroes & hero, int obj, s32 dst_index )
         }
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToTreasureChest( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToTreasureChest( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
-    const std::string & hdr = MP2::StringObject( obj );
+    const std::string & hdr = MP2::StringObject( objectType );
 
     std::string msg;
-    u32 gold = tile.QuantityGold();
+    uint32_t gold = tile.QuantityGold();
 
     // dialog
     if ( tile.isWater() ) {
@@ -1883,23 +1902,37 @@ void ActionToTreasureChest( Heroes & hero, u32 obj, s32 dst_index )
 
             if ( art.isValid() ) {
                 if ( hero.IsFullBagArtifacts() ) {
-                    gold = GoldInsteadArtifact( obj );
+                    gold = GoldInsteadArtifact( objectType );
                     msg = _( "After spending hours trying to fish the chest out of the sea, you open it and find %{gold} gold pieces." );
                     StringReplace( msg, "%{gold}", gold );
-                    DialogWithGold( hdr, msg, gold );
+
+                    const fheroes2::ResourceDialogElement goldUI( Resource::GOLD, std::to_string( gold ) );
+
+                    fheroes2::showMessage( fheroes2::Text( hdr, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ),
+                                           Dialog::OK, { &goldUI } );
                 }
                 else {
                     msg = _( "After spending hours trying to fish the chest out of the sea, you open it and find %{gold} gold and the %{art}." );
                     StringReplace( msg, "%{gold}", gold );
                     StringReplace( msg, "%{art}", art.GetName() );
-                    DialogWithArtifactAndGold( hdr, msg, art, gold );
+
+                    const fheroes2::ResourceDialogElement goldUI( Resource::GOLD, std::to_string( gold ) );
+                    const fheroes2::ArtifactDialogElement artifactUI( art );
+
+                    fheroes2::showMessage( fheroes2::Text( hdr, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ),
+                                           Dialog::OK, { &artifactUI, &goldUI } );
+
                     hero.PickupArtifact( art );
                 }
             }
             else {
                 msg = _( "After spending hours trying to fish the chest out of the sea, you open it and find %{gold} gold pieces." );
                 StringReplace( msg, "%{gold}", gold );
-                DialogWithGold( hdr, msg, gold );
+
+                const fheroes2::ResourceDialogElement goldUI( Resource::GOLD, std::to_string( gold ) );
+
+                fheroes2::showMessage( fheroes2::Text( hdr, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                       { &goldUI } );
             }
         }
         else {
@@ -1910,7 +1943,7 @@ void ActionToTreasureChest( Heroes & hero, u32 obj, s32 dst_index )
         const Artifact & art = tile.QuantityArtifact();
 
         if ( gold ) {
-            const u32 expr = gold > 500 ? gold - 500 : 500;
+            const uint32_t expr = gold > 500 ? gold - 500 : 500;
             msg = _(
                 "After scouring the area, you fall upon a hidden treasure cache. You may take the gold or distribute the gold to the peasants for experience. Do you wish to keep the gold?" );
 
@@ -1921,15 +1954,25 @@ void ActionToTreasureChest( Heroes & hero, u32 obj, s32 dst_index )
         }
         else if ( art.isValid() ) {
             if ( hero.IsFullBagArtifacts() ) {
-                gold = GoldInsteadArtifact( obj );
+                gold = GoldInsteadArtifact( objectType );
                 msg = _( "After scouring the area, you fall upon a hidden chest, containing the %{gold} gold pieces." );
                 StringReplace( msg, "%{gold}", gold );
-                DialogWithGold( hdr, msg, gold );
+
+                const fheroes2::ResourceDialogElement goldUI( Resource::GOLD, std::to_string( gold ) );
+
+                fheroes2::showMessage( fheroes2::Text( hdr, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                       { &goldUI } );
             }
             else {
                 msg = _( "After scouring the area, you fall upon a hidden chest, containing the ancient artifact %{art}." );
                 StringReplace( msg, "%{art}", art.GetName() );
-                Dialog::ArtifactInfo( "", msg, art );
+                AudioManager::PlaySound( M82::TREASURE );
+
+                const fheroes2::ArtifactDialogElement artifactUI( art );
+
+                fheroes2::showMessage( fheroes2::Text( hdr, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                       { &artifactUI } );
+
                 hero.PickupArtifact( art );
             }
         }
@@ -1947,142 +1990,135 @@ void ActionToTreasureChest( Heroes & hero, u32 obj, s32 dst_index )
 
     Game::ObjectFadeAnimation::PerformFadeTask();
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToAncientLamp( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToAncientLamp( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
     const Troop & troop = tile.QuantityTroop();
-
-    if ( troop.isValid()
-         && Dialog::YES
-                == Dialog::Message( MP2::StringObject( obj ), _( "You stumble upon a dented and tarnished lamp lodged deep in the earth. Do you wish to rub the lamp?" ),
-                                    Font::BIG, Dialog::YES | Dialog::NO ) )
-        RecruitMonsterFromTile( hero, tile, MP2::StringObject( obj ), troop, true );
-
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
-}
-
-void ActionToTeleports( Heroes & hero, s32 index_from )
-{
-    s32 index_to = world.NextTeleport( index_from );
-
-    if ( index_from == index_to ) {
-        AGG::PlaySound( M82::RSBRYFZL );
-        DEBUG_LOG( DBG_GAME, DBG_WARN, "action unsuccessfully..." );
+    if ( !troop.isValid() ) {
         return;
     }
 
-    const Heroes * other_hero = world.GetTiles( index_to ).GetHeroes();
-    if ( other_hero ) {
-        ActionToHeroes( hero, index_to );
-
-        // lose battle
-        if ( hero.isFreeman() ) {
-            return;
-        }
-        else if ( !other_hero->isFreeman() ) {
-            DEBUG_LOG( DBG_GAME, DBG_WARN, "is busy..." );
-            return;
-        }
+    const std::string title( MP2::StringObject( objectType ) );
+    if ( Dialog::YES
+         == Dialog::Message( title, _( "You stumble upon a dented and tarnished lamp lodged deep in the earth. Do you wish to rub the lamp?" ), Font::BIG,
+                             Dialog::YES | Dialog::NO ) ) {
+        RecruitMonsterFromTile( hero, tile, title, troop, true );
     }
 
-    AGG::PlaySound( M82::KILLFADE );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
+}
+
+void ActionToTeleports( Heroes & hero, int32_t index_from )
+{
+    const int32_t index_to = world.NextTeleport( index_from );
+
+    if ( index_from == index_to ) {
+        AudioManager::PlaySound( M82::RSBRYFZL );
+        DEBUG_LOG( DBG_GAME, DBG_WARN, "action unsuccessfully..." )
+        return;
+    }
+
+    assert( world.GetTiles( index_to ).GetObject() != MP2::OBJ_HEROES );
+
+    AudioManager::PlaySound( M82::KILLFADE );
     hero.GetPath().Hide();
     hero.FadeOut();
 
-    hero.Move2Dest( index_to ); // no action and no penalty
+    // No action and no penalty
+    hero.Move2Dest( index_to );
 
     Interface::Basic & I = Interface::Basic::Get();
     I.GetGameArea().SetCenter( hero.GetCenter() );
-    I.RedrawFocus();
-    I.Redraw();
+    I.Redraw( Interface::REDRAW_GAMEAREA | Interface::REDRAW_RADAR );
 
-    AGG::PlaySound( M82::KILLFADE );
+    AudioManager::PlaySound( M82::KILLFADE );
     hero.GetPath().Hide();
     hero.FadeIn();
 
     hero.GetPath().Reset();
-    hero.GetPath().Show(); // Reset method sets Hero's path to hidden mode with non empty path, we have to set it back
+    // Path::Reset() puts the hero's path into the hidden mode, we have to make it visible again
+    hero.GetPath().Show();
     hero.ActionNewPosition( false );
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToWhirlpools( Heroes & hero, s32 index_from )
+void ActionToWhirlpools( Heroes & hero, int32_t index_from )
 {
-    const s32 index_to = world.NextWhirlpool( index_from );
+    const int32_t index_to = world.NextWhirlpool( index_from );
 
     if ( index_from == index_to ) {
-        AGG::PlaySound( M82::RSBRYFZL );
-        DEBUG_LOG( DBG_GAME, DBG_WARN, "action unsuccessfully..." );
+        AudioManager::PlaySound( M82::RSBRYFZL );
+        DEBUG_LOG( DBG_GAME, DBG_WARN, "action unsuccessfully..." )
         return;
     }
 
-    AGG::PlaySound( M82::KILLFADE );
+    AudioManager::PlaySound( M82::KILLFADE );
     hero.GetPath().Hide();
     hero.FadeOut();
 
-    hero.Move2Dest( index_to ); // no action and no penalty
+    // No action and no penalty
+    hero.Move2Dest( index_to );
 
     Interface::Basic & I = Interface::Basic::Get();
     I.GetGameArea().SetCenter( hero.GetCenter() );
-    I.RedrawFocus();
-    I.Redraw();
+    I.Redraw( Interface::REDRAW_GAMEAREA | Interface::REDRAW_RADAR );
 
-    AGG::PlaySound( M82::KILLFADE );
+    AudioManager::PlaySound( M82::KILLFADE );
     hero.GetPath().Hide();
     hero.FadeIn();
 
-    WhirlpoolTroopLooseEffect( hero );
+    WhirlpoolTroopLoseEffect( hero );
 
     hero.GetPath().Reset();
-    hero.GetPath().Show(); // Reset method sets Hero's path to hidden mode with non empty path, we have to set it back
+    // Path::Reset() puts the hero's path into the hidden mode, we have to make it visible again
+    hero.GetPath().Show();
     hero.ActionNewPosition( false );
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToAbandoneMine( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToAbandonedMine( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     if ( Dialog::YES
-         == Dialog::Message( "", _( "You come upon an abandoned gold mine. The mine appears to be haunted. Do you wish to enter?" ), Font::BIG,
-                             Dialog::YES | Dialog::NO ) ) {
-        ActionToCaptureObject( hero, obj, dst_index );
+         == Dialog::Message( MP2::StringObject( MP2::OBJ_ABANDONEDMINE ),
+                             _( "You come upon an abandoned gold mine. The mine appears to be haunted. Do you wish to enter?" ), Font::BIG, Dialog::YES | Dialog::NO ) ) {
+        ActionToCaptureObject( hero, objectType, dst_index );
     }
 }
 
-/* capture color object */
-void ActionToCaptureObject( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToCaptureObject( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
     std::string header;
     std::string body;
-    u32 resource = Resource::UNKNOWN;
+    int32_t resource = Resource::UNKNOWN;
 
-    switch ( obj ) {
+    switch ( objectType ) {
     case MP2::OBJ_ALCHEMYLAB:
         resource = Resource::MERCURY;
-        header = MP2::StringObject( obj );
+        header = MP2::StringObject( objectType );
         body = _( "You have taken control of the local Alchemist shop. It will provide you with %{count} unit of Mercury per day." );
         break;
 
     case MP2::OBJ_SAWMILL:
         resource = Resource::WOOD;
-        header = MP2::StringObject( obj );
+        header = MP2::StringObject( objectType );
         body = _( "You gain control of a sawmill. It will provide you with %{count} units of wood per day." );
         break;
 
     case MP2::OBJ_ABANDONEDMINE:
     case MP2::OBJ_MINES: {
-        if ( obj == MP2::OBJ_ABANDONEDMINE && tile.GetQuantity3() != Spell::HAUNT ) {
+        resource = tile.QuantityResourceCount().first;
+        header = Maps::GetMinesName( resource );
+
+        if ( objectType == MP2::OBJ_ABANDONEDMINE && tile.GetQuantity3() != Spell::HAUNT ) {
             body = _( "You beat the Ghosts and are able to restore the mine to production." );
             break;
         }
-
-        resource = tile.QuantityResourceCount().first;
-        header = Maps::GetMinesName( resource );
 
         switch ( resource ) {
         case Resource::ORE:
@@ -2103,17 +2139,18 @@ void ActionToCaptureObject( Heroes & hero, u32 obj, s32 dst_index )
         default:
             break;
         }
-    } break;
+        break;
+    }
 
     case MP2::OBJ_LIGHTHOUSE:
-        header = MP2::StringObject( obj );
-        body = _( "The lighthouse is now under your control, and all of your ships will now move further each turn." );
+        header = MP2::StringObject( objectType );
+        body = _( "The lighthouse is now under your control, and all of your ships will now move further each day." );
         break;
 
     default:
         body = _( "You gain control of a %{name}." );
-        header = MP2::StringObject( obj );
-        StringReplace( body, "%{name}", MP2::StringObject( obj ) );
+        header = MP2::StringObject( objectType );
+        StringReplace( body, "%{name}", MP2::StringObject( objectType ) );
         break;
     }
 
@@ -2122,7 +2159,7 @@ void ActionToCaptureObject( Heroes & hero, u32 obj, s32 dst_index )
         bool capture = true;
 
         // check guardians
-        if ( tile.CaptureObjectIsProtection() ) {
+        if ( tile.isCaptureObjectProtected() ) {
             Army army( tile );
             const Monster & mons = tile.QuantityMonster();
 
@@ -2134,90 +2171,88 @@ void ActionToCaptureObject( Heroes & hero, u32 obj, s32 dst_index )
             }
             else {
                 capture = false;
+
                 BattleLose( hero, result, true );
-                tile.MonsterSetCount( army.GetCountMonsters( mons ) );
+
+                Troop & troop = world.GetCapturedObject( dst_index ).GetTroop();
+                troop.SetCount( army.GetCountMonsters( mons ) );
             }
         }
 
         if ( capture ) {
+            // restore the abandoned mine
+            if ( objectType == MP2::OBJ_ABANDONEDMINE ) {
+                Maps::Tiles::UpdateAbandonedMineSprite( tile );
+                hero.SetMapsObject( MP2::OBJ_MINES );
+                world.CaptureObject( dst_index, hero.GetColor() );
+                Interface::Basic::Get().Redraw( Interface::REDRAW_GAMEAREA );
+            }
+
             if ( resource == Resource::UNKNOWN )
                 Dialog::Message( header, body, Font::BIG, Dialog::OK );
             else
                 DialogCaptureResourceObject( header, body, resource );
 
-            // update abandone mine
-            if ( obj == MP2::OBJ_ABANDONEDMINE ) {
-                Maps::Tiles::UpdateAbandoneMineSprite( tile );
-                hero.SetMapsObject( MP2::OBJ_MINES );
-            }
-
             tile.QuantitySetColor( hero.GetColor() );
         }
     }
-    else
-        // set guardians
-        if ( Settings::Get().ExtWorldAllowSetGuardian() ) {
+    // set guardians
+    else if ( Settings::Get().ExtWorldAllowSetGuardian() ) {
         CapturedObject & co = world.GetCapturedObject( dst_index );
-        Troop & troop1 = co.GetTroop();
-        Troop troop2 = troop1;
+        Troop & troop = co.GetTroop();
+        Troop new_troop = troop;
 
         // check if it is already guarded by a spell
         const bool readonly = tile.GetQuantity3() != 0;
 
-        if ( Dialog::SetGuardian( hero, troop2, co, readonly ) )
-            troop1.Set( troop2(), troop2.GetCount() );
+        if ( Dialog::SetGuardian( hero, new_troop, co, readonly ) )
+            troop.Set( new_troop.GetMonster(), new_troop.GetCount() );
     }
 
-    if ( obj == MP2::OBJ_LIGHTHOUSE )
-        world.CaptureObject( dst_index, hero.GetColor() );
-
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " captured: " << MP2::StringObject( obj ) );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << " captured: " << MP2::StringObject( objectType ) )
 }
 
-void ActionToDwellingJoinMonster( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToDwellingJoinMonster( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
     const Troop & troop = tile.QuantityTroop();
 
-    if ( troop.isValid() ) {
-        hero.MovePointsScaleFixed();
+    const std::string title( MP2::StringObject( objectType ) );
 
+    if ( troop.isValid() ) {
         std::string message = _( "A group of %{monster} with a desire for greater glory wish to join you. Do you accept?" );
         StringReplace( message, "%{monster}", troop.GetMultiName() );
 
-        if ( !Settings::Get().MusicMIDI() && obj == MP2::OBJ_WATCHTOWER )
-            AGG::PlayMusic( MUS::WATCHTOWER, false );
-        else
-            AGG::PlaySound( M82::EXPERNCE );
+        AudioManager::PlaySound( M82::EXPERNCE );
 
-        if ( Dialog::YES == Dialog::Message( MP2::StringObject( obj ), message, Font::BIG, Dialog::YES | Dialog::NO ) ) {
+        if ( Dialog::YES == Dialog::Message( title, message, Font::BIG, Dialog::YES | Dialog::NO ) ) {
             if ( !hero.GetArmy().CanJoinTroop( troop ) )
                 Dialog::Message( troop.GetName(), _( "You are unable to recruit at this time, your ranks are full." ), Font::BIG, Dialog::OK );
             else {
                 tile.MonsterSetCount( 0 );
                 hero.GetArmy().JoinTroop( troop );
-                hero.MovePointsScaleFixed();
 
-                Interface::Basic::Get().GetStatusWindow().SetRedraw();
+                Interface::Basic::Get().SetRedraw( Interface::REDRAW_STATUS );
             }
         }
     }
     else {
-        Dialog::Message( "", _( "As you approach the dwelling, you notice that there is no one here." ), Font::BIG, Dialog::OK );
+        Dialog::Message( title, _( "As you approach the dwelling, you notice that there is no one here." ), Font::BIG, Dialog::OK );
     }
 
     hero.SetVisited( dst_index, Visit::GLOBAL );
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << ", object: " << MP2::StringObject( obj ) );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << ", object: " << title.c_str() )
 }
 
-void ActionToDwellingRecruitMonster( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToDwellingRecruitMonster( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
 
-    std::string msg_full, msg_void;
+    std::string msg_full;
+    std::string msg_void;
 
-    switch ( obj ) {
+    switch ( objectType ) {
     case MP2::OBJ_RUINS:
         msg_void = _( "You search the ruins, but the Medusas that used to live here are gone. Perhaps there will be more next week." );
         msg_full = _( "You've found some Medusas living in the ruins. They are willing to join your army for a price. Do you want to recruit Medusas?" );
@@ -2271,21 +2306,22 @@ void ActionToDwellingRecruitMonster( Heroes & hero, u32 obj, s32 dst_index )
     default:
         return;
     }
-    AGG::PlayMusic( MUS::FromMapObject( obj ), false );
 
     const Troop & troop = tile.QuantityTroop();
 
+    const std::string title( MP2::StringObject( objectType ) );
+
     if ( !troop.isValid() )
-        Dialog::Message( MP2::StringObject( obj ), msg_void, Font::BIG, Dialog::OK );
-    else if ( Dialog::YES == Dialog::Message( MP2::StringObject( obj ), msg_full, Font::BIG, Dialog::YES | Dialog::NO ) )
-        RecruitMonsterFromTile( hero, tile, MP2::StringObject( obj ), troop, false );
+        Dialog::Message( title, msg_void, Font::BIG, Dialog::OK );
+    else if ( Dialog::YES == Dialog::Message( title, msg_full, Font::BIG, Dialog::YES | Dialog::NO ) )
+        RecruitMonsterFromTile( hero, tile, title, troop, false );
 
     hero.SetVisited( dst_index, Visit::GLOBAL );
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << ", object: " << MP2::StringObject( obj ) );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << ", object: " << title.c_str() )
 }
 
-void ActionToDwellingBattleMonster( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToDwellingBattleMonster( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     const char * str_empty = nullptr;
     const char * str_recr = nullptr;
@@ -2293,7 +2329,7 @@ void ActionToDwellingBattleMonster( Heroes & hero, u32 obj, s32 dst_index )
     const char * str_wins = nullptr;
     const char * str_scss = nullptr;
 
-    switch ( obj ) {
+    switch ( objectType ) {
     case MP2::OBJ_CITYDEAD:
         str_empty = _( "The City of the Dead is empty of life, and empty of unlife as well. Perhaps some undead will move in next week." );
         str_recr = _( "Some Liches living here are willing to join your army for a price. Do you want to recruit Liches?" );
@@ -2320,9 +2356,11 @@ void ActionToDwellingBattleMonster( Heroes & hero, u32 obj, s32 dst_index )
     Maps::Tiles & tile = world.GetTiles( dst_index );
     const Troop & troop = tile.QuantityTroop();
 
+    const std::string title( MP2::StringObject( objectType ) );
+
     if ( Color::NONE == tile.QuantityColor() ) {
         // Not captured / defeated yet.
-        if ( Dialog::YES == Dialog::Message( MP2::StringObject( obj ), str_warn, Font::BIG, Dialog::YES | Dialog::NO ) ) {
+        if ( Dialog::YES == Dialog::Message( title, str_warn, Font::BIG, Dialog::YES | Dialog::NO ) ) {
             // new battle
             Army army( tile );
             Battle::Result res = Battle::Loader( hero.GetArmy(), army, dst_index );
@@ -2342,64 +2380,64 @@ void ActionToDwellingBattleMonster( Heroes & hero, u32 obj, s32 dst_index )
             str_scss = str_recr;
         }
         else {
-            Dialog::Message( MP2::StringObject( obj ), str_empty, Font::BIG, Dialog::OK );
+            Dialog::Message( title, str_empty, Font::BIG, Dialog::OK );
         }
     }
 
     // recruit monster
     if ( str_scss ) {
-        if ( troop.isValid() && Dialog::YES == Dialog::Message( MP2::StringObject( obj ), str_scss, Font::BIG, Dialog::YES | Dialog::NO ) ) {
-            RecruitMonsterFromTile( hero, tile, MP2::StringObject( obj ), troop, false );
+        if ( troop.isValid() && Dialog::YES == Dialog::Message( title, str_scss, Font::BIG, Dialog::YES | Dialog::NO ) ) {
+            RecruitMonsterFromTile( hero, tile, title, troop, false );
         }
 
         hero.SetVisited( dst_index, Visit::GLOBAL );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << ", object: " << MP2::StringObject( obj ) );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() << ", object: " << title.c_str() )
 }
 
-void ActionToObservationTower( const Heroes & hero, u32 obj, s32 dst_index )
+void ActionToObservationTower( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
-    Dialog::Message( MP2::StringObject( obj ), _( "From the observation tower, you are able to see distant lands." ), Font::BIG, Dialog::OK );
-    Maps::ClearFog( dst_index, Game::GetViewDistance( Game::VIEW_OBSERVATION_TOWER ), hero.GetColor() );
+    Dialog::Message( MP2::StringObject( objectType ), _( "From the observation tower, you are able to see distant lands." ), Font::BIG, Dialog::OK );
+
+    Maps::ClearFog( dst_index, GameStatic::getFogDiscoveryDistance( GameStatic::FogDiscoveryType::OBSERVATION_TOWER ), hero.GetColor() );
 }
 
-void ActionToArtesianSpring( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToArtesianSpring( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
-    const u32 max = hero.GetMaxSpellPoints();
+    const uint32_t max = hero.GetMaxSpellPoints();
     const std::string & name = MP2::StringObject( MP2::OBJ_ARTESIANSPRING );
 
-    if ( world.isAnyKingdomVisited( obj, dst_index ) ) {
+    if ( world.isAnyKingdomVisited( objectType, dst_index ) ) {
         Dialog::Message( name, _( "The spring only refills once a week, and someone's already been here this week." ), Font::BIG, Dialog::OK );
     }
     else if ( hero.GetSpellPoints() == max * 2 ) {
         Dialog::Message( name, _( "A drink at the spring is supposed to give you twice your normal spell points, but you are already at that level." ), Font::BIG,
                          Dialog::OK );
-        hero.SetVisitedWideTile( dst_index, obj, Visit::GLOBAL );
     }
     else {
         if ( Settings::Get().MusicMIDI() ) {
-            AGG::PlaySound( M82::EXPERNCE );
+            AudioManager::PlaySound( M82::EXPERNCE );
         }
         else {
-            AGG::PlayMusic( MUS::WATERSPRING, false );
+            AudioManager::PlayMusic( MUS::WATERSPRING, Music::PlaybackMode::PLAY_ONCE );
         }
         hero.SetSpellPoints( max * 2 );
         Dialog::Message( name, _( "A drink from the spring fills your blood with magic! You have twice your normal spell points in reserve." ), Font::BIG, Dialog::OK );
-
-        hero.SetVisitedWideTile( dst_index, obj, Visit::GLOBAL );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    hero.SetVisitedWideTile( dst_index, objectType, Visit::GLOBAL );
+
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToXanadu( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToXanadu( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     const Maps::Tiles & tile = world.GetTiles( dst_index );
+    const std::string title( MP2::StringObject( objectType ) );
 
     if ( hero.isVisited( tile ) ) {
-        Dialog::Message( MP2::StringObject( obj ),
-                         _( "Recognizing you, the butler refuses to admit you. \"The master,\" he says, \"will not see the same student twice.\"" ), Font::BIG,
+        Dialog::Message( title, _( "Recognizing you, the butler refuses to admit you. \"The master,\" he says, \"will not see the same student twice.\"" ), Font::BIG,
                          Dialog::OK );
     }
     else {
@@ -2424,8 +2462,8 @@ void ActionToXanadu( Heroes & hero, u32 obj, s32 dst_index )
         }
 
         if ( access ) {
-            Dialog::Message( MP2::StringObject( obj ), _( "The butler admits you to see the master of the house. He trains you in the four skills a hero should know." ),
-                             Font::BIG, Dialog::OK );
+            Dialog::Message( title, _( "The butler admits you to see the master of the house. He trains you in the four skills a hero should know." ), Font::BIG,
+                             Dialog::OK );
             hero.IncreasePrimarySkill( Skill::Primary::ATTACK );
             hero.IncreasePrimarySkill( Skill::Primary::DEFENSE );
             hero.IncreasePrimarySkill( Skill::Primary::KNOWLEDGE );
@@ -2434,18 +2472,18 @@ void ActionToXanadu( Heroes & hero, u32 obj, s32 dst_index )
         }
         else {
             Dialog::Message(
-                MP2::StringObject( obj ),
+                title,
                 _( "The butler opens the door and looks you up and down. \"You are neither famous nor diplomatic enough to be admitted to see my master,\" he sniffs. \"Come back when you think yourself worthy.\"" ),
                 Font::BIG, Dialog::OK );
         }
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
 bool ActionToUpgradeArmy( Army & army, const Monster & mons, std::string & str1, std::string & str2, const bool combineWithAnd )
 {
-    const std::string combTypeAnd = " and ";
+    const std::string combTypeAnd = _( " and " );
     const std::string combTypeComma = ", ";
 
     if ( army.HasMonster( mons ) ) {
@@ -2461,7 +2499,7 @@ bool ActionToUpgradeArmy( Army & army, const Monster & mons, std::string & str1,
     return false;
 }
 
-void ActionToUpgradeArmyObject( Heroes & hero, u32 obj )
+void ActionToUpgradeArmyObject( Heroes & hero, const MP2::MapObjectType objectType, const std::string & defaultMessage )
 {
     std::string monsters;
     std::string monsters_upgrade;
@@ -2469,18 +2507,16 @@ void ActionToUpgradeArmyObject( Heroes & hero, u32 obj )
     std::string msg2;
 
     std::vector<Monster *> mons;
-
-    hero.MovePointsScaleFixed();
-
     std::vector<Monster> monsToUpgrade;
 
-    switch ( obj ) {
+    switch ( objectType ) {
     case MP2::OBJ_HILLFORT: {
         monsToUpgrade = { Monster( Monster::OGRE ), Monster( Monster::ORC ), Monster( Monster::DWARF ) };
 
         msg1 = _( "All of the %{monsters} you have in your army have been trained by the battle masters of the fort. Your army now contains %{monsters2}." );
         msg2 = _( "An unusual alliance of Ogres, Orcs, and Dwarves offer to train (upgrade) any such troops brought to them. Unfortunately, you have none with you." );
-    } break;
+        break;
+    }
 
     case MP2::OBJ_FREEMANFOUNDRY: {
         monsToUpgrade = { Monster( Monster::SWORDSMAN ), Monster( Monster::PIKEMAN ), Monster( Monster::IRON_GOLEM ) };
@@ -2488,16 +2524,26 @@ void ActionToUpgradeArmyObject( Heroes & hero, u32 obj )
         msg1 = _( "All of your %{monsters} have been upgraded into %{monsters2}." );
         msg2 = _(
             "A blacksmith working at the foundry offers to convert all Pikemen and Swordsmen's weapons brought to him from iron to steel. He also says that he knows a process that will convert Iron Golems into Steel Golems. Unfortunately, you have none of these troops in your army, so he can't help you." );
-    } break;
+        break;
+    }
+
+    case MP2::OBJ_STABLES: {
+        assert( !defaultMessage.empty() );
+        msg1 = defaultMessage;
+        msg2 = defaultMessage;
+
+        monsToUpgrade = { Monster( Monster::CAVALRY ) };
+        break;
+    }
 
     default:
-        ERROR_LOG( "Incorrect object type passed to ActionToUpgradeArmyObject" );
+        ERROR_LOG( "Incorrect object type passed to ActionToUpgradeArmyObject" )
         assert( 0 );
         return;
     }
 
     if ( monsToUpgrade.empty() ) {
-        ERROR_LOG( "monsToUpgrade mustn't be empty." );
+        ERROR_LOG( "monsToUpgrade mustn't be empty." )
         assert( 0 );
         return;
     }
@@ -2513,10 +2559,12 @@ void ActionToUpgradeArmyObject( Heroes & hero, u32 obj )
             mons.emplace_back( &monsToUpgrade[i] );
     }
 
+    const std::string title( MP2::StringObject( objectType ) );
+
     if ( !mons.empty() ) {
         // composite sprite
-        uint32_t offsetX = 0;
-        uint32_t offsetY = 0;
+        int32_t offsetX = 0;
+        int32_t offsetY = 0;
         const fheroes2::Sprite & border = fheroes2::AGG::GetICN( ICN::STRIP, 12 );
 
         const int32_t monsterCount = static_cast<int32_t>( mons.size() ); // safe to do as the count is no more than 3
@@ -2543,77 +2591,65 @@ void ActionToUpgradeArmyObject( Heroes & hero, u32 obj )
 
             // border
             fheroes2::Blit( border, surface, offsetX, offsetY );
-            // background scenary for each race
-            switch ( mons[i]->GetRace() ) {
-            case Race::KNGT:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 4 ), surface, offsetX + 6, offsetY + 6 );
-                break;
-            case Race::BARB:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 5 ), surface, offsetX + 6, offsetY + 6 );
-                break;
-            case Race::SORC:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 6 ), surface, offsetX + 6, offsetY + 6 );
-                break;
-            case Race::WRLK:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 7 ), surface, offsetX + 6, offsetY + 6 );
-                break;
-            case Race::WZRD:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 8 ), surface, offsetX + 6, offsetY + 6 );
-                break;
-            case Race::NECR:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 9 ), surface, offsetX + 6, offsetY + 6 );
-                break;
-            default:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 10 ), surface, offsetX + 6, offsetY + 6 );
-                break;
-            }
-            // upgraded troop
-            const fheroes2::Sprite & mon = fheroes2::AGG::GetICN( mons[i]->GetUpgrade().ICNMonh(), 0 );
+            fheroes2::renderMonsterFrame( mons[i]->GetUpgrade(), surface, { 6 + offsetX, 6 + offsetY } );
 
-            fheroes2::Blit( mon, surface, offsetX + 6 + mon.x(), 6 + mon.y() + offsetY );
             offsetX += border.width() + 4;
         }
-        Dialog::SpriteInfo( MP2::StringObject( obj ), msg1, surface );
+
+        // The Hill Fort has a special sound
+        if ( objectType == MP2::OBJ_HILLFORT ) {
+            AudioManager::PlayMusic( MUS::HILLFORT, Music::PlaybackMode::PLAY_ONCE );
+        }
+
+        const fheroes2::CustomImageDialogElement imageUI( std::move( surface ) );
+        fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg1, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                               { &imageUI } );
     }
     else {
-        Dialog::Message( MP2::StringObject( obj ), msg2, Font::BIG, Dialog::OK );
+        Dialog::Message( title, msg2, Font::BIG, Dialog::OK );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToMagellanMaps( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToMagellanMaps( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     const Funds payment( Resource::GOLD, 1000 );
     Kingdom & kingdom = hero.GetKingdom();
 
-    if ( hero.isObjectTypeVisited( obj, Visit::GLOBAL ) ) {
-        Dialog::Message( MP2::StringObject( obj ), "empty", Font::BIG, Dialog::OK );
+    const std::string title( MP2::StringObject( objectType ) );
+
+    if ( hero.isObjectTypeVisited( objectType, Visit::GLOBAL ) ) {
+        Dialog::Message( title, _( "The captain looks at you with surprise and says:\n\"You already have all the maps I know about. Let me fish in peace now.\"" ),
+                         Font::BIG, Dialog::OK );
     }
     else if ( kingdom.AllowPayment( payment ) ) {
         if (
             Dialog::YES
             == Dialog::Message(
-                MP2::StringObject( obj ),
+                title,
                 _( "A retired captain living on this refurbished fishing platform offers to sell you maps of the sea he made in his younger days for 1,000 gold. Do you wish to buy the maps?" ),
                 Font::BIG, Dialog::YES | Dialog::NO ) ) {
             world.ActionForMagellanMaps( hero.GetColor() );
-            kingdom.OddFundsResource( payment );
-            hero.SetVisited( dst_index, Visit::GLOBAL );
-        }
 
-        Interface::Basic & I = Interface::Basic::Get();
-        I.RedrawFocus();
+            kingdom.OddFundsResource( payment );
+
+            hero.SetVisited( dst_index, Visit::GLOBAL );
+            hero.setVisitedForAllies( dst_index );
+
+            Interface::Basic & I = Interface::Basic::Get();
+            I.SetRedraw( Interface::REDRAW_GAMEAREA | Interface::REDRAW_RADAR );
+        }
     }
     else {
-        Dialog::Message( MP2::StringObject( obj ), _( "The captain sighs. \"You don't have enough money, eh?  You can't expect me to give my maps away for free!\"" ),
-                         Font::BIG, Dialog::OK );
+        Dialog::Message( title, _( "The captain sighs. \"You don't have enough money, eh?  You can't expect me to give my maps away for free!\"" ), Font::BIG,
+                         Dialog::OK );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToEvent( Heroes & hero, s32 dst_index )
+void ActionToEvent( Heroes & hero, int32_t dst_index )
 {
     // check event maps
     MapEvent * event_maps = world.GetMapEvent( Maps::GetPoint( dst_index ) );
@@ -2621,22 +2657,32 @@ void ActionToEvent( Heroes & hero, s32 dst_index )
     if ( event_maps && event_maps->isAllow( hero.GetColor() ) ) {
         hero.SetMove( false );
 
+        std::vector<fheroes2::ResourceDialogElement> resourceUI = fheroes2::getResourceDialogElements( event_maps->resources );
+        std::unique_ptr<fheroes2::ArtifactDialogElement> artifactUI;
+
         if ( event_maps->resources.GetValidItemsCount() ) {
             hero.GetKingdom().AddFundsResource( event_maps->resources );
-            Dialog::ResourceInfo( "", event_maps->message, event_maps->resources );
         }
-        else if ( event_maps->message.size() )
-            Dialog::Message( "", event_maps->message, Font::BIG, Dialog::OK );
 
         const Artifact & art = event_maps->artifact;
         if ( art.isValid() ) {
             if ( hero.PickupArtifact( art ) ) {
-                Game::PlayPickupSound();
-                std::string message( _( "You find %{artifact}." ) );
-                StringReplace( message, "%{artifact}", art.GetName() );
-                Dialog::ArtifactInfo( "", message, art );
+                artifactUI.reset( new fheroes2::ArtifactDialogElement( art ) );
+                AudioManager::PlaySound( M82::TREASURE );
             }
         }
+
+        std::vector<const fheroes2::DialogElement *> elementUI;
+        elementUI.reserve( resourceUI.size() );
+        for ( const fheroes2::ResourceDialogElement & element : resourceUI ) {
+            elementUI.emplace_back( &element );
+        }
+
+        if ( artifactUI ) {
+            elementUI.emplace_back( artifactUI.get() );
+        }
+
+        fheroes2::showMessage( fheroes2::Text( "", {} ), fheroes2::Text( event_maps->message, fheroes2::FontType::normalWhite() ), Dialog::OK, elementUI );
 
         event_maps->SetVisited( hero.GetColor() );
 
@@ -2646,34 +2692,38 @@ void ActionToEvent( Heroes & hero, s32 dst_index )
         }
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToObelisk( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToObelisk( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Kingdom & kingdom = hero.GetKingdom();
+    const std::string title( MP2::StringObject( objectType ) );
+
     if ( !hero.isVisited( world.GetTiles( dst_index ), Visit::GLOBAL ) ) {
         hero.SetVisited( dst_index, Visit::GLOBAL );
         kingdom.PuzzleMaps().Update( kingdom.CountVisitedObjects( MP2::OBJ_OBELISK ), world.CountObeliskOnMaps() );
-        AGG::PlaySound( M82::EXPERNCE );
+        AudioManager::PlaySound( M82::EXPERNCE );
         Dialog::Message(
-            MP2::StringObject( obj ),
+            title,
             _( "You come upon an obelisk made from a type of stone you have never seen before. Staring at it intensely, the smooth surface suddenly changes to an inscription. The inscription is a piece of a lost ancient map. Quickly you copy down the piece and the inscription vanishes as abruptly as it appeared." ),
             Font::BIG, Dialog::OK );
         kingdom.PuzzleMaps().ShowMapsDialog();
     }
-    else
-        Dialog::Message( MP2::StringObject( obj ), _( "You have already been to this obelisk." ), Font::BIG, Dialog::OK );
+    else {
+        Dialog::Message( title, _( "You have already been to this obelisk." ), Font::BIG, Dialog::OK );
+    }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToTreeKnowledge( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToTreeKnowledge( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     const Maps::Tiles & tile = world.GetTiles( dst_index );
+    const std::string title( MP2::StringObject( objectType ) );
 
     if ( hero.isVisited( tile ) ) {
-        Dialog::Message( MP2::StringObject( obj ),
+        Dialog::Message( title,
                          _( "Upon your approach, the tree opens its eyes in delight. \"It is good to see you, my student. I hope my teachings have helped you.\"" ),
                          Font::BIG, Dialog::OK );
     }
@@ -2684,33 +2734,42 @@ void ActionToTreeKnowledge( Heroes & hero, u32 obj, s32 dst_index )
 
         // free
         if ( conditions ) {
-            const fheroes2::Sprite & sprite = fheroes2::AGG::GetICN( ICN::EXPMRL, 4 );
             msg = _(
                 "Upon your approach, the tree opens its eyes in delight. \"Ahh, an adventurer! Allow me to teach you a little of what I have learned over the ages.\"" );
-            Dialog::SpriteInfo( MP2::StringObject( obj ), msg, sprite );
+
+            const fheroes2::CustomImageDialogElement imageUI( fheroes2::AGG::GetICN( ICN::EXPMRL, 4 ) );
+            fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                   { &imageUI } );
         }
         else {
             const ResourceCount & rc = tile.QuantityResourceCount();
 
             if ( hero.GetKingdom().AllowPayment( funds ) ) {
                 msg = _( "Upon your approach, the tree opens its eyes in delight." );
-                msg.append( "\n" );
+                msg += '\n';
                 msg.append( _( "\"Ahh, an adventurer! I will be happy to teach you a little of what I have learned over the ages for a mere %{count} %{res}.\"" ) );
-                msg.append( "\n" );
+                msg += '\n';
                 msg.append( _( "(Just bury it around my roots.)" ) );
                 StringReplace( msg, "%{res}", Resource::String( rc.first ) );
                 StringReplace( msg, "%{count}", rc.second );
-                conditions = Dialog::YES == Dialog::SpriteInfo( MP2::StringObject( obj ), msg, fheroes2::AGG::GetICN( ICN::EXPMRL, 4 ), Dialog::YES | Dialog::NO );
+
+                const uint32_t possibleExperience = Heroes::GetExperienceFromLevel( hero.GetLevel() ) - hero.GetExperience();
+
+                const fheroes2::ExperienceDialogElement experienceUI( static_cast<int32_t>( possibleExperience ) );
+                const fheroes2::Text titleUI( title, fheroes2::FontType::normalYellow() );
+                const fheroes2::Text messageUI( msg, fheroes2::FontType::normalWhite() );
+
+                conditions = ( fheroes2::showMessage( titleUI, messageUI, Dialog::YES | Dialog::NO, { &experienceUI } ) == Dialog::YES );
             }
             else {
                 msg = _( "Tears brim in the eyes of the tree." );
-                msg.append( "\n" );
+                msg += '\n';
                 msg.append( _( "\"I need %{count} %{res}.\"" ) );
-                msg.append( "\n" );
+                msg += '\n';
                 msg.append( _( "it whispers. (sniff) \"Well, come back when you can pay me.\"" ) );
                 StringReplace( msg, "%{res}", Resource::String( rc.first ) );
                 StringReplace( msg, "%{count}", rc.second );
-                Dialog::Message( MP2::StringObject( obj ), msg, Font::BIG, Dialog::OK );
+                Dialog::Message( title, msg, Font::BIG, Dialog::OK );
             }
         }
 
@@ -2721,43 +2780,43 @@ void ActionToTreeKnowledge( Heroes & hero, u32 obj, s32 dst_index )
         }
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToOracle( const Heroes & hero, uint32_t obj )
+void ActionToOracle( const Heroes & hero, const MP2::MapObjectType objectType )
 {
     Dialog::Message(
-        MP2::StringObject( obj ),
-        _( "Nestled among the trees sits a blind seer. After explaining the intent of your journey, the seer activates his crystal ball, allowing you to see the strengths and weaknesses of your opponents." ),
+        MP2::StringObject( objectType ),
+        _( "Nestled among the trees sits a blind seer. After you explain the intent of your journey, the seer activates his crystal ball, allowing you to see the strengths and weaknesses of your opponents." ),
         Font::BIG, Dialog::OK );
+
     Dialog::ThievesGuild( true );
 
     (void)hero;
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToDaemonCave( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToDaemonCave( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     Maps::Tiles & tile = world.GetTiles( dst_index );
 
-    AGG::PlayMusic( MUS::DEMONCAVE, false );
-
+    const std::string header = MP2::StringObject( objectType );
     if ( Dialog::YES
-         == Dialog::Message( MP2::StringObject( obj ), _( "The entrance to the cave is dark, and a foul, sulfurous smell issues from the cave mouth. Will you enter?" ),
-                             Font::BIG, Dialog::YES | Dialog::NO ) ) {
-        u32 variant = tile.QuantityVariant();
+         == Dialog::Message( header, _( "The entrance to the cave is dark, and a foul, sulfurous smell issues from the cave mouth. Will you enter?" ), Font::BIG,
+                             Dialog::YES | Dialog::NO ) ) {
+        uint32_t variant = tile.QuantityVariant();
 
         if ( variant ) {
-            u32 gold = tile.QuantityGold();
+            uint32_t gold = tile.QuantityGold();
             std::string msg;
 
-            if ( variant == 2 && hero.IsFullBagArtifacts() )
-                variant = 3;
+            if ( variant == 3 && hero.IsFullBagArtifacts() )
+                variant = 2;
 
             if (
                 Dialog::YES
                 == Dialog::Message(
-                    "",
+                    header,
                     _( "You find a powerful and grotesque Demon in the cave. \"Today,\" it rasps, \"you will fight and surely die. But I will give you a choice of deaths. You may fight me, or you may fight my servants. Do you prefer to fight my servants?\"" ),
                     Font::BIG, Dialog::YES | Dialog::NO ) ) {
                 // battle with earth elements
@@ -2769,7 +2828,12 @@ void ActionToDaemonCave( Heroes & hero, u32 obj, s32 dst_index )
                     hero.IncreaseExperience( res.GetExperienceAttacker() );
                     msg = _( "Upon defeating the daemon's servants, you find a hidden cache with %{count} gold." );
                     StringReplace( msg, "%{count}", gold );
-                    DialogWithGold( "", msg, gold );
+
+                    const fheroes2::ResourceDialogElement goldUI( Resource::GOLD, std::to_string( gold ) );
+
+                    fheroes2::showMessage( fheroes2::Text( header, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ),
+                                           Dialog::OK, { &goldUI } );
+
                     hero.GetKingdom().AddFundsResource( Funds( Resource::GOLD, gold ) );
                 }
                 else {
@@ -2778,32 +2842,45 @@ void ActionToDaemonCave( Heroes & hero, u32 obj, s32 dst_index )
             }
             // check variants
             else if ( 1 == variant ) {
-                const u32 exp = 1000;
+                const uint32_t exp = 1000;
                 msg = _( "The Demon screams its challenge and attacks! After a short, desperate battle, you slay the monster and receive %{exp} experience points." );
                 StringReplace( msg, "%{exp}", exp );
-                DialogWithExp( "", msg, exp );
+
+                const fheroes2::ExperienceDialogElement experienceUI( exp );
+                fheroes2::showMessage( fheroes2::Text( header, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                       { &experienceUI } );
+
                 hero.IncreaseExperience( exp );
             }
             else if ( 2 == variant ) {
-                const u32 exp = 1000;
-                const Artifact & art = tile.QuantityArtifact();
-                msg = _(
-                    "The Demon screams its challenge and attacks! After a short, desperate battle, you slay the monster and find the %{art} in the back of the cave." );
-                StringReplace( msg, "%{art}", art.GetName() );
-                if ( art.isValid() )
-                    DialogArtifactWithExp( "", msg, art, exp );
-                hero.PickupArtifact( art );
-                hero.IncreaseExperience( exp );
-            }
-            else if ( 3 == variant ) {
-                const u32 exp = 1000;
+                const uint32_t exp = 1000;
                 msg = _(
                     "The Demon screams its challenge and attacks! After a short, desperate battle, you slay the monster and receive %{exp} experience points and %{count} gold." );
                 StringReplace( msg, "%{exp}", exp );
                 StringReplace( msg, "%{count}", gold );
-                DialogGoldWithExp( "", msg, gold, exp );
+
+                const fheroes2::ExperienceDialogElement experienceUI( exp );
+                const fheroes2::ResourceDialogElement goldUI( Resource::GOLD, std::to_string( gold ) );
+                fheroes2::showMessage( fheroes2::Text( header, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                       { &experienceUI, &goldUI } );
+
                 hero.IncreaseExperience( exp );
                 hero.GetKingdom().AddFundsResource( Funds( Resource::GOLD, gold ) );
+            }
+            else if ( 3 == variant ) {
+                const uint32_t exp = 1000;
+                const Artifact & art = tile.QuantityArtifact();
+                msg = _(
+                    "The Demon screams its challenge and attacks! After a short, desperate battle, you slay the monster and find the %{art} in the back of the cave." );
+                StringReplace( msg, "%{art}", art.GetName() );
+                if ( art.isValid() ) {
+                    const fheroes2::ExperienceDialogElement experienceUI( exp );
+                    const fheroes2::ArtifactDialogElement artifactUI( art );
+                    fheroes2::showMessage( fheroes2::Text( header, fheroes2::FontType::normalYellow() ), fheroes2::Text( msg, fheroes2::FontType::normalWhite() ),
+                                           Dialog::OK, { &experienceUI, &artifactUI } );
+                }
+                hero.PickupArtifact( art );
+                hero.IncreaseExperience( exp );
             }
             else {
                 bool remove = true;
@@ -2817,13 +2894,13 @@ void ActionToDaemonCave( Heroes & hero, u32 obj, s32 dst_index )
                 StringReplace( msg, "%{count}", gold );
 
                 if ( allow ) {
-                    if ( Dialog::YES == Dialog::Message( "", msg, Font::BIG, Dialog::YES | Dialog::NO ) ) {
+                    if ( Dialog::YES == Dialog::Message( header, msg, Font::BIG, Dialog::YES | Dialog::NO ) ) {
                         remove = false;
                         kingdom.OddFundsResource( payment );
                     }
                 }
                 else
-                    Dialog::Message( "", msg, Font::BIG, Dialog::OK );
+                    Dialog::Message( header, msg, Font::BIG, Dialog::OK );
 
                 if ( remove ) {
                     Battle::Result res;
@@ -2835,136 +2912,162 @@ void ActionToDaemonCave( Heroes & hero, u32 obj, s32 dst_index )
             tile.QuantityReset();
         }
         else
-            Dialog::Message( "", _( "Except for evidence of a terrible battle, the cave is empty." ), Font::BIG, Dialog::OK );
+            Dialog::Message( header, _( "Except for evidence of a terrible battle, the cave is empty." ), Font::BIG, Dialog::OK );
 
         hero.SetVisited( dst_index, Visit::GLOBAL );
     }
 
-    AGG::PlayMusic( MUS::FromGround( tile.GetGround() ) );
-
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
 void ActionToAlchemistsTower( Heroes & hero )
 {
     BagArtifacts & bag = hero.GetBagArtifacts();
-    const uint32_t cursed = static_cast<uint32_t>( std::count_if( bag.begin(), bag.end(), []( const Artifact & art ) { return art.isAlchemistRemove(); } ) );
+    const uint32_t cursed = static_cast<uint32_t>( std::count_if( bag.begin(), bag.end(), []( const Artifact & art ) { return art.containsCurses(); } ) );
 
     const char * title = MP2::StringObject( MP2::OBJ_ALCHEMYTOWER );
 
     if ( cursed ) {
-        payment_t payment = PaymentConditions::ForAlchemist();
+        const payment_t payment = PaymentConditions::ForAlchemist();
 
         if ( hero.GetKingdom().AllowPayment( payment ) ) {
-            std::string msg = "As you enter the Alchemist's Tower, a hobbled, graying man in a brown cloak makes his way towards you.";
-            msg.append( "\n" );
+            std::string msg = _( "As you enter the Alchemist's Tower, a hobbled, graying man in a brown cloak makes his way towards you." );
+            msg += '\n';
             msg.append(
                 _n( "He checks your pack, and sees that you have 1 cursed item.", "He checks your pack, and sees that you have %{count} cursed items.", cursed ) );
             StringReplace( msg, "%{count}", cursed );
-            msg.append( "\n" );
-            msg.append( _( "For %{gold} gold, the alchemist will remove it for you. Do you pay?" ) );
+            msg += '\n';
+            msg.append( _n( "For %{gold} gold, the alchemist will remove it for you. Do you pay?",
+                            "For %{gold} gold, the alchemist will remove them for you. Do you pay?", cursed ) );
             StringReplace( msg, "%{gold}", payment.gold );
 
             if ( Dialog::YES == Dialog::Message( title, msg, Font::BIG, Dialog::YES | Dialog::NO ) ) {
-                AGG::PlaySound( M82::GOODLUCK );
+                AudioManager::PlaySound( M82::GOODLUCK );
                 hero.GetKingdom().OddFundsResource( payment );
 
-                for ( BagArtifacts::iterator it = bag.begin(); it != bag.end(); ++it ) {
-                    if ( it->isAlchemistRemove() ) {
-                        *it = Artifact::UNKNOWN;
+                for ( Artifact & artifact : bag ) {
+                    if ( artifact.containsCurses() ) {
+                        artifact = Artifact::UNKNOWN;
                     }
                 }
+
+                msg = _n( "After you consent to pay the requested amount of gold, the alchemist grabs the cursed artifact and throws it into his magical cauldron.",
+                          "After you consent to pay the requested amount of gold, the alchemist grabs all cursed artifacts and throws them into his magical cauldron.",
+                          cursed );
+
+                Dialog::Message( title, msg, Font::BIG, Dialog::OK );
             }
         }
-        else
+        else {
             Dialog::Message( title, _( "You hear a voice from behind the locked door, \"You don't have enough gold to pay for my services.\"" ), Font::BIG, Dialog::OK );
+        }
     }
     else {
         Dialog::Message( title, _( "You hear a voice from high above in the tower, \"Go away! I can't help you!\"" ), Font::BIG, Dialog::OK );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToStables( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToStables( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
-    const bool cavalry = hero.GetArmy().HasMonster( Monster::CAVALRY );
-    const bool visited = hero.isObjectTypeVisited( obj );
+    const bool isCavalryPresent = hero.GetArmy().HasMonster( Monster::CAVALRY );
+    const bool visited = hero.isObjectTypeVisited( objectType );
     std::string body;
 
-    if ( !cavalry && visited )
-        body = _(
-            "The head groom approaches you and speaks, \"You already have a fine horse, and have no inexperienced cavalry which might make use of our trained war horses.\"" );
-    else if ( !cavalry && !visited )
-        body = _(
-            "As you approach the stables, the head groom appears, leading a fine looking war horse. \"This steed will help speed you in your travels. Alas, his endurance will wane with a lot of heavy riding, and you must return for a fresh mount in a week. We also have many fine war horses which could benefit mounted soldiers, but you have none we can help.\"" );
-    else if ( cavalry && visited )
+    if ( isCavalryPresent && visited ) {
         body = _(
             "The head groom speaks to you, \"That is a fine looking horse you have. I am afraid we can give you no better, but the horses your cavalry are riding look to be of poor breeding stock. We have many trained war horses which would aid your riders greatly. I insist you take them.\"" );
-    else if ( cavalry && !visited )
+    }
+    if ( isCavalryPresent && !visited ) {
         body = _(
             "As you approach the stables, the head groom appears, leading a fine looking war horse. \"This steed will help speed you in your travels. Alas, he will grow tired in a week. You must also let me give better horses to your mounted soldiers, their horses look shoddy and weak.\"" );
+    }
+    else if ( !isCavalryPresent && visited ) {
+        body = _(
+            "The head groom approaches you and speaks, \"You already have a fine horse, and have no inexperienced cavalry which might make use of our trained war horses.\"" );
+    }
+    else {
+        body = _(
+            "As you approach the stables, the head groom appears, leading a fine looking war horse. \"This steed will help speed you in your travels. Alas, his endurance will wane with a lot of heavy riding, and you must return for a fresh mount in a week. We also have many fine war horses which could benefit mounted soldiers, but you have none we can help.\"" );
+    }
 
     // check if already visited
     if ( !visited ) {
         hero.SetVisited( dst_index );
-        AGG::PlaySound( M82::EXPERNCE );
+        AudioManager::PlaySound( M82::EXPERNCE );
         hero.IncreaseMovePoints( 400 );
     }
 
-    if ( cavalry )
-        hero.GetArmy().UpgradeMonsters( Monster::CAVALRY );
+    if ( isCavalryPresent ) {
+        ActionToUpgradeArmyObject( hero, objectType, body );
+    }
+    else {
+        Dialog::Message( MP2::StringObject( objectType ), body, Font::BIG, Dialog::OK );
+    }
 
-    Dialog::Message( MP2::StringObject( obj ), body, Font::BIG, Dialog::OK );
-
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToArena( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToArena( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
-    if ( hero.isObjectTypeVisited( obj ) ) {
-        Dialog::Message( MP2::StringObject( obj ), _( "The Arena guards turn you away." ), Font::BIG, Dialog::OK );
+    if ( hero.isObjectTypeVisited( objectType ) ) {
+        Dialog::Message( MP2::StringObject( objectType ), _( "The Arena guards turn you away." ), Font::BIG, Dialog::OK );
     }
     else {
         hero.SetVisited( dst_index );
-        AGG::PlaySound( M82::EXPERNCE );
+        AudioManager::PlaySound( M82::EXPERNCE );
         hero.IncreasePrimarySkill( Dialog::SelectSkillFromArena() );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToSirens( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToSirens( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
-    if ( hero.isObjectTypeVisited( obj ) ) {
-        Dialog::Message( MP2::StringObject( obj ),
-                         _( "As the sirens sing their eerie song, your small, determined army manages to overcome the urge to dive headlong into the sea." ), Font::BIG,
-                         Dialog::OK );
+    const std::string title( MP2::StringObject( objectType ) );
+
+    if ( hero.isObjectTypeVisited( objectType ) ) {
+        Dialog::Message( title, _( "You have your crew stop up their ears with wax before the sirens' eerie song has any chance of luring them to a watery grave." ),
+                         Font::BIG, Dialog::OK );
     }
     else {
-        u32 exp = hero.GetArmy().ActionToSirens();
-        std::string str = _(
-            "You have your crew stop up their ears with wax before the sirens' eerie song has any chance of luring them to a watery grave. An eerie wailing song emanates from the sirens perched upon the rocks. Many of your crew fall under its spell, and dive into the water where they drown. You are now wiser for the visit, and gain %{exp} experience." );
-        StringReplace( str, "%{exp}", exp );
+        const uint32_t experience = hero.GetArmy().ActionToSirens();
+        if ( experience == 0 ) {
+            Dialog::Message( title, _( "As the sirens sing their eerie song, your small, determined army manages to overcome the urge to dive headlong into the sea." ),
+                         Font::BIG, Dialog::OK );
+        }
+        else {
+            const fheroes2::ExperienceDialogElement experienceUI( static_cast<int32_t>( experience ) );
+
+            std::string str = _(
+                "An eerie wailing song emanates from the sirens perched upon the rocks. Many of your crew fall under its spell, and dive into the water where they drown. You are now wiser for the visit, and gain %{exp} experience." );
+            StringReplace( str, "%{exp}", experience );
+
+            AudioManager::PlaySound( M82::EXPERNCE );
+
+            fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( str, fheroes2::FontType::normalWhite() ), Dialog::OK,
+                                   { &experienceUI } );
+
+            hero.IncreaseExperience( experience );
+        }
 
         hero.SetVisited( dst_index );
-        AGG::PlaySound( M82::EXPERNCE );
-        Dialog::Message( MP2::StringObject( obj ), str, Font::BIG, Dialog::OK );
-        hero.IncreaseExperience( exp );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToJail( const Heroes & hero, u32 obj, s32 dst_index )
+void ActionToJail( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     const Kingdom & kingdom = hero.GetKingdom();
+    const std::string title( MP2::StringObject( objectType ) );
 
-    if ( kingdom.AllowRecruitHero( false, 0 ) ) {
+    if ( kingdom.AllowRecruitHero( false ) ) {
         Maps::Tiles & tile = world.GetTiles( dst_index );
-        AGG::PlaySound( M82::EXPERNCE );
+        AudioManager::PlaySound( M82::EXPERNCE );
         Dialog::Message(
-            MP2::StringObject( obj ),
+            title,
             _( "In a dazzling display of daring, you break into the local jail and free the hero imprisoned there, who, in return, pledges loyalty to your cause." ),
             Font::BIG, Dialog::OK );
 
@@ -2978,36 +3081,36 @@ void ActionToJail( const Heroes & hero, u32 obj, s32 dst_index )
         Heroes * prisoner = world.FromJailHeroes( dst_index );
 
         if ( prisoner ) {
-            if ( prisoner->Recruit( hero.GetColor(), Maps::GetPoint( dst_index ) ) )
-                prisoner->ResetModes( Heroes::JAIL );
+            prisoner->Recruit( hero.GetColor(), Maps::GetPoint( dst_index ) );
         }
     }
     else {
         std::string str = _( "You already have %{count} heroes, and regretfully must leave the prisoner in this jail to languish in agony for untold days." );
         StringReplace( str, "%{count}", Kingdom::GetMaxHeroes() );
-        Dialog::Message( MP2::StringObject( obj ), str, Font::BIG, Dialog::OK );
+        Dialog::Message( title, str, Font::BIG, Dialog::OK );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToHutMagi( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToHutMagi( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
-    Dialog::Message( MP2::StringObject( obj ),
+    Dialog::Message( MP2::StringObject( objectType ),
                      _( "You enter a rickety hut and talk to the magician who lives there. He tells you of places near and far which may aid you in your journeys." ),
                      Font::BIG, Dialog::OK );
 
-    if ( !hero.isObjectTypeVisited( obj, Visit::GLOBAL ) ) {
+    if ( !hero.isObjectTypeVisited( objectType, Visit::GLOBAL ) ) {
         hero.SetVisited( dst_index, Visit::GLOBAL );
-        MapsIndexes vec_eyes = Maps::GetObjectPositions( MP2::OBJ_EYEMAGI, false );
+        MapsIndexes vec_eyes = Maps::GetObjectPositions( MP2::OBJ_EYEMAGI, true );
 
-        if ( vec_eyes.size() ) {
+        if ( !vec_eyes.empty() ) {
             Interface::Basic & I = Interface::Basic::Get();
-            for ( MapsIndexes::const_iterator it = vec_eyes.begin(); it != vec_eyes.end(); ++it ) {
-                Maps::ClearFog( *it, Game::GetViewDistance( Game::VIEW_MAGI_EYES ), hero.GetColor() );
-                I.GetGameArea().SetCenter( Maps::GetPoint( *it ) );
-                I.RedrawFocus();
-                I.Redraw();
+
+            for ( const int32_t eyeIndex : vec_eyes ) {
+                Maps::ClearFog( eyeIndex, GameStatic::getFogDiscoveryDistance( GameStatic::FogDiscoveryType::MAGI_EYES ), hero.GetColor() );
+
+                I.GetGameArea().SetCenter( Maps::GetPoint( eyeIndex ) );
+                I.Redraw( Interface::REDRAW_GAMEAREA | Interface::REDRAW_RADAR );
 
                 fheroes2::Display::instance().render();
 
@@ -3019,25 +3122,28 @@ void ActionToHutMagi( Heroes & hero, u32 obj, s32 dst_index )
                     }
                 }
             }
+
             I.GetGameArea().SetCenter( hero.GetCenter() );
+            I.SetRedraw( Interface::REDRAW_GAMEAREA | Interface::REDRAW_RADAR );
         }
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToEyeMagi( const Heroes & hero, u32 obj )
+void ActionToEyeMagi( const Heroes & hero, const MP2::MapObjectType objectType )
 {
-    Dialog::Message( MP2::StringObject( obj ), _( "This eye seems to be intently studying its surroundings." ), Font::BIG, Dialog::OK );
+    Dialog::Message( MP2::StringObject( objectType ), _( "This eye seems to be intently studying its surroundings." ), Font::BIG, Dialog::OK );
 
     (void)hero;
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToSphinx( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToSphinx( Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
     MapSphinx * riddle = dynamic_cast<MapSphinx *>( world.GetMapObject( dst_index ) );
-    const std::string title = MP2::StringObject( obj );
+    const std::string title = MP2::StringObject( objectType );
+
     if ( riddle && riddle->valid ) {
         if (
             Dialog::YES
@@ -3052,20 +3158,35 @@ void ActionToSphinx( Heroes & hero, u32 obj, s32 dst_index )
             if ( riddle->AnswerCorrect( answer ) ) {
                 const Funds & res = riddle->resources;
                 const Artifact art = riddle->artifact;
-                const std::string say = _( "Looking somewhat disappointed, the Sphinx sighs. You've answered my riddle so here's your reward. Now begone." );
-                const u32 count = res.GetValidItemsCount();
+                const std::string say = _( "Looking somewhat disappointed, the Sphinx sighs. \"You've answered my riddle so here's your reward. Now begone.\"" );
+                const uint32_t count = res.GetValidItemsCount();
 
                 if ( count ) {
-                    if ( 1 == count && res.gold && art.isValid() )
-                        DialogWithArtifactAndGold( title, say, art, res.gold );
-                    else {
-                        Dialog::ResourceInfo( title, say, res );
-                        if ( art.isValid() )
-                            Dialog::ArtifactInfo( title, say, art );
+                    const std::vector<fheroes2::ResourceDialogElement> resourceUiElements = fheroes2::getResourceDialogElements( res );
+                    std::vector<const fheroes2::DialogElement *> uiElements;
+                    uiElements.reserve( resourceUiElements.size() );
+                    for ( const fheroes2::ResourceDialogElement & element : resourceUiElements ) {
+                        uiElements.emplace_back( &element );
                     }
+
+                    std::unique_ptr<fheroes2::ArtifactDialogElement> artifactUI;
+
+                    if ( art.isValid() ) {
+                        artifactUI.reset( new fheroes2::ArtifactDialogElement( art ) );
+                        uiElements.emplace_back( artifactUI.get() );
+                    }
+
+                    fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( say, fheroes2::FontType::normalWhite() ),
+                                           Dialog::OK, uiElements );
                 }
-                else if ( art.isValid() )
-                    Dialog::ArtifactInfo( title, say, art );
+                else if ( art.isValid() ) {
+                    AudioManager::PlaySound( M82::TREASURE );
+
+                    const fheroes2::ArtifactDialogElement artifactUI( art );
+
+                    fheroes2::showMessage( fheroes2::Text( title, fheroes2::FontType::normalYellow() ), fheroes2::Text( say, fheroes2::FontType::normalWhite() ),
+                                           Dialog::OK, { &artifactUI } );
+                }
 
                 if ( art.isValid() )
                     hero.PickupArtifact( art );
@@ -3091,52 +3212,48 @@ void ActionToSphinx( Heroes & hero, u32 obj, s32 dst_index )
         Dialog::Message( title, _( "You come across a giant Sphinx. The Sphinx remains strangely quiet." ), Font::BIG, Dialog::OK );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToBarrier( Heroes & hero, u32 obj, s32 dst_index )
+void ActionToBarrier( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
+    // A hero cannot stand on a barrier. He must stand in front of the barrier. Something wrong with logic!
+    assert( hero.GetIndex() != dst_index );
+
     Maps::Tiles & tile = world.GetTiles( dst_index );
     const Kingdom & kingdom = hero.GetKingdom();
 
+    const std::string title = MP2::StringObject( objectType );
+
     if ( kingdom.IsVisitTravelersTent( tile.QuantityColor() ) ) {
         Dialog::Message(
-            MP2::StringObject( obj ),
+            title,
             _( "A magical barrier stands tall before you, blocking your way. Runes on the arch read,\n\"Speak the key and you may pass.\"\nAs you speak the magic word, the glowing barrier dissolves into nothingness." ),
             Font::BIG, Dialog::OK );
 
         Game::ObjectFadeAnimation::PrepareFadeTask( tile.GetObject(), tile.GetIndex(), -1, true, false );
 
-        tile.SetObject( hero.GetMapsObject() );
-        hero.SetMapsObject( MP2::OBJ_ZERO );
         tile.RemoveObjectSprite();
+        tile.setAsEmpty();
 
+        AudioManager::PlaySound( M82::KILLFADE );
         Game::ObjectFadeAnimation::PerformFadeTask();
-
-        // TODO: fix pathfinding
-        if ( tile.GetIndex() == hero.GetIndex() ) {
-            tile.SetObject( MP2::OBJ_HEROES );
-        }
-        else {
-            tile.setAsEmpty();
-            hero.SetMapsObject( MP2::OBJ_HEROES );
-        }
     }
     else {
         Dialog::Message(
-            MP2::StringObject( obj ),
+            title,
             _( "A magical barrier stands tall before you, blocking your way. Runes on the arch read,\n\"Speak the key and you may pass.\"\nYou speak, and nothing happens." ),
             Font::BIG, Dialog::OK );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }
 
-void ActionToTravellersTent( const Heroes & hero, u32 obj, s32 dst_index )
+void ActionToTravellersTent( const Heroes & hero, const MP2::MapObjectType objectType, int32_t dst_index )
 {
-    AGG::PlaySound( M82::EXPERNCE );
+    AudioManager::PlaySound( M82::EXPERNCE );
     Dialog::Message(
-        MP2::StringObject( obj ),
+        MP2::StringObject( objectType ),
         _( "You enter the tent and see an old woman gazing into a magic gem. She looks up and says,\n\"In my travels, I have learned much in the way of arcane magic. A great oracle taught me his skill. I have the answer you seek.\"" ),
         Font::BIG, Dialog::OK );
 
@@ -3145,5 +3262,5 @@ void ActionToTravellersTent( const Heroes & hero, u32 obj, s32 dst_index )
 
     kingdom.SetVisitTravelersTent( tile.QuantityColor() );
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, hero.GetName() )
 }

@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2020                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2020 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,35 +21,23 @@
 #pragma once
 
 #include "screen.h"
+#include "ui_base.h"
 #include <memory>
 
 namespace fheroes2
 {
-    // Action-event class to communicate between sender and receiver (only for user actions)
-    class ActionObject
-    {
-    public:
-        ActionObject();
-        virtual ~ActionObject() = default;
-
-        void subscribe( ActionObject * receiver );
-        void unsubscribe();
-
-    protected:
-        void updateSubscription();
-
-        virtual void senderUpdate( const ActionObject * ) {}
-
-    private:
-        ActionObject * _receiver;
-    };
-
     // An abstract class for button usage
     class ButtonBase : public ActionObject
     {
     public:
         ButtonBase( int32_t offsetX = 0, int32_t offsetY = 0 );
+        ButtonBase( const ButtonBase & ) = delete;
+        ButtonBase( ButtonBase && button ) noexcept;
+
         ~ButtonBase() override = default;
+
+        ButtonBase & operator=( const ButtonBase & button ) = delete;
+        ButtonBase & operator=( ButtonBase && button ) noexcept;
 
         bool isEnabled() const;
         bool isDisabled() const;
@@ -78,6 +66,8 @@ namespace fheroes2
         Rect area() const;
 
     protected:
+        void _swap( ButtonBase & button );
+
         virtual const Sprite & _getPressed() const = 0;
         virtual const Sprite & _getReleased() const = 0;
         virtual const Sprite & _getDisabled() const;
@@ -119,7 +109,13 @@ namespace fheroes2
     public:
         ButtonSprite( int32_t offsetX = 0, int32_t offsetY = 0 );
         ButtonSprite( int32_t offsetX, int32_t offsetY, const Sprite & released, const Sprite & pressed, const Sprite & disabled = Sprite() );
+        ButtonSprite( const ButtonSprite & ) = delete;
+        ButtonSprite( ButtonSprite && button ) noexcept;
+
         ~ButtonSprite() override = default;
+
+        ButtonSprite & operator=( const ButtonSprite & ) = delete;
+        ButtonSprite & operator=( ButtonSprite && button ) noexcept;
 
         void setSprite( const Sprite & released, const Sprite & pressed, const Sprite & disabled = Sprite() );
 
@@ -147,6 +143,8 @@ namespace fheroes2
 
         void createButton( int32_t offsetX, int32_t offsetY, int icnId, uint32_t releasedIndex, uint32_t pressedIndex, int returnValue );
         void createButton( int32_t offsetX, int32_t offsetY, const Sprite & released, const Sprite & pressed, int returnValue );
+        void addButton( ButtonSprite && button, int returnValue );
+
         void draw( Image & area = Display::instance() ) const; // will draw on screen by default
 
         // Make sure that id is less than size!
@@ -195,4 +193,11 @@ namespace fheroes2
         void subscribeAll();
         void unsubscribeAll();
     };
+
+    // Makes a button with the background (usually from display): it can be used when original button sprites do not contain pieces of background in the pressed state
+    ButtonSprite makeButtonWithBackground( int32_t offsetX, int32_t offsetY, const Sprite & released, const Sprite & pressed, const Image & background );
+
+    // Makes a button with the shadow: for that it needs to capture the background from the display at construct time
+    ButtonSprite makeButtonWithShadow( int32_t offsetX, int32_t offsetY, const Sprite & released, const Sprite & pressed, const Image & background,
+                                       const Point & shadowOffset = Point( -4, 6 ) );
 }

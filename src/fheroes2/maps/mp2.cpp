@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -27,205 +28,160 @@
 #include "settings.h"
 #include "translations.h"
 
-/* return name icn object */
-int MP2::GetICNObject( int tileset )
+#include <cassert>
+
+int MP2::GetICNObject( const uint8_t tileset )
 {
     switch ( tileset >> 2 ) {
     // reserverd
     case 0:
         return ICN::UNKNOWN;
-
     // custom: boat sprite
     case 6:
         return ICN::BOAT32;
-
     // artifact
     case 11:
         return ICN::OBJNARTI;
-
     // monster
     case 12:
         return ICN::MONS32;
-
     // castle flags
     case 14:
         return ICN::FLAG32;
-
     // heroes
     case 21:
         return ICN::MINIHERO;
-
     // mountains: snow
     case 22:
         return ICN::MTNSNOW;
-
     // mountains: swamp
     case 23:
         return ICN::MTNSWMP;
-
     // mountains: lava
     case 24:
         return ICN::MTNLAVA;
-
     // mountains: desert
     case 25:
         return ICN::MTNDSRT;
-
     // mountains: dirt
     case 26:
         return ICN::MTNDIRT;
-
     // mountains: all terrains
     case 27:
         return ICN::MTNMULT;
-
     // mines
     case 29:
         return ICN::EXTRAOVR;
-
     // road
     case 30:
         return ICN::ROAD;
-
     // relief: crck
     case 31:
         return ICN::MTNCRCK;
-
     // relief: gras
     case 32:
         return ICN::MTNGRAS;
-
     // trees jungle
     case 33:
         return ICN::TREJNGL;
-
     // trees evil
     case 34:
         return ICN::TREEVIL;
-
     // castle and town sprites
     case 35:
         return ICN::OBJNTOWN;
-
     // castle base
     case 36:
         return ICN::OBJNTWBA;
-
     // castle shadow
     case 37:
         return ICN::OBJNTWSH;
-
     // random castle
     case 38:
         return ICN::OBJNTWRD;
-
     // mine guardians (elementals)
     case 39:
         return ICN::OBJNXTRA;
-
     // water object
     case 40:
         return ICN::OBJNWAT2;
-
     // object other
     case 41:
         return ICN::OBJNMUL2;
-
     // trees snow
     case 42:
         return ICN::TRESNOW;
-
     // trees trefir
     case 43:
         return ICN::TREFIR;
-
     // trees
     case 44:
         return ICN::TREFALL;
-
     // river
     case 45:
         return ICN::STREAM;
-
     // resource
     case 46:
         return ICN::OBJNRSRC;
-
     // gras object
     case 48:
         return ICN::OBJNGRA2;
-
     // trees tredeci
     case 49:
         return ICN::TREDECI;
-
     // sea object
     case 50:
         return ICN::OBJNWATR;
-
     // vegetation gras
     case 51:
         return ICN::OBJNGRAS;
-
     // object on snow
     case 52:
         return ICN::OBJNSNOW;
-
     // object on swamp
     case 53:
         return ICN::OBJNSWMP;
-
     // object on lava
     case 54:
         return ICN::OBJNLAVA;
-
     // object on desert
     case 55:
         return ICN::OBJNDSRT;
-
     // object on dirt
     case 56:
         return ICN::OBJNDIRT;
-
     // object on crck
     case 57:
         return ICN::OBJNCRCK;
-
     // object on lava
     case 58:
         return ICN::OBJNLAV3;
-
     // object on earth
     case 59:
         return ICN::OBJNMULT;
-
     //  object on lava
     case 60:
         return ICN::OBJNLAV2;
-
     // extra objects for loyalty version
     case 61:
         if ( Settings::Get().isPriceOfLoyaltySupported() )
             return ICN::X_LOC1;
         break;
-
     // extra objects for loyalty version
     case 62:
         if ( Settings::Get().isPriceOfLoyaltySupported() )
             return ICN::X_LOC2;
         break;
-
     // extra objects for loyalty version
     case 63:
         if ( Settings::Get().isPriceOfLoyaltySupported() )
             return ICN::X_LOC3;
         break;
-
     default:
         break;
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_WARN, "unknown type: " << static_cast<int>( tileset ) );
+    DEBUG_LOG( DBG_GAME, DBG_WARN, "unknown type: " << static_cast<int>( tileset ) )
 
     return ICN::UNKNOWN;
 }
@@ -233,15 +189,14 @@ int MP2::GetICNObject( int tileset )
 bool MP2::isHiddenForPuzzle( uint8_t tileset, uint8_t index )
 {
     const int icnID = tileset >> 2;
-    // Values extracted from 64-byte array in original game
     return ( icnID < 22 || icnID == 46 || ( icnID == 56 && index == 140 ) );
 }
 
-const char * MP2::StringObject( int object )
+const char * MP2::StringObject( const MapObjectType objectType, const int count )
 {
-    switch ( object ) {
+    switch ( objectType ) {
     case OBJ_ZERO:
-        return "OBJ_ZERO";
+        return _( "No object" );
     case OBJN_ALCHEMYLAB:
     case OBJ_ALCHEMYLAB:
         return _( "Alchemist Lab" );
@@ -262,7 +217,7 @@ const char * MP2::StringObject( int object )
         return _( "Lighthouse" );
     case OBJN_WATERWHEEL:
     case OBJ_WATERWHEEL:
-        return _( "Water Wheel" );
+        return _n( "Water Wheel", "Water Wheels", count );
     case OBJN_MINES:
     case OBJ_MINES:
         return _( "Mines" );
@@ -289,7 +244,7 @@ const char * MP2::StringObject( int object )
         return _( "Wagon Camp" );
     case OBJN_WINDMILL:
     case OBJ_WINDMILL:
-        return _( "Windmill" );
+        return _n( "Windmill", "Windmills", count );
     case OBJN_RNDTOWN:
     case OBJ_RNDTOWN:
         return _( "Random Town" );
@@ -352,7 +307,7 @@ const char * MP2::StringObject( int object )
         return _( "Troll Bridge" );
     case OBJN_WITCHSHUT:
     case OBJ_WITCHSHUT:
-        return _( "Witch Hut" );
+        return _( "Witch's Hut" );
     case OBJN_XANADU:
     case OBJ_XANADU:
         return _( "Xanadu" );
@@ -361,7 +316,7 @@ const char * MP2::StringObject( int object )
         return _( "Cave" );
     case OBJN_MAGELLANMAPS:
     case OBJ_MAGELLANMAPS:
-        return _( "Magellan Maps" );
+        return _( "Magellan's Maps" );
     case OBJN_DERELICTSHIP:
     case OBJ_DERELICTSHIP:
         return _( "Derelict Ship" );
@@ -469,25 +424,25 @@ const char * MP2::StringObject( int object )
     case OBJ_BOAT:
         return _( "Boat" );
     case OBJ_RNDARTIFACT:
-        return "Random Artifact";
+        return _( "Random Artifact" );
     case OBJ_RNDRESOURCE:
-        return "Random Resource";
+        return _( "Random Resource" );
     case OBJ_RNDMONSTER1:
-        return "OBJ_RNDMONSTER1";
+        return _( "Random Monster - weak" );
     case OBJ_RNDMONSTER2:
-        return "OBJ_RNDMONSTER2";
+        return _( "Random Monster - medium" );
     case OBJ_RNDMONSTER3:
-        return "OBJ_RNDMONSTER3";
+        return _( "Random Monster - strong" );
     case OBJ_RNDMONSTER4:
-        return "OBJ_RNDMONSTER4";
+        return _( "Random Monster - very strong" );
     case OBJ_STANDINGSTONES:
         return _( "Standing Stones" );
     case OBJ_EVENT:
-        return "OBJ_EVENT";
+        return _( "Event" );
     case OBJ_RNDMONSTER:
-        return "OBJ_RNDMONSTER";
+        return _( "Random Monster" );
     case OBJ_RNDULTIMATEARTIFACT:
-        return "OBJ_RNDULTIMATEARTIFACT";
+        return _( "Random Ultimate Artifact" );
     case OBJ_IDOL:
         return _( "Idol" );
     case OBJ_SHRINE1:
@@ -499,22 +454,21 @@ const char * MP2::StringObject( int object )
     case OBJ_WAGON:
         return _( "Wagon" );
     case OBJ_LEANTO:
-        return _( "Lean To" );
+        return _( "Lean-To" );
     case OBJ_FLOTSAM:
         return _( "Flotsam" );
-    case OBJ_SHIPWRECKSURVIROR:
+    case OBJ_SHIPWRECKSURVIVOR:
         return _( "Shipwreck Survivor" );
     case OBJ_BOTTLE:
         return _( "Bottle" );
     case OBJ_MAGICGARDEN:
-        return _( "Magic Garden" );
+        return _n( "Magic Garden", "Magic Gardens", count );
     case OBJ_RNDARTIFACT1:
-        return "OBJ_RNDARTIFACT1";
+        return _( "Random Artifact - Treasure" );
     case OBJ_RNDARTIFACT2:
-        return "OBJ_RNDARTIFACT2";
+        return _( "Random Artifact - Minor" );
     case OBJ_RNDARTIFACT3:
-        return "OBJ_RNDARTIFACT3";
-
+        return _( "Random Artifact - Major" );
     case OBJN_JAIL:
     case OBJ_JAIL:
         return _( "Jail" );
@@ -523,7 +477,6 @@ const char * MP2::StringObject( int object )
         return _( "Traveller's Tent" );
     case OBJ_BARRIER:
         return _( "Barrier" );
-
     case OBJN_FIREALTAR:
     case OBJ_FIREALTAR:
         return _( "Fire Summoning Altar" );
@@ -562,7 +515,6 @@ const char * MP2::StringObject( int object )
         return _( "Sirens" );
     case OBJ_REEFS:
         return _( "Reefs" );
-
     case OBJ_UNKNW_02:
         return "OBJ_UNKNW_02";
     case OBJ_UNKNW_03:
@@ -685,19 +637,18 @@ const char * MP2::StringObject( int object )
         return "OBJ_UNKNW_F9";
     case OBJ_UNKNW_FA:
         return "OBJ_UNKNW_FA";
-
     default:
-        DEBUG_LOG( DBG_GAME, DBG_WARN, "unknown object: " << static_cast<int>( object ) );
+        DEBUG_LOG( DBG_GAME, DBG_WARN, "unknown object: " << static_cast<int>( objectType ) )
         break;
     }
 
     return nullptr;
 }
 
-bool MP2::isDayLife( int obj )
+bool MP2::isDayLife( const MapObjectType objectType )
 {
-    // FIXME: list day object life
-    switch ( obj ) {
+    // TODO: list day object life
+    switch ( objectType ) {
     case OBJ_MAGICWELL:
         return true;
 
@@ -708,17 +659,16 @@ bool MP2::isDayLife( int obj )
     return false;
 }
 
-bool MP2::isWeekLife( int obj )
+bool MP2::isWeekLife( const MapObjectType objectType )
 {
-    // FIXME: list week object life
-    switch ( obj ) {
+    // TODO: list week object life
+    switch ( objectType ) {
     case OBJ_STABLES:
     case OBJ_MAGICGARDEN:
     case OBJ_WATERWHEEL:
     case OBJ_WINDMILL:
     case OBJ_ARTESIANSPRING:
-
-        // join army
+    // join army
     case OBJ_WATCHTOWER:
     case OBJ_EXCAVATION:
     case OBJ_CAVE:
@@ -729,7 +679,6 @@ bool MP2::isWeekLife( int obj )
     case OBJ_HALFLINGHOLE:
     case OBJ_PEASANTHUT:
     case OBJ_THATCHEDHUT:
-
     // recruit army
     case OBJ_RUINS:
     case OBJ_TREECITY:
@@ -740,18 +689,14 @@ bool MP2::isWeekLife( int obj )
     case OBJ_FIREALTAR:
     case OBJ_EARTHALTAR:
     case OBJ_BARROWMOUNDS:
-
     // battle and recruit army
     case OBJ_DRAGONCITY:
     case OBJ_CITYDEAD:
     case OBJ_TROLLBRIDGE:
-
     // for AI
     case OBJ_COAST:
     case OBJ_HEROES:
-
         return true;
-
     default:
         break;
     }
@@ -759,21 +704,19 @@ bool MP2::isWeekLife( int obj )
     return false;
 }
 
-bool MP2::isMonthLife( int objectID )
+bool MP2::isMonthLife( const MapObjectType objectType )
 {
-    return objectID == MP2::OBJ_CASTLE;
+    return objectType == MP2::OBJ_CASTLE;
 }
 
-bool MP2::isBattleLife( int obj )
+bool MP2::isBattleLife( const MapObjectType objectType )
 {
-    // FIXME: list battle object life
-    switch ( obj ) {
+    switch ( objectType ) {
     // luck modificators
     case OBJ_IDOL:
     case OBJ_FOUNTAIN:
     case OBJ_FAERIERING:
     case OBJ_PYRAMID:
-
     // morale modificators
     case OBJ_BUOY:
     case OBJ_OASIS:
@@ -783,9 +726,7 @@ bool MP2::isBattleLife( int obj )
     case OBJ_DERELICTSHIP:
     case OBJ_SHIPWRECK:
     case OBJ_MERMAID:
-
         return true;
-
     default:
         break;
     }
@@ -793,60 +734,230 @@ bool MP2::isBattleLife( int obj )
     return false;
 }
 
-bool MP2::isActionObject( int obj, bool water )
+bool MP2::isActionObject( const MapObjectType objectType, const bool locatesOnWater )
 {
-    if ( water )
-        return isWaterObject( obj );
+    if ( locatesOnWater ) {
+        return isWaterActionObject( objectType );
+    }
 
-    return isGroundObject( obj );
+    return isActionObject( objectType );
 }
 
-bool MP2::isWaterObject( int obj )
+bool MP2::isWaterActionObject( const MapObjectType objectType )
 {
-    switch ( obj ) {
+    switch ( objectType ) {
     case OBJ_WATERCHEST:
     case OBJ_DERELICTSHIP:
     case OBJ_SHIPWRECK:
     case OBJ_WHIRLPOOL:
     case OBJ_BUOY:
     case OBJ_BOTTLE:
-    case OBJ_SHIPWRECKSURVIROR:
+    case OBJ_SHIPWRECKSURVIVOR:
     case OBJ_FLOTSAM:
     case OBJ_MAGELLANMAPS:
     case OBJ_COAST:
-
     case OBJ_MERMAID:
     case OBJ_SIRENS:
     case OBJ_BARRIER:
-
-        // hack (bug: #3142729)
     case OBJ_MONSTER:
     case OBJ_ARTIFACT:
     case OBJ_RESOURCE:
-
         return true;
-
     case OBJ_CASTLE:
     case OBJ_BOAT:
         return false;
-
     default:
         break;
     }
 
     // price loyalty: editor allow place other objects
-    return Settings::Get().isPriceOfLoyaltySupported() ? isGroundObject( obj ) : false;
+    return Settings::Get().isPriceOfLoyaltySupported() ? isActionObject( objectType ) : false;
 }
 
-bool MP2::isGroundObject( int obj )
+bool MP2::isActionObject( const MapObjectType objectType )
 {
     // check if first bit is set
-    return obj > 127 && obj != OBJ_EVENT && obj != OBJN_STABLES && obj != OBJN_ALCHEMYTOWER;
+    if ( objectType < 128 ) {
+        return false;
+    }
+    switch ( objectType ) {
+    case OBJ_EVENT:
+    case OBJN_STABLES:
+    case OBJN_ALCHEMYTOWER:
+    case OBJ_UNKNW_E2:
+    case OBJ_UNKNW_E3:
+    case OBJ_UNKNW_E4:
+    case OBJ_UNKNW_E5:
+    case OBJ_UNKNW_E6:
+    case OBJ_UNKNW_E7:
+    case OBJ_UNKNW_E8:
+    case OBJ_UNKNW_F9:
+    case OBJ_UNKNW_FA:
+    case OBJ_UNKNW_91:
+    case OBJ_UNKNW_92:
+    case OBJ_UNKNW_9C:
+    case OBJ_UNKNW_A1:
+    case OBJ_UNKNW_AA:
+    case OBJ_UNKNW_B2:
+    case OBJ_UNKNW_B8:
+    case OBJ_UNKNW_B9:
+    case OBJ_UNKNW_D1:
+    case OBJ_REEFS:
+        return false;
+    default:
+        break;
+    }
+
+    return true;
 }
 
-bool MP2::isQuantityObject( int obj )
+MP2::MapObjectType MP2::getBaseActionObjectType( const MapObjectType objectType )
 {
-    switch ( obj ) {
+    switch ( objectType ) {
+    case OBJN_ALCHEMYLAB:
+        return OBJ_ALCHEMYLAB;
+    case OBJN_SKELETON:
+        return OBJ_SKELETON;
+    case OBJN_DAEMONCAVE:
+        return OBJ_DAEMONCAVE;
+    case OBJN_FAERIERING:
+        return OBJ_FAERIERING;
+    case OBJN_GAZEBO:
+        return OBJ_GAZEBO;
+    case OBJN_GRAVEYARD:
+        return OBJ_GRAVEYARD;
+    case OBJN_ARCHERHOUSE:
+        return OBJ_ARCHERHOUSE;
+    case OBJN_DWARFCOTT:
+        return OBJ_DWARFCOTT;
+    case OBJN_PEASANTHUT:
+        return OBJ_PEASANTHUT;
+    case OBJN_DRAGONCITY:
+        return OBJ_DRAGONCITY;
+    case OBJN_LIGHTHOUSE:
+        return OBJ_LIGHTHOUSE;
+    case OBJN_WATERWHEEL:
+        return OBJ_WATERWHEEL;
+    case OBJN_MINES:
+        return OBJ_MINES;
+    case OBJN_OBELISK:
+        return OBJ_OBELISK;
+    case OBJN_OASIS:
+        return OBJ_OASIS;
+    case OBJN_SAWMILL:
+        return OBJ_SAWMILL;
+    case OBJN_ORACLE:
+        return OBJ_ORACLE;
+    case OBJN_SHIPWRECK:
+        return OBJ_SHIPWRECK;
+    case OBJN_DESERTTENT:
+        return OBJ_DESERTTENT;
+    case OBJN_CASTLE:
+        return OBJ_CASTLE;
+    case OBJN_STONELITHS:
+        return OBJ_STONELITHS;
+    case OBJN_WAGONCAMP:
+        return OBJ_WAGONCAMP;
+    case OBJN_WINDMILL:
+        return OBJ_WINDMILL;
+    case OBJN_RNDTOWN:
+        return OBJ_RNDTOWN;
+    case OBJN_RNDCASTLE:
+        return OBJ_RNDCASTLE;
+    case OBJN_WATCHTOWER:
+        return OBJ_WATCHTOWER;
+    case OBJN_TREEHOUSE:
+        return OBJ_TREEHOUSE;
+    case OBJN_TREECITY:
+        return OBJ_TREECITY;
+    case OBJN_RUINS:
+        return OBJ_RUINS;
+    case OBJN_FORT:
+        return OBJ_FORT;
+    case OBJN_TRADINGPOST:
+        return OBJ_TRADINGPOST;
+    case OBJN_ABANDONEDMINE:
+        return OBJ_ABANDONEDMINE;
+    case OBJN_TREEKNOWLEDGE:
+        return OBJ_TREEKNOWLEDGE;
+    case OBJN_DOCTORHUT:
+        return OBJ_DOCTORHUT;
+    case OBJN_TEMPLE:
+        return OBJ_TEMPLE;
+    case OBJN_HILLFORT:
+        return OBJ_HILLFORT;
+    case OBJN_HALFLINGHOLE:
+        return OBJ_HALFLINGHOLE;
+    case OBJN_MERCENARYCAMP:
+        return OBJ_MERCENARYCAMP;
+    case OBJN_PYRAMID:
+        return OBJ_PYRAMID;
+    case OBJN_CITYDEAD:
+        return OBJ_CITYDEAD;
+    case OBJN_EXCAVATION:
+        return OBJ_EXCAVATION;
+    case OBJN_SPHINX:
+        return OBJ_SPHINX;
+    case OBJN_ARTESIANSPRING:
+        return OBJ_ARTESIANSPRING;
+    case OBJN_TROLLBRIDGE:
+        return OBJ_TROLLBRIDGE;
+    case OBJN_WATERINGHOLE:
+        return OBJ_WATERINGHOLE;
+    case OBJN_WITCHSHUT:
+        return OBJ_WITCHSHUT;
+    case OBJN_XANADU:
+        return OBJ_XANADU;
+    case OBJN_CAVE:
+        return OBJ_CAVE;
+    case OBJN_MAGELLANMAPS:
+        return OBJ_MAGELLANMAPS;
+    case OBJN_DERELICTSHIP:
+        return OBJ_DERELICTSHIP;
+    case OBJN_MAGICWELL:
+        return OBJ_MAGICWELL;
+    case OBJN_OBSERVATIONTOWER:
+        return OBJ_OBSERVATIONTOWER;
+    case OBJN_FREEMANFOUNDRY:
+        return OBJ_FREEMANFOUNDRY;
+    case OBJN_ARENA:
+        return OBJ_ARENA;
+    case OBJN_BARROWMOUNDS:
+        return OBJ_BARROWMOUNDS;
+    case OBJN_MERMAID:
+        return OBJ_MERMAID;
+    case OBJN_SIRENS:
+        return OBJ_SIRENS;
+    case OBJN_HUTMAGI:
+        return OBJ_HUTMAGI;
+    case OBJN_EYEMAGI:
+        return OBJ_EYEMAGI;
+    case OBJN_TRAVELLERTENT:
+        return OBJ_TRAVELLERTENT;
+    case OBJN_JAIL:
+        return OBJ_JAIL;
+    case OBJN_FIREALTAR:
+        return OBJ_FIREALTAR;
+    case OBJN_AIRALTAR:
+        return OBJ_AIRALTAR;
+    case OBJN_EARTHALTAR:
+        return OBJ_EARTHALTAR;
+    case OBJN_WATERALTAR:
+        return OBJ_WATERALTAR;
+    case OBJN_ALCHEMYTOWER:
+        return OBJ_ALCHEMYTOWER;
+    case OBJN_STABLES:
+        return OBJ_STABLES;
+    default:
+        break;
+    }
+
+    return objectType;
+}
+
+bool MP2::isQuantityObject( const MapObjectType objectType )
+{
+    switch ( objectType ) {
     case OBJ_SKELETON:
     case OBJ_WAGON:
     case OBJ_MAGICGARDEN:
@@ -855,7 +966,7 @@ bool MP2::isQuantityObject( int obj )
     case OBJ_LEANTO:
     case OBJ_CAMPFIRE:
     case OBJ_FLOTSAM:
-    case OBJ_SHIPWRECKSURVIROR:
+    case OBJ_SHIPWRECKSURVIVOR:
     case OBJ_WATERCHEST:
     case OBJ_DERELICTSHIP:
     case OBJ_SHIPWRECK:
@@ -864,20 +975,19 @@ bool MP2::isQuantityObject( int obj )
     case OBJ_DAEMONCAVE:
     case OBJ_ABANDONEDMINE:
         return true;
-
     default:
         break;
     }
 
-    if ( isPickupObject( obj ) )
+    if ( isPickupObject( objectType ) )
         return true;
 
     return false;
 }
 
-bool MP2::isCaptureObject( int obj )
+bool MP2::isCaptureObject( const MapObjectType objectType )
 {
-    switch ( obj ) {
+    switch ( objectType ) {
     case OBJ_MINES:
     case OBJ_ABANDONEDMINE:
     case OBJ_ALCHEMYLAB:
@@ -885,12 +995,10 @@ bool MP2::isCaptureObject( int obj )
     case OBJ_LIGHTHOUSE:
     case OBJ_CASTLE:
         return true;
-
     case OBJ_WATERWHEEL:
     case OBJ_WINDMILL:
     case OBJ_MAGICGARDEN:
         return Settings::Get().ExtWorldExtObjectsCaptured();
-
     default:
         break;
     }
@@ -898,11 +1006,11 @@ bool MP2::isCaptureObject( int obj )
     return false;
 }
 
-bool MP2::isPickupObject( int obj )
+bool MP2::isPickupObject( const MapObjectType objectType )
 {
-    switch ( obj ) {
+    switch ( objectType ) {
     case OBJ_WATERCHEST:
-    case OBJ_SHIPWRECKSURVIROR:
+    case OBJ_SHIPWRECKSURVIVOR:
     case OBJ_FLOTSAM:
     case OBJ_BOTTLE:
     case OBJ_TREASURECHEST:
@@ -911,7 +1019,6 @@ bool MP2::isPickupObject( int obj )
     case OBJ_RESOURCE:
     case OBJ_ARTIFACT:
         return true;
-
     default:
         break;
     }
@@ -919,20 +1026,19 @@ bool MP2::isPickupObject( int obj )
     return false;
 }
 
-bool MP2::isArtifactObject( int obj )
+bool MP2::isArtifactObject( const MapObjectType objectType )
 {
-    switch ( obj ) {
-    case MP2::OBJ_ARTIFACT:
-    case MP2::OBJ_WAGON:
-    case MP2::OBJ_SKELETON:
-    case MP2::OBJ_DAEMONCAVE:
-    case MP2::OBJ_WATERCHEST:
-    case MP2::OBJ_TREASURECHEST:
-    case MP2::OBJ_SHIPWRECKSURVIROR:
-    case MP2::OBJ_SHIPWRECK:
-    case MP2::OBJ_GRAVEYARD:
+    switch ( objectType ) {
+    case OBJ_ARTIFACT:
+    case OBJ_WAGON:
+    case OBJ_SKELETON:
+    case OBJ_DAEMONCAVE:
+    case OBJ_WATERCHEST:
+    case OBJ_TREASURECHEST:
+    case OBJ_SHIPWRECKSURVIVOR:
+    case OBJ_SHIPWRECK:
+    case OBJ_GRAVEYARD:
         return true;
-
     default:
         break;
     }
@@ -940,22 +1046,21 @@ bool MP2::isArtifactObject( int obj )
     return false;
 }
 
-bool MP2::isHeroUpgradeObject( int obj )
+bool MP2::isHeroUpgradeObject( const MapObjectType objectType )
 {
-    switch ( obj ) {
-    case MP2::OBJ_GAZEBO:
-    case MP2::OBJ_TREEKNOWLEDGE:
-    case MP2::OBJ_MERCENARYCAMP:
-    case MP2::OBJ_FORT:
-    case MP2::OBJ_STANDINGSTONES:
-    case MP2::OBJ_DOCTORHUT:
-    case MP2::OBJ_SHRINE1:
-    case MP2::OBJ_SHRINE2:
-    case MP2::OBJ_SHRINE3:
-    case MP2::OBJ_WITCHSHUT:
-    case MP2::OBJ_XANADU:
+    switch ( objectType ) {
+    case OBJ_GAZEBO:
+    case OBJ_TREEKNOWLEDGE:
+    case OBJ_MERCENARYCAMP:
+    case OBJ_FORT:
+    case OBJ_STANDINGSTONES:
+    case OBJ_DOCTORHUT:
+    case OBJ_SHRINE1:
+    case OBJ_SHRINE2:
+    case OBJ_SHRINE3:
+    case OBJ_WITCHSHUT:
+    case OBJ_XANADU:
         return true;
-
     default:
         break;
     }
@@ -963,9 +1068,9 @@ bool MP2::isHeroUpgradeObject( int obj )
     return false;
 }
 
-bool MP2::isMonsterDwelling( int obj )
+bool MP2::isMonsterDwelling( const MapObjectType objectType )
 {
-    switch ( obj ) {
+    switch ( objectType ) {
     case OBJ_WATCHTOWER:
     case OBJ_EXCAVATION:
     case OBJ_CAVE:
@@ -989,7 +1094,6 @@ bool MP2::isMonsterDwelling( int obj )
     case OBJ_TROLLBRIDGE:
     case OBJ_DRAGONCITY:
         return true;
-
     default:
         break;
     }
@@ -997,9 +1101,9 @@ bool MP2::isMonsterDwelling( int obj )
     return false;
 }
 
-bool MP2::isProtectedObject( int obj )
+bool MP2::isProtectedObject( const MapObjectType objectType )
 {
-    switch ( obj ) {
+    switch ( objectType ) {
     case OBJ_MONSTER:
     case OBJ_ARTIFACT:
     case OBJ_DERELICTSHIP:
@@ -1012,91 +1116,78 @@ bool MP2::isProtectedObject( int obj )
     case OBJ_TROLLBRIDGE:
     case OBJ_DRAGONCITY:
         return true;
-
     default:
         break;
     }
 
-    return isCaptureObject( obj );
+    return isCaptureObject( objectType );
 }
 
-bool MP2::isMoveObject( int obj )
+bool MP2::isSafeForFogDiscoveryObject( const MapObjectType objectType )
 {
-    switch ( obj ) {
+    switch ( objectType ) {
+    // Stone liths and whirlpools are mandatory because they open access to new tiles
     case OBJ_STONELITHS:
     case OBJ_WHIRLPOOL:
+    // Sign messages are useless for AI, but they are harmless for fog discovery purposes
+    case OBJ_SIGN:
         return true;
-
     default:
         break;
     }
 
-    return false;
+    // Action objects in general should be avoided for fog discovery purposes, because
+    // they may be guarded or may require wasting resources
+    return !isActionObject( objectType );
 }
 
-bool MP2::isAbandonedMine( int obj )
+bool MP2::isAbandonedMine( const MapObjectType objectType )
 {
-    return obj == MP2::OBJN_ABANDONEDMINE || obj == MP2::OBJ_ABANDONEDMINE;
+    return objectType == MP2::OBJN_ABANDONEDMINE || objectType == MP2::OBJ_ABANDONEDMINE;
 }
 
-bool MP2::isRemoveObject( int obj )
+bool MP2::isNeedStayFront( const MapObjectType objectType )
 {
-    switch ( obj ) {
-    case OBJ_MONSTER:
-    case OBJ_BARRIER:
-        return true;
-
-    default:
-        break;
-    }
-
-    return isPickupObject( obj );
-}
-
-bool MP2::isNeedStayFront( int obj )
-{
-    switch ( obj ) {
+    switch ( objectType ) {
     case OBJ_MONSTER:
     case OBJ_HEROES:
     case OBJ_BOAT:
     case OBJ_BARRIER:
     case OBJ_JAIL:
-    case OBJ_SHIPWRECK:
     case OBJ_BUOY:
     case OBJ_SKELETON:
+    case OBJ_MERMAID:
+    case OBJ_SIRENS:
+    case OBJ_SHIPWRECK:
         return true;
-
     default:
         break;
     }
 
-    return isPickupObject( obj );
+    return isPickupObject( objectType );
 }
 
-bool MP2::isClearGroundObject( int obj )
+int MP2::getActionObjectDirection( const MapObjectType objectType )
 {
-    switch ( obj ) {
-    case OBJ_ZERO:
-    case OBJ_COAST:
-        return true;
-
-    default:
-        break;
-    }
-
-    return false;
-}
-
-int MP2::GetObjectDirect( int obj )
-{
-    switch ( obj ) {
+    switch ( objectType ) {
     case OBJ_JAIL:
     case OBJ_BARRIER:
+    case OBJ_ARTIFACT:
+    case OBJ_RESOURCE:
+    case OBJ_TREASURECHEST:
+    case OBJ_MONSTER:
+    case OBJ_ANCIENTLAMP:
+    case OBJ_CAMPFIRE:
+    case OBJ_SHIPWRECKSURVIVOR:
+    case OBJ_FLOTSAM:
+    case OBJ_WATERCHEST:
+    case OBJ_BUOY:
+    case OBJ_WHIRLPOOL:
+    case OBJ_BOTTLE:
+    case OBJ_COAST:
+    case OBJ_BOAT:
+    case OBJ_HEROES:
         return DIRECTION_ALL;
-
-    case OBJ_SHIPWRECK:
-        return Direction::CENTER | Direction::LEFT | DIRECTION_BOTTOM_ROW;
-
     case OBJ_DERELICTSHIP:
     case OBJ_TROLLBRIDGE:
     case OBJ_ARCHERHOUSE:
@@ -1169,20 +1260,17 @@ int MP2::GetObjectDirect( int obj )
     case OBJ_ARENA:
     case OBJ_SIRENS:
     case OBJ_MERMAID:
-        return DIRECTION_CENTER_ROW | DIRECTION_BOTTOM_ROW;
-
     case OBJ_WATERWHEEL:
-        return Direction::CENTER | Direction::LEFT | Direction::RIGHT | DIRECTION_BOTTOM_ROW;
-
     case OBJ_MAGELLANMAPS:
-        return Direction::CENTER | Direction::LEFT | DIRECTION_BOTTOM_ROW;
-
+    case OBJ_SHIPWRECK:
+        return DIRECTION_CENTER_ROW | DIRECTION_BOTTOM_ROW;
     case OBJ_CASTLE:
         return Direction::CENTER | Direction::BOTTOM;
-
     default:
+        // Did you add a new action object? Please add its passability!
+        assert( 0 );
         break;
     }
 
-    return DIRECTION_ALL;
+    return Direction::UNKNOWN;
 }

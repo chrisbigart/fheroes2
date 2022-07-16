@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,9 +23,6 @@
 #ifndef H2GAMEDEFS_H
 #define H2GAMEDEFS_H
 
-#include "tools.h"
-#include "types.h"
-
 // hardcore defines: kingdom
 #define KINGDOMMAX 6
 
@@ -38,7 +36,6 @@
 // hardcore defines: heroes
 #define HEROESMAXARTIFACT 14
 #define HEROESMAXSKILL 8
-#define HEROESMAXCOUNT 71
 
 // hardcore defines: skill
 #define MAXPRIMARYSKILL 4

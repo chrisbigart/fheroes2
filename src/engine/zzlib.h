@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,15 +24,11 @@
 #ifndef H2ZLIB_H
 #define H2ZLIB_H
 
-#include <iostream>
+#include <cstdint>
 #include <vector>
 
 #include "image.h"
 #include "serialize.h"
-#include "types.h"
-
-std::vector<u8> zlibCompress( const u8 *, size_t srcsz );
-std::vector<u8> zlibDecompress( const u8 *, size_t srcsz, size_t realsz = 0 );
 
 class ZStreamFile : public StreamBuf
 {

@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,49 +22,86 @@
  ***************************************************************************/
 
 #include <algorithm>
-#include <functional>
+#include <cassert>
+#include <type_traits>
 
-#include "agg_image.h"
 #include "artifact.h"
+#include "campaign_data.h"
 #include "campaign_savedata.h"
 #include "castle.h"
-#include "difficulty.h"
-#include "game.h"
 #include "game_over.h"
-#include "game_static.h"
 #include "heroes.h"
 #include "icn.h"
 #include "kingdom.h"
 #include "logging.h"
-#include "maps_actions.h"
+#include "maps_objects.h"
 #include "maps_tiles.h"
 #include "mp2.h"
-#include "pairs.h"
+#include "mp2_helper.h"
 #include "race.h"
 #include "rand.h"
-#include "resource.h"
-#include "text.h"
+#include "serialize.h"
+#include "settings.h"
+#include "tools.h"
+#include "translations.h"
 #include "world.h"
-#include "zzlib.h"
 
 namespace
 {
     const int32_t ultimateArtifactOffset = 9;
+
+    Artifact getUltimateArtifact()
+    {
+        if ( Settings::Get().isCampaignGameType() ) {
+            const Campaign::ScenarioVictoryCondition victoryCondition = Campaign::getCurrentScenarioVictoryCondition();
+            if ( victoryCondition == Campaign::ScenarioVictoryCondition::OBTAIN_ULTIMATE_CROWN ) {
+                return Artifact::ULTIMATE_CROWN;
+            }
+            else if ( victoryCondition == Campaign::ScenarioVictoryCondition::OBTAIN_SPHERE_NEGATION ) {
+                return Artifact::SPHERE_NEGATION;
+            }
+        }
+
+        return Artifact::Rand( Artifact::ART_ULTIMATE );
+    }
+
+    void fixCastleNames( const AllCastles & castles )
+    {
+        // Find castles with no names.
+        std::vector<Castle *> castleWithNoName;
+        std::set<std::string> castleNames;
+
+        for ( Castle * castle : castles ) {
+            if ( castle == nullptr ) {
+                // How do we have an empty pointer in this container?
+                assert( 0 );
+                continue;
+            }
+
+            const std::string & name = castle->GetName();
+
+            if ( name.empty() ) {
+                castleWithNoName.emplace_back( castle );
+            }
+            else {
+                castleNames.emplace( name );
+            }
+        }
+
+        if ( castleWithNoName.empty() ) {
+            return;
+        }
+
+        for ( Castle * castle : castleWithNoName ) {
+            castle->setName( castleNames );
+            castleNames.emplace( castle->GetName() );
+        }
+    }
 }
 
 namespace GameStatic
 {
-    extern u32 uniq;
-}
-
-std::vector<u8> DecodeBase64AndUncomress( const std::string & base64 )
-{
-    std::vector<u8> zdata = decodeBase64( base64 );
-    StreamBuf sb( zdata );
-    sb.skip( 4 ); // editor: version
-    u32 realsz = sb.getLE32();
-    sb.skip( 4 ); // qt uncompress size
-    return zlibDecompress( sb.data(), sb.size(), realsz + 1 );
+    extern uint32_t uniq;
 }
 
 bool World::LoadMapMP2( const std::string & filename )
@@ -73,7 +111,7 @@ bool World::LoadMapMP2( const std::string & filename )
 
     StreamFile fs;
     if ( !fs.open( filename, "rb" ) ) {
-        DEBUG_LOG( DBG_GAME | DBG_ENGINE, DBG_WARN, "file not found " << filename.c_str() );
+        DEBUG_LOG( DBG_GAME | DBG_ENGINE, DBG_WARN, "file not found " << filename.c_str() )
         return false;
     }
 
@@ -89,7 +127,7 @@ bool World::LoadMapMP2( const std::string & filename )
     GameStatic::uniq = fs.getLE32();
 
     // offset data
-    fs.seek( MP2OFFSETDATA - 2 * 4 );
+    fs.seek( MP2::MP2OFFSETDATA - 2 * 4 );
 
     // width
     switch ( fs.getLE32() ) {
@@ -130,35 +168,27 @@ bool World::LoadMapMP2( const std::string & filename )
     }
 
     if ( width == 0 || height == 0 || width != height ) {
-        DEBUG_LOG( DBG_GAME, DBG_WARN, "incrrect maps size" );
+        DEBUG_LOG( DBG_GAME, DBG_WARN, "incorrect map size" )
         return false;
     }
 
     const int32_t worldSize = width * height;
 
     // seek to ADDONS block
-    fs.skip( worldSize * SIZEOFMP2TILE );
+    fs.skip( worldSize * MP2::SIZEOFMP2TILE );
 
     // read all addons
     std::vector<MP2::mp2addon_t> vec_mp2addons( fs.getLE32() /* count mp2addon_t */ );
 
     for ( MP2::mp2addon_t & mp2addon : vec_mp2addons ) {
-        mp2addon.indexAddon = fs.getLE16();
-        mp2addon.objectNameN1 = fs.get() * 2;
-        mp2addon.indexNameN1 = fs.get();
-        mp2addon.quantityN = fs.get();
-        mp2addon.objectNameN2 = fs.get();
-        mp2addon.indexNameN2 = fs.get();
-
-        mp2addon.editorObjectLink = fs.getLE32();
-        mp2addon.editorObjectOverlay = fs.getLE32();
+        MP2::loadAddon( fs, mp2addon );
     }
 
     const size_t endof_addons = fs.tell();
-    DEBUG_LOG( DBG_GAME, DBG_INFO, "read all tiles addons, tellg: " << endof_addons );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, "read all tiles addons, tellg: " << endof_addons )
 
     // offset data
-    fs.seek( MP2OFFSETDATA );
+    fs.seek( MP2::MP2OFFSETDATA );
 
     vec_tiles.resize( worldSize );
 
@@ -175,18 +205,25 @@ bool World::LoadMapMP2( const std::string & filename )
         Maps::Tiles & tile = vec_tiles[i];
 
         MP2::mp2tile_t mp2tile;
+        MP2::loadTile( fs, mp2tile );
 
-        mp2tile.tileIndex = fs.getLE16();
-        mp2tile.objectName1 = fs.get();
-        mp2tile.indexName1 = fs.get();
-        mp2tile.quantity1 = fs.get();
-        mp2tile.quantity2 = fs.get();
-        mp2tile.objectName2 = fs.get();
-        mp2tile.indexName2 = fs.get();
-        mp2tile.flags = fs.get();
-        mp2tile.mapObject = fs.get();
+        tile.Init( i, mp2tile );
 
-        switch ( mp2tile.mapObject ) {
+        // Read extra information if it's present.
+        size_t addonIndex = mp2tile.nextAddonIndex;
+        while ( addonIndex > 0 ) {
+            if ( vec_mp2addons.size() <= addonIndex ) {
+                DEBUG_LOG( DBG_GAME, DBG_WARN, "index out of range" )
+                break;
+            }
+            tile.AddonsPushLevel1( vec_mp2addons[addonIndex] );
+            tile.AddonsPushLevel2( vec_mp2addons[addonIndex] );
+            addonIndex = vec_mp2addons[addonIndex].nextAddonIndex;
+        }
+
+        tile.AddonsSort();
+
+        switch ( mp2tile.mapObjectType ) {
         case MP2::OBJ_RNDTOWN:
         case MP2::OBJ_RNDCASTLE:
         case MP2::OBJ_CASTLE:
@@ -201,30 +238,9 @@ bool World::LoadMapMP2( const std::string & filename )
         default:
             break;
         }
-
-        // offset first addon
-        size_t offsetAddonsBlock = fs.getLE16();
-
-        mp2tile.editorObjectLink = fs.getLE32();
-        mp2tile.editorObjectOverlay = fs.getLE32();
-
-        tile.Init( i, mp2tile );
-
-        // load all addon for current tils
-        while ( offsetAddonsBlock ) {
-            if ( vec_mp2addons.size() <= offsetAddonsBlock ) {
-                DEBUG_LOG( DBG_GAME, DBG_WARN, "index out of range" );
-                break;
-            }
-            tile.AddonsPushLevel1( vec_mp2addons[offsetAddonsBlock] );
-            tile.AddonsPushLevel2( vec_mp2addons[offsetAddonsBlock] );
-            offsetAddonsBlock = vec_mp2addons[offsetAddonsBlock].indexAddon;
-        }
-
-        tile.AddonsSort();
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, "read all tiles, tellg: " << fs.tell() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, "read all tiles, tellg: " << fs.tell() )
 
     // after addons
     fs.seek( endof_addons );
@@ -279,14 +295,14 @@ bool World::LoadMapMP2( const std::string & filename )
         default:
             DEBUG_LOG( DBG_GAME, DBG_WARN,
                        "castle block: "
-                           << "unknown id: " << id << ", maps index: " << cx + cy * width );
+                           << "unknown id: " << id << ", maps index: " << cx + cy * width )
             break;
         }
         // preload in to capture objects cache
         map_captureobj.Set( Maps::GetIndexFromAbsPoint( cx, cy ), MP2::OBJ_CASTLE, Color::NONE );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, "read coord castles, tellg: " << fs.tell() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, "read coord castles, tellg: " << fs.tell() )
     fs.seek( endof_addons + ( 72 * 3 ) );
 
     // cood resource kingdoms
@@ -336,22 +352,22 @@ bool World::LoadMapMP2( const std::string & filename )
         default:
             DEBUG_LOG( DBG_GAME, DBG_WARN,
                        "kingdom block: "
-                           << "unknown id: " << id << ", maps index: " << cx + cy * width );
+                           << "unknown id: " << id << ", maps index: " << cx + cy * width )
             break;
         }
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, "read coord other resource, tellg: " << fs.tell() );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, "read coord other resource, tellg: " << fs.tell() )
     fs.seek( endof_addons + ( 72 * 3 ) + ( 144 * 3 ) );
 
     // byte: num obelisks (01 default)
     fs.skip( 1 );
 
     // count final mp2 blocks
-    u32 countblock = 0;
-    while ( 1 ) {
-        const u32 l = fs.get();
-        const u32 h = fs.get();
+    uint32_t countblock = 0;
+    while ( true ) {
+        const uint32_t l = fs.get();
+        const uint32_t h = fs.get();
 
         if ( 0 == h && 0 == l )
             break;
@@ -361,18 +377,18 @@ bool World::LoadMapMP2( const std::string & filename )
     }
 
     // castle or heroes or (events, rumors, etc)
-    for ( u32 ii = 0; ii < countblock; ++ii ) {
-        s32 findobject = -1;
+    for ( uint32_t ii = 0; ii < countblock; ++ii ) {
+        int32_t findobject = -1;
 
         // read block
         size_t sizeblock = fs.getLE16();
-        std::vector<u8> pblock = fs.getRaw( sizeblock );
+        std::vector<uint8_t> pblock = fs.getRaw( sizeblock );
 
         for ( MapsIndexes::const_iterator it_index = vec_object.begin(); it_index != vec_object.end() && findobject < 0; ++it_index ) {
             const Maps::Tiles & tile = vec_tiles[*it_index];
 
             // orders(quantity2, quantity1)
-            u32 orders = ( tile.GetQuantity2() ? tile.GetQuantity2() : 0 );
+            uint32_t orders = ( tile.GetQuantity2() ? tile.GetQuantity2() : 0 );
             orders <<= 8;
             orders |= tile.GetQuantity1();
 
@@ -386,54 +402,54 @@ bool World::LoadMapMP2( const std::string & filename )
             switch ( tile.GetObject() ) {
             case MP2::OBJ_CASTLE:
                 // add castle
-                if ( SIZEOFMP2CASTLE != pblock.size() ) {
+                if ( MP2::SIZEOFMP2CASTLE != pblock.size() ) {
                     DEBUG_LOG( DBG_GAME, DBG_WARN,
                                "read castle: "
-                                   << "incorrect size block: " << pblock.size() );
+                                   << "incorrect size block: " << pblock.size() )
                 }
                 else {
-                    Castle * castle = GetCastle( Maps::GetPoint( findobject ) );
+                    Castle * castle = getCastleEntrance( Maps::GetPoint( findobject ) );
                     if ( castle ) {
-                        castle->LoadFromMP2( StreamBuf( pblock ) );
-                        Maps::MinimizeAreaForCastle( castle->GetCenter() );
+                        castle->LoadFromMP2( pblock );
                         map_captureobj.SetColor( tile.GetIndex(), castle->GetColor() );
                     }
                     else {
                         DEBUG_LOG( DBG_GAME, DBG_WARN,
                                    "load castle: "
-                                       << "not found, index: " << findobject );
+                                       << "not found, index: " << findobject )
                     }
                 }
                 break;
             case MP2::OBJ_RNDTOWN:
             case MP2::OBJ_RNDCASTLE:
                 // add rnd castle
-                if ( SIZEOFMP2CASTLE != pblock.size() ) {
+                if ( MP2::SIZEOFMP2CASTLE != pblock.size() ) {
                     DEBUG_LOG( DBG_GAME, DBG_WARN,
                                "read castle: "
-                                   << "incorrect size block: " << pblock.size() );
+                                   << "incorrect size block: " << pblock.size() )
                 }
                 else {
-                    Castle * castle = GetCastle( Maps::GetPoint( findobject ) );
+                    // Random castle's entrance tile is marked as OBJ_RNDCASTLE or OBJ_RNDTOWN instead of OBJ_CASTLE.
+                    Castle * castle = getCastle( Maps::GetPoint( findobject ) );
                     if ( castle ) {
-                        castle->LoadFromMP2( StreamBuf( pblock ) );
+                        castle->LoadFromMP2( pblock );
                         Maps::UpdateCastleSprite( castle->GetCenter(), castle->GetRace(), castle->isCastle(), true );
-                        Maps::MinimizeAreaForCastle( castle->GetCenter() );
+                        Maps::ReplaceRandomCastleObjectId( castle->GetCenter() );
                         map_captureobj.SetColor( tile.GetIndex(), castle->GetColor() );
                     }
                     else {
                         DEBUG_LOG( DBG_GAME, DBG_WARN,
                                    "load castle: "
-                                       << "not found, index: " << findobject );
+                                       << "not found, index: " << findobject )
                     }
                 }
                 break;
             case MP2::OBJ_JAIL:
                 // add jail
-                if ( SIZEOFMP2HEROES != pblock.size() ) {
+                if ( MP2::SIZEOFMP2HEROES != pblock.size() ) {
                     DEBUG_LOG( DBG_GAME, DBG_WARN,
                                "read heroes: "
-                                   << "incorrect size block: " << pblock.size() );
+                                   << "incorrect size block: " << pblock.size() )
                 }
                 else {
                     int race = Race::KNGT;
@@ -467,10 +483,10 @@ bool World::LoadMapMP2( const std::string & filename )
                 break;
             case MP2::OBJ_HEROES:
                 // add heroes
-                if ( SIZEOFMP2HEROES != pblock.size() ) {
+                if ( MP2::SIZEOFMP2HEROES != pblock.size() ) {
                     DEBUG_LOG( DBG_GAME, DBG_WARN,
                                "read heroes: "
-                                   << "incorrect size block: " << pblock.size() );
+                                   << "incorrect size block: " << pblock.size() )
                 }
                 else {
                     std::pair<int, int> colorRace = Maps::Tiles::ColorRaceFromHeroSprite( tile.GetObjectSpriteIndex() );
@@ -480,27 +496,27 @@ bool World::LoadMapMP2( const std::string & filename )
                         colorRace.second = kingdom.GetRace();
 
                     // check heroes max count
-                    if ( kingdom.AllowRecruitHero( false, 0 ) ) {
+                    if ( kingdom.AllowRecruitHero( false ) ) {
                         Heroes * hero = nullptr;
 
                         if ( pblock[17] && pblock[18] < Heroes::BAX )
                             hero = vec_heroes.Get( pblock[18] );
 
                         if ( !hero || !hero->isFreeman() )
-                            hero = vec_heroes.GetFreeman( colorRace.second );
+                            hero = GetFreemanHeroes( colorRace.second );
 
                         if ( hero )
                             hero->LoadFromMP2( findobject, colorRace.first, colorRace.second, StreamBuf( pblock ) );
                     }
                     else {
-                        DEBUG_LOG( DBG_GAME, DBG_WARN, "load heroes maximum" );
+                        DEBUG_LOG( DBG_GAME, DBG_WARN, "load heroes maximum" )
                     }
                 }
                 break;
             case MP2::OBJ_SIGN:
             case MP2::OBJ_BOTTLE:
                 // add sign or buttle
-                if ( SIZEOFMP2SIGN - 1 < pblock.size() && 0x01 == pblock[0] ) {
+                if ( MP2::SIZEOFMP2SIGN - 1 < pblock.size() && 0x01 == pblock[0] ) {
                     MapSign * obj = new MapSign();
                     obj->LoadFromMP2( findobject, StreamBuf( pblock ) );
                     map_objects.add( obj );
@@ -508,7 +524,7 @@ bool World::LoadMapMP2( const std::string & filename )
                 break;
             case MP2::OBJ_EVENT:
                 // add event maps
-                if ( SIZEOFMP2EVENT - 1 < pblock.size() && 0x01 == pblock[0] ) {
+                if ( MP2::SIZEOFMP2EVENT - 1 < pblock.size() && 0x01 == pblock[0] ) {
                     MapEvent * obj = new MapEvent();
                     obj->LoadFromMP2( findobject, StreamBuf( pblock ) );
                     map_objects.add( obj );
@@ -516,7 +532,7 @@ bool World::LoadMapMP2( const std::string & filename )
                 break;
             case MP2::OBJ_SPHINX:
                 // add riddle sphinx
-                if ( SIZEOFMP2RIDDLE - 1 < pblock.size() && 0x00 == pblock[0] ) {
+                if ( MP2::SIZEOFMP2RIDDLE - 1 < pblock.size() && 0x00 == pblock[0] ) {
                     MapSphinx * obj = new MapSphinx();
                     obj->LoadFromMP2( findobject, StreamBuf( pblock ) );
                     map_objects.add( obj );
@@ -529,27 +545,41 @@ bool World::LoadMapMP2( const std::string & filename )
         // other events
         else if ( 0x00 == pblock[0] ) {
             // add event day
-            if ( SIZEOFMP2EVENT - 1 < pblock.size() && 1 == pblock[42] ) {
-                vec_eventsday.emplace_back( EventDate() );
+            if ( MP2::SIZEOFMP2EVENT - 1 < pblock.size() && 1 == pblock[42] ) {
+                vec_eventsday.emplace_back();
                 vec_eventsday.back().LoadFromMP2( StreamBuf( pblock ) );
             }
             // add rumors
-            else if ( SIZEOFMP2RUMOR - 1 < pblock.size() ) {
+            else if ( MP2::SIZEOFMP2RUMOR - 1 < pblock.size() ) {
                 if ( pblock[8] ) {
-                    vec_rumors.push_back( Game::GetEncodeString( StreamBuf( &pblock[8], pblock.size() - 8 ).toString() ) );
-                    DEBUG_LOG( DBG_GAME, DBG_INFO, "add rumors: " << vec_rumors.back() );
+                    _rumors.emplace_back( StreamBuf( &pblock[8], pblock.size() - 8 ).toString() );
+                    DEBUG_LOG( DBG_GAME, DBG_INFO, "add rumors: " << _rumors.back() )
                 }
             }
         }
         // debug
         else {
-            DEBUG_LOG( DBG_GAME, DBG_WARN, "read maps: unknown block addons, size: " << pblock.size() );
+            DEBUG_LOG( DBG_GAME, DBG_WARN, "read maps: unknown block addons, size: " << pblock.size() )
         }
+    }
+
+    fixCastleNames( vec_castles );
+
+    // clear artifact flags to correctly generate random artifacts
+    fheroes2::ResetArtifactStats();
+
+    const Settings & conf = Settings::Get();
+
+    // do not let the player get a random artifact that allows him to win the game
+    if ( ( conf.ConditionWins() & GameOver::WINS_ARTIFACT ) == GameOver::WINS_ARTIFACT && !conf.WinsFindUltimateArtifact() ) {
+        const Artifact art = conf.WinsFindArtifactID();
+
+        fheroes2::ExcludeArtifactFromRandom( art.GetID() );
     }
 
     ProcessNewMap();
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, "end load" );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, "end load" )
     return true;
 }
 
@@ -558,7 +588,7 @@ void World::ProcessNewMap()
     // modify other objects
     for ( size_t i = 0; i < vec_tiles.size(); ++i ) {
         Maps::Tiles & tile = vec_tiles[i];
-        Maps::Tiles::FixedPreload( tile );
+        Maps::Tiles::fixTileObjectType( tile );
 
         switch ( tile.GetObject() ) {
         case MP2::OBJ_WITCHSHUT:
@@ -586,7 +616,7 @@ void World::ProcessNewMap()
         case MP2::OBJ_LEANTO:
         case MP2::OBJ_CAMPFIRE:
         case MP2::OBJ_FLOTSAM:
-        case MP2::OBJ_SHIPWRECKSURVIROR:
+        case MP2::OBJ_SHIPWRECKSURVIVOR:
         case MP2::OBJ_DERELICTSHIP:
         case MP2::OBJ_SHIPWRECK:
         case MP2::OBJ_GRAVEYARD:
@@ -641,7 +671,8 @@ void World::ProcessNewMap()
                 tile.Remove( tile.GetObjectUID() );
 
             tile.SetHeroes( GetHeroes( Maps::GetPoint( static_cast<int32_t>( i ) ) ) );
-        } break;
+            break;
+        }
 
         default:
             break;
@@ -654,30 +685,107 @@ void World::ProcessNewMap()
     // add castles to kingdoms
     vec_kingdoms.AddCastles( vec_castles );
 
+    const Settings & conf = Settings::Get();
+
     // update wins, loss conditions
-    if ( GameOver::WINS_HERO & Settings::Get().ConditionWins() ) {
-        const Heroes * hero = GetHeroes( Settings::Get().WinsMapsPositionObject() );
+    if ( GameOver::WINS_HERO & conf.ConditionWins() ) {
+        const Heroes * hero = GetHeroes( conf.WinsMapsPositionObject() );
         heroes_cond_wins = hero ? hero->GetID() : Heroes::UNKNOWN;
     }
-    if ( GameOver::LOSS_HERO & Settings::Get().ConditionLoss() ) {
-        Heroes * hero = GetHeroes( Settings::Get().LossMapsPositionObject() );
+    if ( GameOver::LOSS_HERO & conf.ConditionLoss() ) {
+        Heroes * hero = GetHeroes( conf.LossMapsPositionObject() );
+        heroes_cond_loss = hero ? hero->GetID() : Heroes::UNKNOWN;
+
         if ( hero ) {
-            heroes_cond_loss = hero->GetID();
             hero->SetModes( Heroes::NOTDISMISS | Heroes::NOTDEFAULTS );
         }
     }
 
-    PostLoad();
+    // Search for a tile with a predefined Ultimate Artifact
+    const MapsTiles::iterator ultArtTileIter
+        = std::find_if( vec_tiles.begin(), vec_tiles.end(), []( const Maps::Tiles & tile ) { return tile.isObject( MP2::OBJ_RNDULTIMATEARTIFACT ); } );
 
-    // play with hero
+    auto checkTileForSuitabilityForUltArt = [this]( const int32_t idx ) {
+        const int32_t x = idx % width;
+        if ( x < ultimateArtifactOffset || x >= width - ultimateArtifactOffset ) {
+            return false;
+        }
+
+        const int32_t y = idx / width;
+        if ( y < ultimateArtifactOffset || y >= height - ultimateArtifactOffset ) {
+            return false;
+        }
+
+        return GetTiles( idx ).GoodForUltimateArtifact();
+    };
+
+    // There is no tile with a predefined Ultimate Artifact, pick a suitable tile randomly
+    if ( ultArtTileIter == vec_tiles.end() ) {
+        MapsIndexes pool;
+        pool.reserve( vec_tiles.size() / 2 );
+
+        for ( const Maps::Tiles & tile : vec_tiles ) {
+            const int32_t idx = tile.GetIndex();
+
+            if ( checkTileForSuitabilityForUltArt( idx ) ) {
+                pool.push_back( idx );
+            }
+        }
+
+        if ( !pool.empty() ) {
+            const int32_t pos = Rand::Get( pool );
+
+            ultimate_artifact.Set( pos, getUltimateArtifact() );
+
+            DEBUG_LOG( DBG_GAME, DBG_INFO, "Ultimate Artifact index: " << pos )
+        }
+        else {
+            DEBUG_LOG( DBG_GAME, DBG_WARN, "no suitable tile to place the Ultimate Artifact was found" )
+        }
+    }
+    // There is a tile with a predefined Ultimate Artifact, pick a tile nearby in the radius specified in the artifact's properties
+    else {
+        static_assert( std::is_same_v<decltype( ultArtTileIter->GetQuantity1() ), uint8_t> && std::is_same_v<decltype( ultArtTileIter->GetQuantity2() ), uint8_t>,
+                       "Types of tile's quantities have been changed, check the bitwise arithmetic below" );
+
+        // The radius can be in the range 0 - 127, it is represented by 2 low-order bits of quantity2 and 5 high-order bits of quantity1
+        const int32_t radius = ( ( ultArtTileIter->GetQuantity2() & 0x03 ) << 5 ) + ( ultArtTileIter->GetQuantity1() >> 3 );
+
+        // Remove the predefined Ultimate Artifact object
+        ultArtTileIter->Remove( ultArtTileIter->GetObjectUID() );
+        ultArtTileIter->setAsEmpty();
+
+        // Use the predefined Ultimate Artifact tile index as a fallback
+        int32_t pos = ultArtTileIter->GetIndex();
+
+        if ( radius > 0 ) {
+            MapsIndexes pool = Maps::getAroundIndexes( pos, radius );
+
+            // Maps::getAroundIndexes() results does not include the central index, so we have to append it manually
+            assert( std::find( pool.begin(), pool.end(), pos ) == pool.end() );
+            pool.push_back( pos );
+
+            pool.erase( std::remove_if( pool.begin(), pool.end(),
+                                        [&checkTileForSuitabilityForUltArt]( const int32_t idx ) { return !checkTileForSuitabilityForUltArt( idx ); } ),
+                        pool.end() );
+
+            if ( !pool.empty() ) {
+                pos = Rand::Get( pool );
+            }
+        }
+
+        ultimate_artifact.Set( pos, getUltimateArtifact() );
+
+        DEBUG_LOG( DBG_GAME, DBG_INFO,
+                   "predefined Ultimate Artifact index: " << ultArtTileIter->GetIndex() << ", radius: " << radius << ", Ultimate Artifact index: " << pos )
+    }
+
+    PostLoad( true );
+
     vec_kingdoms.ApplyPlayWithStartingHero();
 
-    if ( Settings::Get().ExtWorldStartHeroLossCond4Humans() )
-        vec_kingdoms.AddCondLossHeroes( vec_heroes );
-
-    // play with debug hero
+    // If we are in developer mode, then add the DEBUG_HERO
     if ( IS_DEVEL() ) {
-        // get first castle position
         Kingdom & kingdom = GetKingdom( Color::GetFirst( Players::HumanColors() ) );
 
         if ( !kingdom.GetCastles().empty() ) {
@@ -685,105 +793,9 @@ void World::ProcessNewMap()
             const fheroes2::Point & cp = castle->GetCenter();
             Heroes * hero = vec_heroes.Get( Heroes::DEBUG_HERO );
 
-            if ( hero && !world.GetTiles( cp.x, cp.y + 1 ).GetHeroes() ) {
-                hero->Recruit( castle->GetColor(), fheroes2::Point( cp.x, cp.y + 1 ) );
+            if ( hero && !GetTiles( cp.x, cp.y + 1 ).GetHeroes() ) {
+                hero->Recruit( castle->GetColor(), { cp.x, cp.y + 1 } );
             }
         }
     }
-
-    // set ultimate
-    MapsTiles::iterator it = std::find_if( vec_tiles.begin(), vec_tiles.end(),
-                                           []( const Maps::Tiles & tile ) { return tile.isObject( static_cast<int>( MP2::OBJ_RNDULTIMATEARTIFACT ) ); } );
-    fheroes2::Point ultimate_pos;
-
-    // not found
-    if ( vec_tiles.end() == it ) {
-        // generate position for ultimate
-        MapsIndexes pools;
-        pools.reserve( vec_tiles.size() / 2 );
-
-        for ( size_t i = 0; i < vec_tiles.size(); ++i ) {
-            const Maps::Tiles & tile = vec_tiles[i];
-            const int32_t x = tile.GetIndex() % width;
-            if ( x < ultimateArtifactOffset || x >= width - ultimateArtifactOffset )
-                continue;
-
-            const int32_t y = tile.GetIndex() / width;
-            if ( y < ultimateArtifactOffset || y >= height - ultimateArtifactOffset )
-                continue;
-
-            if ( tile.GoodForUltimateArtifact() )
-                pools.emplace_back( tile.GetIndex() );
-        }
-
-        if ( !pools.empty() ) {
-            Artifact ultimate = Artifact::Rand( Artifact::ART_ULTIMATE );
-            if ( Settings::Get().isCampaignGameType() ) {
-                const Campaign::CampaignSaveData & campaignData = Campaign::CampaignSaveData::Get();
-
-                const std::vector<Campaign::ScenarioData> & scenarios = Campaign::CampaignData::getCampaignData( campaignData.getCampaignID() ).getAllScenarios();
-                const int scenarioId = campaignData.getCurrentScenarioID();
-                assert( scenarioId >= 0 && static_cast<size_t>( scenarioId ) < scenarios.size() );
-
-                if ( scenarioId >= 0 && static_cast<size_t>( scenarioId ) < scenarios.size() ) {
-                    const Campaign::ScenarioVictoryCondition victoryCondition = scenarios[scenarioId].getVictoryCondition();
-                    if ( victoryCondition == Campaign::ScenarioVictoryCondition::OBTAIN_ULTIMATE_CROWN ) {
-                        ultimate = Artifact::ULTIMATE_CROWN;
-                    }
-                }
-            }
-
-            const int32_t pos = Rand::Get( pools );
-            ultimate_artifact.Set( pos, ultimate );
-            ultimate_pos = Maps::GetPoint( pos );
-        }
-    }
-    else {
-        // remove ultimate artifact sprite
-        const uint8_t objectIndex = it->GetObjectSpriteIndex();
-        it->Remove( it->GetObjectUID() );
-        it->setAsEmpty();
-        ultimate_artifact.Set( it->GetIndex(), Artifact::FromMP2IndexSprite( objectIndex ) );
-        ultimate_pos = ( *it ).GetCenter();
-    }
-
-    vec_rumors.emplace_back( _( "The ultimate artifact is really the %{name}." ) );
-    StringReplace( vec_rumors.back(), "%{name}", ultimate_artifact.GetName() );
-
-    vec_rumors.emplace_back( _( "The ultimate artifact may be found in the %{name} regions of the world." ) );
-
-    if ( height / 3 > ultimate_pos.y ) {
-        if ( width / 3 > ultimate_pos.x )
-            StringReplace( vec_rumors.back(), "%{name}", _( "north-west" ) );
-        else if ( 2 * width / 3 > ultimate_pos.x )
-            StringReplace( vec_rumors.back(), "%{name}", _( "north" ) );
-        else
-            StringReplace( vec_rumors.back(), "%{name}", _( "north-east" ) );
-    }
-    else if ( 2 * height / 3 > ultimate_pos.y ) {
-        if ( width / 3 > ultimate_pos.x )
-            StringReplace( vec_rumors.back(), "%{name}", _( "west" ) );
-        else if ( 2 * width / 3 > ultimate_pos.x )
-            StringReplace( vec_rumors.back(), "%{name}", _( "center" ) );
-        else
-            StringReplace( vec_rumors.back(), "%{name}", _( "east" ) );
-    }
-    else {
-        if ( width / 3 > ultimate_pos.x )
-            StringReplace( vec_rumors.back(), "%{name}", _( "south-west" ) );
-        else if ( 2 * width / 3 > ultimate_pos.x )
-            StringReplace( vec_rumors.back(), "%{name}", _( "south" ) );
-        else
-            StringReplace( vec_rumors.back(), "%{name}", _( "south-east" ) );
-    }
-
-    vec_rumors.emplace_back( _( "The truth is out there." ) );
-    vec_rumors.emplace_back( _( "The dark side is stronger." ) );
-    vec_rumors.emplace_back( _( "The end of the world is near." ) );
-    vec_rumors.emplace_back( _( "The bones of Lord Slayer are buried in the foundation of the arena." ) );
-    vec_rumors.emplace_back( _( "A Black Dragon will take out a Titan any day of the week." ) );
-    vec_rumors.emplace_back( _( "He told her: Yada yada yada...  and then she said: Blah, blah, blah..." ) );
-    vec_rumors.emplace_back( _( "An unknown force is being ressurected..." ) );
-
-    vec_rumors.emplace_back( _( "Check the newest version of game at\nhttps://github.com/ihhub/\nfheroes2/releases" ) );
 }

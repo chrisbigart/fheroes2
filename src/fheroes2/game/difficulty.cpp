@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,27 +24,24 @@
 #include "difficulty.h"
 #include "translations.h"
 
-const std::string & Difficulty::String( int difficulty )
+std::string Difficulty::String( int difficulty )
 {
-    static const std::string str_difficulty[]
-        = {_( "difficulty|Easy" ), _( "difficulty|Normal" ), _( "difficulty|Hard" ), _( "difficulty|Expert" ), _( "difficulty|Impossible" ), "Unknown"};
-
     switch ( difficulty ) {
     case Difficulty::EASY:
-        return str_difficulty[0];
+        return _( "difficulty|Easy" );
     case Difficulty::NORMAL:
-        return str_difficulty[1];
+        return _( "difficulty|Normal" );
     case Difficulty::HARD:
-        return str_difficulty[2];
+        return _( "difficulty|Hard" );
     case Difficulty::EXPERT:
-        return str_difficulty[3];
+        return _( "difficulty|Expert" );
     case Difficulty::IMPOSSIBLE:
-        return str_difficulty[4];
+        return _( "difficulty|Impossible" );
     default:
         break;
     }
 
-    return str_difficulty[5];
+    return "Unknown";
 }
 
 int Difficulty::GetScoutingBonus( int difficulty )

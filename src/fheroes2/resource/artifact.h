@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,16 +23,18 @@
 #ifndef H2ARTIFACT_H
 #define H2ARTIFACT_H
 
+#include <set>
 #include <vector>
 
-#include "gamedefs.h"
+#include "artifact_info.h"
 #include "interface_itemsbar.h"
-#include "serialize.h"
+#include "mp2.h"
 #include "ui_tool.h"
 
 class Spell;
 class Heroes;
 class StatusBar;
+class StreamBase;
 
 class Artifact
 {
@@ -48,7 +51,7 @@ public:
         ART_NORANDOM = 0x20
     };
 
-    enum type_t
+    enum type_t : int
     {
         ULTIMATE_BOOK,
         ULTIMATE_SWORD,
@@ -157,45 +160,86 @@ public:
         SWORD_ANDURAN,
         SPADE_NECROMANCY,
 
+        // IMPORTANT! Put all new artifacts just above this line.
         UNKNOWN
     };
 
-    Artifact( int = UNKNOWN );
+    Artifact( int art = UNKNOWN )
+        : id( art >= 0 && art < UNKNOWN ? art : UNKNOWN )
+        , ext( 0 )
+    {
+        // Do nothing.
+    }
 
-    bool operator==( const Spell & ) const;
-    bool operator==( const Artifact & ) const;
-    bool operator!=( const Artifact & ) const;
-    int operator()( void ) const;
-    int GetID( void ) const;
+    bool operator==( const Artifact & art ) const
+    {
+        return id == art.id;
+    }
 
-    bool isUltimate( void ) const;
-    bool isAlchemistRemove( void ) const;
-    bool isValid( void ) const;
+    bool operator!=( const Artifact & art ) const
+    {
+        return id != art.id;
+    }
 
-    void Reset( void );
+    int GetID() const
+    {
+        return id;
+    }
 
-    u32 ExtraValue( void ) const;
-    int Level( void ) const;
-    int LoyaltyLevel( void ) const;
-    int Type( void ) const;
+    bool isUltimate() const;
+
+    bool containsCurses() const
+    {
+        return !fheroes2::getArtifactData( id ).curses.empty();
+    }
+
+    bool isValid() const
+    {
+        return id != UNKNOWN;
+    }
+
+    void Reset()
+    {
+        id = UNKNOWN;
+        ext = 0;
+    }
+
+    int Level() const;
+    int LoyaltyLevel() const;
+
     int getArtifactValue() const;
 
-    /* objnarti.icn */
-    u32 IndexSprite( void ) const;
-    /* artfx.icn */
-    u32 IndexSprite32( void ) const;
-    /* artifact.icn */
-    u32 IndexSprite64( void ) const;
+    // return index of the sprite from objnarti.icn
+    uint32_t IndexSprite() const
+    {
+        return id < UNKNOWN ? id * 2 + 1 : 0;
+    }
 
-    void SetSpell( int );
-    int GetSpell( void ) const;
+    // artfx.icn
+    uint32_t IndexSprite32() const
+    {
+        return id;
+    }
 
-    const char * GetName( void ) const;
-    std::string GetDescription( void ) const;
+    // return index from artifact.icn
+    uint32_t IndexSprite64() const
+    {
+        return id + 1;
+    }
+
+    void SetSpell( const int v );
+    int32_t getSpellId() const;
+
+    const char * GetName() const;
+
+    std::string GetDescription() const
+    {
+        return fheroes2::getArtifactData( id ).getDescription( ext );
+    }
 
     static int Rand( level_t );
-    static Artifact FromMP2IndexSprite( u32 );
-    static const char * GetScenario( const Artifact & );
+    static Artifact FromMP2IndexSprite( uint32_t );
+    static const char * getDiscoveryDescription( const Artifact & );
 
 private:
     friend StreamBase & operator<<( StreamBase &, const Artifact & );
@@ -207,40 +251,81 @@ private:
 
 StreamBase & operator<<( StreamBase &, const Artifact & );
 StreamBase & operator>>( StreamBase &, Artifact & );
-u32 GoldInsteadArtifact( int );
+
+uint32_t GoldInsteadArtifact( const MP2::MapObjectType objectType );
+
+namespace fheroes2
+{
+    void ResetArtifactStats();
+    void ExcludeArtifactFromRandom( const int artifactID );
+}
+
+struct ArtifactSetData
+{
+    ArtifactSetData( const uint32_t artifactID, const std::string & assembleMessage );
+
+    uint32_t _assembledArtifactID = Artifact::UNKNOWN;
+    std::string _assembleMessage;
+
+    bool operator<( const ArtifactSetData & other ) const;
+};
 
 class BagArtifacts : public std::vector<Artifact>
 {
 public:
     BagArtifacts();
 
-    bool ContainSpell( const Spell & ) const;
+    bool ContainSpell( const int spellId ) const;
     bool isPresentArtifact( const Artifact & ) const;
-    bool PushArtifact( const Artifact & );
-    bool isFull( void ) const;
-    bool MakeBattleGarb( void );
-    bool ContainUltimateArtifact( void ) const;
 
-    void RemoveArtifact( const Artifact & );
-    void RemoveScroll( const Artifact & );
+    bool isArtifactBonusPresent( const fheroes2::ArtifactBonusType type ) const;
+    bool isArtifactCursePresent( const fheroes2::ArtifactCurseType type ) const;
+
+    // These methods must be called only for bonuses with cumulative effect.
+    int32_t getTotalArtifactEffectValue( const fheroes2::ArtifactBonusType bonus ) const;
+    int32_t getTotalArtifactEffectValue( const fheroes2::ArtifactBonusType bonus, std::string & description ) const;
+
+    int32_t getTotalArtifactEffectValue( const fheroes2::ArtifactCurseType curse ) const;
+    int32_t getTotalArtifactEffectValue( const fheroes2::ArtifactCurseType curse, std::string & description ) const;
+
+    // These methods must be called only for bonuses with multiplication effect.
+    std::vector<int32_t> getTotalArtifactMultipliedPercent( const fheroes2::ArtifactBonusType bonus ) const;
+    std::vector<int32_t> getTotalArtifactMultipliedPercent( const fheroes2::ArtifactCurseType curse ) const;
+
+    // Ideally, these methods should be called only for unique bonuses. However, it can be called for other bonus types.
+    Artifact getFirstArtifactWithBonus( const fheroes2::ArtifactBonusType bonus ) const;
+    Artifact getFirstArtifactWithCurse( const fheroes2::ArtifactCurseType curse ) const;
+
+    bool PushArtifact( const Artifact & );
+
+    void RemoveArtifact( const Artifact & art );
+
+    bool isFull() const;
+    bool ContainUltimateArtifact() const;
+
     void exchangeArtifacts( BagArtifacts & giftBag );
 
     int getArtifactValue() const;
-    u32 CountArtifacts( void ) const;
-    u32 Count( const Artifact & ) const;
+    uint32_t CountArtifacts() const;
+    uint32_t Count( const Artifact & ) const;
 
-    std::string String( void ) const;
+    std::set<ArtifactSetData> assembleArtifactSetIfPossible();
+
+    std::string String() const;
 };
 
 class ArtifactsBar : public Interface::ItemsActionBar<Artifact>
 {
 public:
+    using Interface::ItemsActionBar<Artifact>::RedrawItem;
+    using Interface::ItemsActionBar<Artifact>::ActionBarRightMouseHold;
+
     ArtifactsBar( const Heroes * hero, const bool mini, const bool ro, const bool change, const bool allowOpeningMagicBook, StatusBar * bar );
 
     void RedrawBackground( const fheroes2::Rect &, fheroes2::Image & ) override;
     void RedrawItem( Artifact &, const fheroes2::Rect &, bool, fheroes2::Image & ) override;
 
-    void ResetSelected( void );
+    void ResetSelected();
     void Redraw( fheroes2::Image & dstsf = fheroes2::Display::instance() );
 
     bool ActionBarLeftMouseSingleClick( Artifact & artifact ) override;

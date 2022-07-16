@@ -1,85 +1,69 @@
-fheroes2
-======
-[![Github Downloads](https://img.shields.io/github/downloads/ihhub/fheroes2/total.svg)](https://github.com/ihhub/fheroes2/releases) [![Discord](https://img.shields.io/discord/733093692860137523.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/xF85vbZ) [![Facebook](https://img.shields.io/badge/Facebook-blue.svg)](https://www.facebook.com/groups/fheroes2) [![VK](https://img.shields.io/badge/VK-blue.svg)](https://vk.com/fheroes2) [![Donate](https://img.shields.io/badge/Donate-Patreon-green.svg)](https://www.patreon.com/fheroes2)
+# fheroes2
 
-Free implementation of **Heroes of Might and Magic II** game engine.
+**fheroes2** is a recreation of the Heroes of Might and Magic II game engine.
+
+This open source multiplatform project, written from scratch, is designed to reproduce the original game with significant
+improvements in the gameplay, graphics and logic (including support for high-resolution graphics, improved AI, numerous fixes
+and UI improvements), breathing new life into one of the most addictive turn-based strategies.
 
 <p align="center">
-    <img src="files/images/screenshots/screenshot_world_map.png?raw=true" width="410"> <img src="files/images/screenshots/screenshot_castle.png?raw=true" width="410">
+    <img src="docs/images/screenshots/screenshot_world_map.png?raw=true" width="820">
 </p>
+
 <p align="center">
-    <img src="files/images/screenshots/screenshot_battle.png?raw=true" width="512">
+    <img src="docs/images/screenshots/screenshot_battle.png?raw=true" width="410"> <img src="docs/images/screenshots/screenshot_castle.png?raw=true" width="410">
 </p>
 
-Download
----------------------------
-You can download a compiled version of the game for your operating system at [**Github releases**](https://github.com/ihhub/fheroes2/releases) of this project.
+## Download and install
 
-Copyright
----------------------------
-All rights for the original game and its resources belong to former The 3DO Company. These rights were transferred to Ubisoft. We do not encourage and do not support any form of illegal usage of the original game. We strongly advise to purchase the original game on [**GOG**](https://www.gog.com) or [**Ubisoft Store**](https://store.ubi.com) platforms. Alternatively, you can download a free demo version of the game.
+Please follow the [**installation guide**](docs/INSTALL.md) to download and install fheroes2.
 
-Requirements
----------------------------
-You are required to have at least a demo version of Heroes of Might and Magic 2 game to be able to play it. Please use one of our scripts to download the demo version of the original game. A script comes with the compiled game.
+[![Github Downloads](https://img.shields.io/github/downloads/ihhub/fheroes2/total.svg)](https://github.com/ihhub/fheroes2/releases)
 
-### macOS
-Please go to `script/macos` and run **install_sdl_1.sh** or **install_sdl_2.sh** file. For macOS we highly recommend to use SDL 2 as latest versions of macOS do not fully support SDL 1.
+## Copyright
 
-### Debian-based
-Please go to `script/linux` directory and run **install_sdl_1.sh** or **install_sdl_2.sh** file.
+All rights for the original game and its resources belong to former The 3DO Company. These rights were transferred to Ubisoft.
+We do not encourage and do not support any form of illegal usage of the original game. We strongly advise to purchase the original
+game on [**GOG**](https://www.gog.com) or [**Ubisoft Store**](https://store.ubi.com) platforms. Alternatively, you can download a
+free demo version of the game. Please refer to the [**installation guide**](docs/INSTALL.md) for more information.
 
-### Arch
-For Arch based Linux distributions use the command `sudo pacman -S sdl sdl_mixer`.
+## License
 
-### RedHat-based
-RPM based distributions like Fedora/Red Hat use the commands `sudo yum install SDL*` or `sudo dnf install SDL*`.
+This project is licensed under the [**GNU General Public License v2.0**](https://github.com/ihhub/fheroes2/blob/master/LICENSE).
 
-### OpenSUSE
-openSUSE supports the One-Click-Install via `SDL_mixer.ymp` file in `script/linux`. 
+Initially, the project was developed on [**sourceforge**](https://sourceforge.net/projects/fheroes2/).
 
-### Gentoo
-If you have Gentoo, in addition to basic distribution you need to run following command `emerge --ask media-libs/sdl2-mixer media-libs/sdl2-ttf`.
+## Contribution and Development
 
-Compilation
----------------------------
-[![Build status](https://ci.appveyor.com/api/projects/status/ih6cw0yr1yuxf4ll?svg=true)](https://ci.appveyor.com/project/ihhub/fheroes2) [![Build Status](https://github.com/ihhub/fheroes2/workflows/GitHub%20Actions/badge.svg)](https://github.com/ihhub/fheroes2/actions)
+This repository is the place for everyone. If you want to contribute, please read more [**here**](https://github.com/ihhub/fheroes2/wiki/F.A.Q.#q-how-can-i-contribute-to-the-project).
 
-[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=ihhub_fheroes2&metric=sqale_rating)](https://sonarcloud.io/dashboard?id=ihhub_fheroes2) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=ihhub_fheroes2&metric=reliability_rating)](https://sonarcloud.io/dashboard?id=ihhub_fheroes2) [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=ihhub_fheroes2&metric=bugs)](https://sonarcloud.io/dashboard?id=ihhub_fheroes2) [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=ihhub_fheroes2&metric=code_smells)](https://sonarcloud.io/dashboard?id=ihhub_fheroes2) [![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=ihhub_fheroes2&metric=duplicated_lines_density)](https://sonarcloud.io/dashboard?id=ihhub_fheroes2) [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/ihhub/fheroes2.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/ihhub/fheroes2/context:cpp) [![Total alerts](https://img.shields.io/lgtm/alerts/g/ihhub/fheroes2.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/ihhub/fheroes2/alerts/)
+To build the project from source please follow [**this guide**](docs/DEVELOPMENT.md).
 
-Please follow below instructions to be able to compile the project:
+[![Build Status](https://github.com/ihhub/fheroes2/workflows/GitHub%20Actions/badge.svg)](https://github.com/ihhub/fheroes2/actions)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=ihhub_fheroes2&metric=bugs)](https://sonarcloud.io/dashboard?id=ihhub_fheroes2)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=ihhub_fheroes2&metric=code_smells)](https://sonarcloud.io/dashboard?id=ihhub_fheroes2)
+[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=ihhub_fheroes2&metric=duplicated_lines_density)](https://sonarcloud.io/dashboard?id=ihhub_fheroes2)
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/ihhub/fheroes2.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/ihhub/fheroes2/alerts/)
 
-Windows
-------------------------
-- open `script/windows` directory and run **install_packages.bat** file. It installs necessary packages for Visual Studio build.
-- open `script/demo` directory and run **demo_windows.bat** file. It downloads a demo version of the game which is needed for minimum development.
-- open **fheroes2-vs2015.vcxproj** or **fheroes2-vs2019.vcxproj** file depending on your Visual Studio and compile the project.
+If you would like to help translating the project, please read the [**translation guide**](docs/TRANSLATION.md).
 
-macOS and Linux
--------------------
+## Donation
 
-- for macOS: open `script/macos` directory and run **install_sdl_2.sh** (default setup) or **install_sdl_1.sh** file. We do not recommend to run SDL 1 as latest versions of macOS do not support it fully.
-- for Linux: open `script/linux` directory and run **install_sdl_2_dev.sh** (default setup) or **install_sdl_1_dev.sh** file.
-- open `script/demo` directory and run **demo_unix.sh** file. It downloads a demo version of the game which is needed for minimum development.
-- run `make` command in root directory of the project. For SDL 1 compilation please run `export FHEROES2_SDL1="ON"` command before compiling the project.
+We accept donations via **Patreon** or **PayPal**. All donations will be used only for the future project development as we do not
+consider this project as a source of income by any means.
 
-Compilation with CMake
--------------------
-If you would like to build the project using CMake please follow the instructions on [this page](https://github.com/ihhub/fheroes2/blob/master/doc/README_cmake.md). 
+[![Donate](https://img.shields.io/badge/Donate-Patreon-green.svg)](https://www.patreon.com/fheroes2)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/paypalme/fheroes2)
 
-Contribution
----------------------------
-We welcome and appreciate any help, even if it is a tiny text or code change. Please read [contribution](https://github.com/ihhub/fheroes2/blob/master/CONTRIBUTING.md) page before starting work on a pull request. 
-Not sure what to start with? Feel free to refer to [good first issue](https://github.com/ihhub/fheroes2/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) or [help wanted](https://github.com/ihhub/fheroes2/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) tags.
+## Contacts
 
-License
----------------------------
-This project is under GNU General Public License v2.0. Please refer to file [**LICENSE**](https://github.com/ihhub/fheroes2/blob/master/LICENSE) for more details.
+Follow us on social networks: [**Facebook**](https://www.facebook.com/groups/fheroes2) or [**VK**](https://vk.com/fheroes2).
+We also have a [**Discord**](https://discord.gg/xF85vbZ) server to discuss the development of the project.
 
-The original project had been developed at [sourceforge](https://sourceforge.net/projects/fheroes2/).
+[![Discord](https://img.shields.io/discord/733093692860137523.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/xF85vbZ)
+[![Facebook](https://img.shields.io/badge/Facebook-blue.svg)](https://www.facebook.com/groups/fheroes2)
+[![VK](https://img.shields.io/badge/VK-blue.svg)](https://vk.com/fheroes2)
 
-Donation
----------------------------
-We accept donations via **Patreon** or **PayPal**. All donations will be used only for the future project development as we do not consider this project as a source of income by any means.
+## FAQ
 
-[![Donate](https://img.shields.io/badge/Donate-Patreon-green.svg)](https://www.patreon.com/fheroes2) [![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/paypalme/fheroes2)
+You can find answers to the most common questions on our [**F.A.Q. page**](https://github.com/ihhub/fheroes2/wiki/F.A.Q.).

@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2020                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2020 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -18,32 +18,13 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#include "agg.h"
 #include "ai.h"
-#include "battle.h"
-#include "battle_arena.h"
-#include "battle_command.h"
-#include "battle_troop.h"
-#include "castle.h"
-#include "dialog.h"
-#include "game_interface.h"
 #include "heroes.h"
-#include "kingdom.h"
-#include "logging.h"
-#include "mus.h"
+#include "serialize.h"
+#include "translations.h"
 
 namespace AI
 {
-    const char * Base::Type() const
-    {
-        return "base";
-    }
-
-    const char * Base::License() const
-    {
-        return "GPL-2.0";
-    }
-
     int Base::GetPersonality() const
     {
         return _personality;
@@ -53,148 +34,91 @@ namespace AI
     {
         switch ( _personality ) {
         case WARRIOR:
-            return "Warrior";
+            return _( "Warrior" );
         case BUILDER:
-            return "Builder";
+            return _( "Builder" );
         case EXPLORER:
-            return "Explorer";
+            return _( "Explorer" );
         default:
             break;
         }
 
-        return Type();
+        return _( "None" );
     }
 
-    void Base::Reset() {}
+    void Base::Reset()
+    {
+        // Do nothing.
+    }
 
-    void Base::CastlePreBattle( Castle & ) {}
+    void Base::CastlePreBattle( Castle & )
+    {
+        // Do nothing.
+    }
 
-    void Base::CastleAfterBattle( Castle &, bool ) {}
+    void Base::CastleAfterBattle( Castle &, bool )
+    {
+        // Do nothing.
+    }
 
-    void Base::CastleTurn( Castle &, bool ) {}
+    void Base::CastleAdd( const Castle & )
+    {
+        // Do nothing.
+    }
 
-    void Base::CastleAdd( const Castle & ) {}
+    void Base::CastleRemove( const Castle & )
+    {
+        // Do nothing.
+    }
 
-    void Base::CastleRemove( const Castle & ) {}
+    void Base::HeroesAdd( const Heroes & )
+    {
+        // Do nothing.
+    }
 
-    void Base::HeroesAdd( const Heroes & ) {}
+    void Base::HeroesRemove( const Heroes & )
+    {
+        // Do nothing.
+    }
 
-    void Base::HeroesRemove( const Heroes & ) {}
+    void Base::HeroesPreBattle( HeroBase &, bool )
+    {
+        // Do nothing.
+    }
 
-    void Base::HeroesPreBattle( HeroBase &, bool ) {}
+    void Base::HeroesAfterBattle( HeroBase &, bool )
+    {
+        // Do nothing.
+    }
 
-    void Base::HeroesAfterBattle( HeroBase &, bool ) {}
+    void Base::HeroesActionNewPosition( Heroes & )
+    {
+        // Do nothing.
+    }
 
-    void Base::HeroesActionNewPosition( Heroes & ) {}
-
-    void Base::HeroesClearTask( const Heroes & ) {}
-
-    void Base::revealFog( const Maps::Tiles & ) {}
+    void Base::HeroesClearTask( const Heroes & )
+    {
+        // Do nothing.
+    }
 
     std::string Base::HeroesString( const Heroes & )
     {
-        return "";
+        return std::string();
     }
 
-    void Base::HeroesActionComplete( Heroes & ) {}
-
-    void Base::HeroesLevelUp( Heroes & ) {}
-
-    void Base::HeroesPostLoad( Heroes & ) {}
-
-    bool Base::HeroesSkipFog()
+    void Base::HeroesActionComplete( Heroes & /*hero*/, int32_t /* tileIndex*/, const MP2::MapObjectType /*objectType*/ )
     {
-        return false;
+        // Do nothing.
     }
 
-    bool Base::HeroesGetTask( Heroes & hero )
+    void Base::HeroesLevelUp( Heroes & )
     {
-        // stop hero
-        hero.GetPath().Reset();
-        return false;
+        // Do nothing.
     }
 
-    bool Base::HeroesCanMove( const Heroes & hero )
+    void Base::HeroesPostLoad( Heroes & )
     {
-        return hero.MayStillMove() && !hero.Modes( Heroes::MOVED );
-    }
-
-    void Base::HeroTurn( Heroes & hero )
-    {
-        Interface::StatusWindow & status = Interface::Basic::Get().GetStatusWindow();
-
-        hero.ResetModes( Heroes::MOVED );
-
-        while ( Base::HeroesCanMove( hero ) ) {
-            // turn indicator
-            status.RedrawTurnProgress( 3 );
-            status.RedrawTurnProgress( 4 );
-
-            // get task for heroes
-            Base::HeroesGetTask( hero );
-
-            // turn indicator
-            status.RedrawTurnProgress( 5 );
-            status.RedrawTurnProgress( 6 );
-
-            // heroes AI turn
-            AI::HeroesMove( hero );
-            hero.SetModes( Heroes::MOVED );
-
-            // turn indicator
-            status.RedrawTurnProgress( 7 );
-            status.RedrawTurnProgress( 8 );
-        }
-
-        DEBUG_LOG( DBG_AI, DBG_TRACE, hero.GetName() << ", end" );
-    }
-
-    void Base::KingdomTurn( Kingdom & kingdom )
-    {
-        KingdomHeroes & heroes = kingdom.GetHeroes();
-        KingdomCastles & castles = kingdom.GetCastles();
-
-        const int color = kingdom.GetColor();
-
-        if ( kingdom.isLoss() || color == Color::NONE ) {
-            kingdom.LossPostActions();
-            return;
-        }
-
-        if ( !Settings::Get().MusicMIDI() )
-            AGG::PlayMusic( MUS::COMPUTER_TURN, true, true );
-
-        Interface::StatusWindow & status = Interface::Basic::Get().GetStatusWindow();
-
-        // indicator
-        status.RedrawTurnProgress( 0 );
-
-        status.RedrawTurnProgress( 1 );
-
-        // castles AI turn
-        for ( KingdomCastles::iterator it = castles.begin(); it != castles.end(); ++it )
-            if ( *it )
-                CastleTurn( **it, false );
-
-        status.RedrawTurnProgress( 3 );
-
-        // heroes turns
-        for ( KingdomHeroes::iterator it = heroes.begin(); it != heroes.end(); ++it )
-            if ( *it )
-                HeroTurn( **it );
-
-        status.RedrawTurnProgress( 6 );
-        status.RedrawTurnProgress( 7 );
-        status.RedrawTurnProgress( 8 );
-        status.RedrawTurnProgress( 9 );
-
-        DEBUG_LOG( DBG_AI, DBG_INFO, Color::String( color ) << " moved" );
-    }
-
-    void Base::BattleTurn( Battle::Arena &, const Battle::Unit & currentUnit, Battle::Actions & actions )
-    {
-        // end action
-        actions.push_back( Battle::Command( Battle::MSG_BATTLE_END_TURN, currentUnit.GetUID() ) );
+        // Do nothing.
     }
 
     StreamBase & operator<<( StreamBase & msg, const AI::Base & instance )

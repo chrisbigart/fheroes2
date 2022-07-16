@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2010 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2010 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -20,26 +21,32 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
+#include <cassert>
 #include <queue>
 
-#include "agg.h"
 #include "agg_image.h"
 #include "army.h"
+#include "audio_manager.h"
 #include "battle.h"
 #include "battle_arena.h"
 #include "battle_army.h"
 #include "battle_interface.h"
 #include "cursor.h"
 #include "game.h"
+#include "game_delays.h"
+#include "game_hotkeys.h"
 #include "heroes.h"
 #include "icn.h"
+#include "kingdom.h"
 #include "luck.h"
 #include "morale.h"
 #include "mus.h"
 #include "race.h"
 #include "settings.h"
 #include "text.h"
-#include "world.h"
+#include "tools.h"
+#include "translations.h"
+#include "ui_dialog.h"
 
 namespace
 {
@@ -150,7 +157,8 @@ namespace
 
 namespace Battle
 {
-    void GetSummaryParams( int res1, int res2, const HeroBase & hero, u32 exp, LoopedAnimationSequence & sequence, std::string & title, std::string & msg );
+    void GetSummaryParams( uint32_t res1, uint32_t res2, const HeroBase * hero, uint32_t exp, LoopedAnimationSequence & sequence, std::string & title,
+                           std::string & msg );
     void RedrawBattleSettings( const std::vector<fheroes2::Rect> & areas );
     void RedrawOnOffSetting( const fheroes2::Rect & area, const std::string & name, uint32_t index, bool isSet );
 }
@@ -173,6 +181,7 @@ void Battle::RedrawBattleSettings( const std::vector<fheroes2::Rect> & areas )
     Text text( str, Font::SMALL );
     text.Blit( areas[0].x + ( sprite.width() - text.w() ) / 2, areas[0].y + sprite.height() + 3 );
 
+    RedrawOnOffSetting( areas[1], _( "Army Order" ), 3, conf.BattleShowArmyOrder() );
     RedrawOnOffSetting( areas[2], _( "Auto Spell Casting" ), 6, conf.BattleAutoSpellcast() );
     RedrawOnOffSetting( areas[3], _( "Grid" ), 8, conf.BattleShowGrid() );
     RedrawOnOffSetting( areas[4], _( "Shadow Movement" ), 10, conf.BattleShowMoveShadow() );
@@ -196,7 +205,7 @@ void Battle::RedrawOnOffSetting( const fheroes2::Rect & area, const std::string 
     lowerText.Blit( area.x + ( area.width - lowerText.w() ) / 2, area.y + area.height + textOffset );
 }
 
-void Battle::DialogBattleSettings( void )
+void Battle::DialogBattleSettings()
 {
     fheroes2::Display & display = fheroes2::Display::instance();
     LocalEvent & le = LocalEvent::Get();
@@ -233,7 +242,7 @@ void Battle::DialogBattleSettings( void )
     optionAreas.emplace_back( pos_rt.x + 128, pos_rt.y + 157, panelWidth, panelHeight ); // move shadow
     optionAreas.emplace_back( pos_rt.x + 220, pos_rt.y + 157, panelWidth, panelHeight ); // cursor shadow
 
-    fheroes2::Button btn_ok( pos_rt.x + 113, pos_rt.y + 252, ( isEvilInterface ? ICN::CSPANBTE : ICN::CSPANBTN ), 0, 1 );
+    fheroes2::Button btn_ok( pos_rt.x + 112, pos_rt.y + 252, ( isEvilInterface ? ICN::CSPANBTE : ICN::CSPANBTN ), 0, 1 );
     btn_ok.draw();
 
     RedrawBattleSettings( optionAreas );
@@ -245,88 +254,153 @@ void Battle::DialogBattleSettings( void )
     while ( le.HandleEvents() ) {
         le.MousePressLeft( btn_ok.area() ) ? btn_ok.drawOnPress() : btn_ok.drawOnRelease();
 
+        bool saveSpeed = false;
         if ( le.MouseClickLeft( optionAreas[0] ) ) {
             conf.SetBattleSpeed( conf.BattleSpeed() % 10 + 1 );
+            saveSpeed = true;
+        }
+        else if ( le.MouseWheelUp( optionAreas[0] ) ) {
+            conf.SetBattleSpeed( conf.BattleSpeed() + 1 );
+            saveSpeed = true;
+        }
+        else if ( le.MouseWheelDn( optionAreas[0] ) ) {
+            conf.SetBattleSpeed( conf.BattleSpeed() - 1 );
+            saveSpeed = true;
+        }
+        else if ( le.MousePressRight( optionAreas[0] ) ) {
+            Dialog::Message( _( "Speed" ), _( "Set the speed of combat actions and animations." ), Font::BIG );
+        }
+        if ( saveSpeed ) {
             Game::UpdateGameSpeed();
+        }
+
+        bool saveShowArmyOrder = false;
+        if ( le.MouseClickLeft( optionAreas[1] ) ) {
+            conf.setBattleShowArmyOrder( !conf.BattleShowArmyOrder() );
+            saveShowArmyOrder = true;
+        }
+        else if ( le.MousePressRight( optionAreas[1] ) ) {
+            Dialog::Message( _( "Army Order" ), _( "Toggle to display army order during the battle." ), Font::BIG );
+        }
+
+        bool saveAutoSpellCast = false;
+        if ( le.MouseClickLeft( optionAreas[2] ) ) {
+            conf.setBattleAutoSpellcast( !conf.BattleAutoSpellcast() );
+            saveAutoSpellCast = true;
+        }
+        else if ( le.MousePressRight( optionAreas[2] ) ) {
+            Dialog::Message(
+                _( "Auto Spell Casting" ),
+                _( "Toggle whether or not the computer will cast spells for you when auto combat is on. (Note: This does not affect spell casting for computer players in any way, nor does it affect quick combat.)" ),
+                Font::BIG );
+        }
+
+        bool saveShowGrid = false;
+        if ( le.MouseClickLeft( optionAreas[3] ) ) {
+            conf.SetBattleGrid( !conf.BattleShowGrid() );
+            saveShowGrid = true;
+        }
+        else if ( le.MousePressRight( optionAreas[3] ) ) {
+            Dialog::Message(
+                _( "Grid" ),
+                _( "Toggle the hex grid on or off. The hex grid always underlies movement, even if turned off. This switch only determines if the grid is visible." ),
+                Font::BIG );
+        }
+
+        bool saveShowMoveShadow = false;
+        if ( le.MouseClickLeft( optionAreas[4] ) ) {
+            conf.SetBattleMovementShaded( !conf.BattleShowMoveShadow() );
+            saveShowMoveShadow = true;
+        }
+        else if ( le.MousePressRight( optionAreas[4] ) ) {
+            Dialog::Message( _( "Shadow Movement" ), _( "Toggle on or off shadows showing where your creatures can move and attack." ), Font::BIG );
+        }
+
+        bool saveShowMouseShadow = false;
+        if ( le.MouseClickLeft( optionAreas[5] ) ) {
+            conf.SetBattleMouseShaded( !conf.BattleShowMouseShadow() );
+            saveShowMouseShadow = true;
+        }
+        else if ( le.MousePressRight( optionAreas[5] ) ) {
+            Dialog::Message( _( "Shadow Cursor" ), _( "Toggle on or off a shadow showing the current hex location of the mouse cursor." ), Font::BIG );
+        }
+
+        if ( Game::HotKeyCloseWindow() || le.MouseClickLeft( btn_ok.area() ) ) {
+            break;
+        }
+
+        if ( saveSpeed || saveShowArmyOrder || saveAutoSpellCast || saveShowGrid || saveShowMoveShadow || saveShowMouseShadow ) {
+            // redraw
             fheroes2::Blit( dialog, display, pos_rt.x, pos_rt.y );
             RedrawBattleSettings( optionAreas );
             display.render();
+
             saveConfiguration = true;
-        }
-        else if ( le.MouseClickLeft( optionAreas[2] ) ) {
-            conf.setBattleAutoSpellcast( !conf.BattleAutoSpellcast() );
-            fheroes2::Blit( dialog, display, pos_rt.x, pos_rt.y );
-            RedrawBattleSettings( optionAreas );
-            saveConfiguration = true;
-        }
-        else if ( le.MouseClickLeft( optionAreas[3] ) ) {
-            conf.SetBattleGrid( !conf.BattleShowGrid() );
-            fheroes2::Blit( dialog, display, pos_rt.x, pos_rt.y );
-            RedrawBattleSettings( optionAreas );
-            saveConfiguration = true;
-        }
-        else if ( le.MouseClickLeft( optionAreas[4] ) ) {
-            conf.SetBattleMovementShaded( !conf.BattleShowMoveShadow() );
-            fheroes2::Blit( dialog, display, pos_rt.x, pos_rt.y );
-            RedrawBattleSettings( optionAreas );
-            saveConfiguration = true;
-        }
-        else if ( le.MouseClickLeft( optionAreas[5] ) ) {
-            conf.SetBattleMouseShaded( !conf.BattleShowMouseShadow() );
-            fheroes2::Blit( dialog, display, pos_rt.x, pos_rt.y );
-            RedrawBattleSettings( optionAreas );
-            saveConfiguration = true;
-        }
-        else if ( Game::HotKeyPressEvent( Game::EVENT_DEFAULT_EXIT ) || le.MouseClickLeft( btn_ok.area() ) ) {
-            break;
         }
     }
 
     if ( saveConfiguration ) {
-        conf.Save( "fheroes2.cfg" );
+        conf.Save( Settings::configFileName );
     }
 }
 
-void Battle::GetSummaryParams( int res1, int res2, const HeroBase & hero, u32 exp, LoopedAnimationSequence & sequence, std::string & title, std::string & msg )
+void Battle::GetSummaryParams( uint32_t res1, uint32_t res2, const HeroBase * hero, uint32_t exp, LoopedAnimationSequence & sequence, std::string & title,
+                               std::string & msg )
 {
     if ( res1 & RESULT_WINS ) {
         sequence.push( ICN::WINCMBT, true );
-        if ( res2 & RESULT_SURRENDER )
-            title.append( _( "The enemy has surrendered!" ) );
-        else if ( res2 & RESULT_RETREAT )
-            title.append( _( "The enemy has fled!" ) );
-        else
-            title.append( _( "A glorious victory!" ) );
 
-        if ( hero.isHeroes() ) {
+        if ( res2 & RESULT_SURRENDER ) {
+            title.append( _( "The enemy has surrendered!" ) );
+        }
+        else if ( res2 & RESULT_RETREAT ) {
+            title.append( _( "The enemy has fled!" ) );
+        }
+        else {
+            title.append( _( "A glorious victory!" ) );
+        }
+
+        if ( hero && hero->isHeroes() ) {
             msg.append( _( "For valor in combat, %{name} receives %{exp} experience." ) );
-            StringReplace( msg, "%{name}", hero.GetName() );
+            StringReplace( msg, "%{name}", hero->GetName() );
             StringReplace( msg, "%{exp}", exp );
         }
     }
     else if ( res1 & RESULT_RETREAT ) {
+        assert( hero != nullptr );
+
         sequence.push( ICN::CMBTFLE1, false );
         sequence.push( ICN::CMBTFLE2, false );
         sequence.push( ICN::CMBTFLE3, false );
+
         msg.append( _( "The cowardly %{name} flees from battle." ) );
-        StringReplace( msg, "%{name}", hero.GetName() );
+        StringReplace( msg, "%{name}", hero->GetName() );
     }
     else if ( res1 & RESULT_SURRENDER ) {
+        assert( hero != nullptr );
+
         sequence.push( ICN::CMBTSURR, true );
+
         msg.append( _( "%{name} surrenders to the enemy, and departs in shame." ) );
-        StringReplace( msg, "%{name}", hero.GetName() );
+        StringReplace( msg, "%{name}", hero->GetName() );
     }
     else {
         sequence.push( ICN::CMBTLOS1, false );
         sequence.push( ICN::CMBTLOS2, false );
         sequence.push( ICN::CMBTLOS3, true );
-        msg.append( _( "Your force suffer a bitter defeat, and %{name} abandons your cause." ) );
-        StringReplace( msg, "%{name}", hero.GetName() );
+
+        if ( hero && hero->isHeroes() ) {
+            msg.append( _( "Your force suffer a bitter defeat, and %{name} abandons your cause." ) );
+            StringReplace( msg, "%{name}", hero->GetName() );
+        }
+        else {
+            msg.append( _( "Your force suffer a bitter defeat." ) );
+        }
     }
 }
 
 // Returns true if player want to restart the battle
-bool Battle::Arena::DialogBattleSummary( const Result & res, const bool transferArtifacts, bool allowToCancel ) const
+bool Battle::Arena::DialogBattleSummary( const Result & res, const std::vector<Artifact> & artifacts, bool allowToCancel ) const
 {
     fheroes2::Display & display = fheroes2::Display::instance();
     LocalEvent & le = LocalEvent::Get();
@@ -342,46 +416,35 @@ bool Battle::Arena::DialogBattleSummary( const Result & res, const bool transfer
     std::string title;
     LoopedAnimationSequence sequence;
 
-    if ( ( res.army1 & RESULT_WINS ) && army1->GetCommander() && army1->GetCommander()->isControlHuman() ) {
-        GetSummaryParams( res.army1, res.army2, *army1->GetCommander(), res.exp1, sequence, title, msg );
-        if ( conf.Music() )
-            AGG::PlayMusic( MUS::BATTLEWIN, false );
+    if ( ( res.army1 & RESULT_WINS ) && ( army1->GetControl() & CONTROL_HUMAN ) ) {
+        GetSummaryParams( res.army1, res.army2, army1->GetCommander(), res.exp1, sequence, title, msg );
+        AudioManager::PlayMusic( MUS::BATTLEWIN, Music::PlaybackMode::PLAY_ONCE );
     }
-    else if ( ( res.army2 & RESULT_WINS ) && army2->GetCommander() && army2->GetCommander()->isControlHuman() ) {
-        GetSummaryParams( res.army2, res.army1, *army2->GetCommander(), res.exp2, sequence, title, msg );
-        if ( conf.Music() )
-            AGG::PlayMusic( MUS::BATTLEWIN, false );
+    else if ( ( res.army2 & RESULT_WINS ) && ( army2->GetControl() & CONTROL_HUMAN ) ) {
+        GetSummaryParams( res.army2, res.army1, army2->GetCommander(), res.exp2, sequence, title, msg );
+        AudioManager::PlayMusic( MUS::BATTLEWIN, Music::PlaybackMode::PLAY_ONCE );
     }
-    else if ( army1->GetCommander() && army1->GetCommander()->isControlHuman() ) {
-        GetSummaryParams( res.army1, res.army2, *army1->GetCommander(), res.exp1, sequence, title, msg );
-        if ( conf.Music() )
-            AGG::PlayMusic( MUS::BATTLELOSE, false );
+    else if ( army1->GetControl() & CONTROL_HUMAN ) {
+        GetSummaryParams( res.army1, res.army2, army1->GetCommander(), res.exp1, sequence, title, msg );
+        AudioManager::PlayMusic( MUS::BATTLELOSE, Music::PlaybackMode::PLAY_ONCE );
     }
-    else if ( army2->GetCommander() && army2->GetCommander()->isControlHuman() ) {
-        GetSummaryParams( res.army2, res.army1, *army2->GetCommander(), res.exp2, sequence, title, msg );
-        if ( conf.Music() )
-            AGG::PlayMusic( MUS::BATTLELOSE, false );
+    else if ( army2->GetControl() & CONTROL_HUMAN ) {
+        GetSummaryParams( res.army2, res.army1, army2->GetCommander(), res.exp2, sequence, title, msg );
+        AudioManager::PlayMusic( MUS::BATTLELOSE, Music::PlaybackMode::PLAY_ONCE );
     }
-    else
-        // AI move
-        if ( army1->GetCommander() && army1->GetCommander()->isControlAI() ) {
-        // AI wins
-        if ( res.army1 & RESULT_WINS ) {
-            sequence.push( ICN::CMBTLOS1, false );
-            sequence.push( ICN::CMBTLOS2, false );
-            sequence.push( ICN::CMBTLOS3, false );
-            msg.append( _( "Your force suffer a bitter defeat." ) );
-        }
-        else
-            // Human wins
-            if ( res.army2 & RESULT_WINS ) {
-            sequence.push( ICN::WINCMBT, true );
-            msg.append( _( "A glorious victory!" ) );
-        }
+    else {
+        // AI vs AI battle, this dialog should not be shown at all
+        assert( 0 );
+
+        return false;
     }
 
-    if ( sequence.isFinished() ) // Cannot be!
+    if ( sequence.isFinished() ) {
+        // This shouldn't happen
+        assert( 0 );
+
         sequence.push( ICN::UNKNOWN, false );
+    }
 
     const bool isEvilInterface = conf.ExtGameEvilInterface();
     const fheroes2::Sprite & dialog = fheroes2::AGG::GetICN( ( isEvilInterface ? ICN::WINLOSEE : ICN::WINLOSE ), 0 );
@@ -405,12 +468,6 @@ bool Battle::Arena::DialogBattleSummary( const Result & res, const bool transfer
     fheroes2::Blit( sequenceBase, display, pos_rt.x + anime_ox + sequenceBase.x(), pos_rt.y + anime_oy + sequenceBase.y() );
     fheroes2::Blit( sequenceStart, display, pos_rt.x + anime_ox + sequenceStart.x(), pos_rt.y + anime_oy + sequenceStart.y() );
 
-    const int buttonOffset = allowToCancel ? 39 : 121;
-    const int buttonICN
-        = isEvilInterface ? ( allowToCancel ? ICN::NON_UNIFORM_EVIL_OKAY_BUTTON : ICN::WINCMBBE ) : ( allowToCancel ? ICN::NON_UNIFORM_GOOD_OKAY_BUTTON : ICN::WINCMBTB );
-    fheroes2::Button btn_ok( pos_rt.x + buttonOffset, pos_rt.y + 410, buttonICN, 0, 1 );
-    fheroes2::Button btnCancel( pos_rt.x + buttonOffset + 125, pos_rt.y + 410, ( isEvilInterface ? ICN::CAMPXTRE : ICN::CAMPXTRG ), 2, 3 );
-
     int32_t messageYOffset = 0;
     if ( !title.empty() ) {
         TextBox box( title, Font::YELLOW_BIG, bsTextWidth );
@@ -432,9 +489,9 @@ bool Battle::Arena::DialogBattleSummary( const Result & res, const bool transfer
     text.Blit( pos_rt.x + ( pos_rt.width - text.w() ) / 2, pos_rt.y + 285 );
 
     if ( killed1.isValid() )
-        Army::DrawMons32Line( killed1, pos_rt.x + 25, pos_rt.y + 303, 270 );
+        Army::drawMiniMonsLine( killed1, pos_rt.x + 25, pos_rt.y + 303, 270 );
     else {
-        text.Set( "None", Font::SMALL );
+        text.Set( _( "None" ), Font::SMALL );
         text.Blit( pos_rt.x + ( pos_rt.width - text.w() ) / 2, pos_rt.y + 300 );
     }
 
@@ -443,29 +500,46 @@ bool Battle::Arena::DialogBattleSummary( const Result & res, const bool transfer
     text.Blit( pos_rt.x + ( pos_rt.width - text.w() ) / 2, pos_rt.y + 345 );
 
     if ( killed2.isValid() )
-        Army::DrawMons32Line( killed2, pos_rt.x + 25, pos_rt.y + 363, 270 );
+        Army::drawMiniMonsLine( killed2, pos_rt.x + 25, pos_rt.y + 363, 270 );
     else {
-        text.Set( "None", Font::SMALL );
+        text.Set( _( "None" ), Font::SMALL );
         text.Blit( pos_rt.x + ( pos_rt.width - text.w() ) / 2, pos_rt.y + 360 );
     }
 
     if ( allowToCancel ) {
-        fheroes2::Sprite buttonOverride = fheroes2::Crop( dialog, 65, 170, 100, 25 );
-        fheroes2::Blit( buttonOverride, display, pos_rt.x + 91, pos_rt.y + 410 );
-        btnCancel.draw();
+        const fheroes2::Sprite & buttonOverride = fheroes2::Crop( dialog, 20, 410, 84, 32 );
+        fheroes2::Blit( buttonOverride, display, pos_rt.x + 116, pos_rt.y + 410 );
     }
-    btn_ok.draw();
+
+    const int buttonOffset = allowToCancel ? 39 : 120;
+    const int buttonOkICN
+        = isEvilInterface ? ( allowToCancel ? ICN::NON_UNIFORM_EVIL_OKAY_BUTTON : ICN::WINCMBBE ) : ( allowToCancel ? ICN::NON_UNIFORM_GOOD_OKAY_BUTTON : ICN::WINCMBTB );
+    const int buttonCancelICN = isEvilInterface ? ICN::NON_UNIFORM_EVIL_RESTART_BUTTON : ICN::NON_UNIFORM_GOOD_RESTART_BUTTON;
+
+    std::unique_ptr<fheroes2::ButtonBase> btnOk;
+    fheroes2::ButtonSprite btnCancel = fheroes2::makeButtonWithShadow( pos_rt.x + buttonOffset + 129, pos_rt.y + 410, fheroes2::AGG::GetICN( buttonCancelICN, 0 ),
+                                                                       fheroes2::AGG::GetICN( buttonCancelICN, 1 ), display );
+
+    if ( allowToCancel ) {
+        btnCancel.draw();
+        btnOk.reset( new fheroes2::ButtonSprite( fheroes2::makeButtonWithShadow( pos_rt.x + buttonOffset, pos_rt.y + 410, fheroes2::AGG::GetICN( buttonOkICN, 0 ),
+                                                                                 fheroes2::AGG::GetICN( buttonOkICN, 1 ), display ) ) );
+    }
+    else {
+        btnOk.reset( new fheroes2::Button( pos_rt.x + buttonOffset, pos_rt.y + 410, buttonOkICN, 0, 1 ) );
+    }
+    btnOk->draw();
 
     display.render();
 
     while ( le.HandleEvents() ) {
-        le.MousePressLeft( btn_ok.area() ) ? btn_ok.drawOnPress() : btn_ok.drawOnRelease();
+        le.MousePressLeft( btnOk->area() ) ? btnOk->drawOnPress() : btnOk->drawOnRelease();
         if ( allowToCancel ) {
             le.MousePressLeft( btnCancel.area() ) ? btnCancel.drawOnPress() : btnCancel.drawOnRelease();
         }
 
         // exit
-        if ( HotKeyCloseWindow || le.MouseClickLeft( btn_ok.area() ) )
+        if ( Game::HotKeyCloseWindow() || le.MouseClickLeft( btnOk->area() ) )
             break;
 
         if ( allowToCancel && le.MouseClickLeft( btnCancel.area() ) ) {
@@ -484,70 +558,67 @@ bool Battle::Arena::DialogBattleSummary( const Result & res, const bool transfer
         }
     }
 
-    if ( transferArtifacts ) {
-        HeroBase * hero1 = ( res.army1 & RESULT_WINS ? army1->GetCommander() : ( res.army2 & RESULT_WINS ? army2->GetCommander() : nullptr ) );
-        HeroBase * hero2 = ( res.army1 & RESULT_LOSS ? army1->GetCommander() : ( res.army2 & RESULT_LOSS ? army2->GetCommander() : nullptr ) );
+    if ( !artifacts.empty() ) {
+        const HeroBase * winner = ( res.army1 & RESULT_WINS ? army1->GetCommander() : ( res.army2 & RESULT_WINS ? army2->GetCommander() : nullptr ) );
+        const HeroBase * loser = ( res.army1 & RESULT_LOSS ? army1->GetCommander() : ( res.army2 & RESULT_LOSS ? army2->GetCommander() : nullptr ) );
 
         // Can't transfer artifacts
-        if ( hero1 == nullptr || hero2 == nullptr )
+        if ( winner == nullptr || loser == nullptr )
             return false;
 
-        BagArtifacts & bag1 = hero1->GetBagArtifacts();
-        BagArtifacts & bag2 = hero2->GetBagArtifacts();
+        const bool isWinnerHuman = winner && winner->isControlHuman();
 
-        btn_ok.setICNInfo( isEvilInterface ? ICN::WINCMBBE : ICN::WINCMBTB, 0, 1 );
-        btn_ok.setPosition( pos_rt.x + 121, pos_rt.y + 410 );
+        btnOk.reset( new fheroes2::Button( pos_rt.x + 120, pos_rt.y + 410, isEvilInterface ? ICN::WINCMBBE : ICN::WINCMBTB, 0, 1 ) );
 
-        for ( size_t i = 0; i < bag2.size(); ++i ) {
-            Artifact & art = bag2[i];
-
-            if ( art.isUltimate() ) {
-                art = Artifact::UNKNOWN;
-                continue;
-            }
-
-            if ( art() == Artifact::UNKNOWN || art() == Artifact::MAGIC_BOOK ) {
-                continue;
-            }
-
-            BagArtifacts::iterator it = std::find( bag1.begin(), bag1.end(), Artifact( Artifact::UNKNOWN ) );
-            if ( bag1.end() != it ) {
-                *it = art;
-
+        for ( const Artifact & art : artifacts ) {
+            if ( isWinnerHuman || art.isUltimate() ) { // always show the message for ultimate artifacts
                 back.restore();
                 back.update( shadowOffset.x, shadowOffset.y, dialog.width() + BORDERWIDTH, dialog.height() + BORDERWIDTH - 1 );
                 fheroes2::Blit( dialogShadow, display, pos_rt.x - BORDERWIDTH, pos_rt.y + BORDERWIDTH - 1 );
                 fheroes2::Blit( dialog, display, pos_rt.x, pos_rt.y );
-                btn_ok.draw();
 
-                Game::PlayPickupSound();
+                btnOk->draw();
 
-                TextBox box( _( "You have captured an enemy artifact!" ), Font::YELLOW_BIG, bsTextWidth );
+                std::string artMsg;
+                if ( art.isUltimate() ) {
+                    if ( isWinnerHuman ) {
+                        artMsg = _( "As you reach for the %{name}, it mysteriously disappears." );
+                    }
+                    else {
+                        artMsg = _( "As your enemy reaches for the %{name}, it mysteriously disappears." );
+                    }
+                    StringReplace( artMsg, "%{name}", art.GetName() );
+                }
+                else {
+                    artMsg = _( "You have captured an enemy artifact!" );
+                    Game::PlayPickupSound();
+                }
+
+                TextBox box( artMsg, Font::YELLOW_BIG, bsTextWidth );
                 box.Blit( pos_rt.x + bsTextXOffset, pos_rt.y + bsTextYOffset );
 
-                const fheroes2::Sprite & border = fheroes2::AGG::GetICN( ICN::RESOURCE, 7 );
+                const fheroes2::Sprite & border = fheroes2::AGG::GetICN( ICN::WINLOSEB, 0 );
                 const fheroes2::Sprite & artifact = fheroes2::AGG::GetICN( ICN::ARTIFACT, art.IndexSprite64() );
                 const fheroes2::Point artifactOffset( pos_rt.x + 119, pos_rt.y + 310 );
 
-                fheroes2::Sprite image = border;
-                const int32_t borderSize = 5;
-                fheroes2::Blit( artifact, image, borderSize, borderSize );
-                fheroes2::Blit( image, display, artifactOffset.x, artifactOffset.y );
+                fheroes2::Blit( border, display, artifactOffset.x, artifactOffset.y );
+                fheroes2::Blit( artifact, display, artifactOffset.x + 8, artifactOffset.y + 8 );
 
                 TextBox artName( art.GetName(), Font::SMALL, bsTextWidth );
-                artName.Blit( pos_rt.x + bsTextXOffset, artifactOffset.y + image.height() + borderSize );
+                artName.Blit( pos_rt.x + bsTextXOffset, artifactOffset.y + border.height() + 5 );
 
-                const fheroes2::Rect artifactArea( artifactOffset.x, artifactOffset.y, artifact.width() + borderSize * 2, artifact.height() + borderSize * 2 );
+                const fheroes2::Rect artifactArea( artifactOffset.x, artifactOffset.y, border.width(), border.height() );
 
                 while ( le.HandleEvents() ) {
-                    le.MousePressLeft( btn_ok.area() ) ? btn_ok.drawOnPress() : btn_ok.drawOnRelease();
+                    le.MousePressLeft( btnOk->area() ) ? btnOk->drawOnPress() : btnOk->drawOnRelease();
 
                     // display captured artifact info on right click
-                    if ( le.MousePressRight( artifactArea ) )
-                        Dialog::ArtifactInfo( art.GetName(), "", art, 0 );
+                    if ( le.MousePressRight( artifactArea ) ) {
+                        fheroes2::ArtifactDialogElement( art ).showPopup( Dialog::ZERO );
+                    }
 
                     // exit
-                    if ( HotKeyCloseWindow || le.MouseClickLeft( btn_ok.area() ) )
+                    if ( Game::HotKeyCloseWindow() || le.MouseClickLeft( btnOk->area() ) )
                         break;
 
                     // animation
@@ -561,7 +632,6 @@ bool Battle::Arena::DialogBattleSummary( const Result & res, const bool transfer
                     }
                 }
             }
-            art = Artifact::UNKNOWN;
         }
     }
     return false;
@@ -569,6 +639,9 @@ bool Battle::Arena::DialogBattleSummary( const Result & res, const bool transfer
 
 void Battle::Arena::DialogBattleNecromancy( const uint32_t raiseCount, const uint32_t raisedMonsterType ) const
 {
+    // setup cursor
+    const CursorRestorer cursorRestorer( true, Cursor::POINTER );
+
     const bool isEvilInterface = Settings::Get().ExtGameEvilInterface();
     const fheroes2::Sprite & dialog = fheroes2::AGG::GetICN( ( isEvilInterface ? ICN::WINLOSEE : ICN::WINLOSE ), 0 );
     const fheroes2::Sprite & dialogShadow = fheroes2::AGG::GetICN( ( isEvilInterface ? ICN::WINLOSEE : ICN::WINLOSE ), 1 );
@@ -634,7 +707,7 @@ void Battle::Arena::DialogBattleNecromancy( const uint32_t raiseCount, const uin
         le.MousePressLeft( buttonOk.area() ) ? buttonOk.drawOnPress() : buttonOk.drawOnRelease();
 
         // exit
-        if ( HotKeyCloseWindow || le.MouseClickLeft( buttonOk.area() ) )
+        if ( Game::HotKeyCloseWindow() || le.MouseClickLeft( buttonOk.area() ) )
             break;
 
         // animation
@@ -686,7 +759,7 @@ int Battle::Arena::DialogBattleHero( const HeroBase & hero, const bool buttons, 
     std::string str;
     Text text;
     text.Set( Font::SMALL );
-    str = _( "%{name} the %{race}" );
+    str = hero.isCaptain() ? _( "Captain of %{name}" ) : _( "%{name} the %{race}" );
     StringReplace( str, "%{name}", hero.GetName() );
     StringReplace( str, "%{race}", Race::String( hero.GetRace() ) );
     text.Set( str );
@@ -762,19 +835,23 @@ int Battle::Arena::DialogBattleHero( const HeroBase & hero, const bool buttons, 
         le.MousePressLeft( btnClose.area() ) ? btnClose.drawOnPress() : btnClose.drawOnRelease();
 
         if ( buttons ) {
-            if ( le.MouseCursor( btnCast.area() ) ) {
+            // The Cast Spell is available for a hero and a captain.
+            if ( le.MouseCursor( btnCast.area() ) && current_color == hero.GetColor() ) {
                 statusMessage = _( "Cast Spell" );
             }
-            else if ( le.MouseCursor( btnRetreat.area() ) ) {
+            // The retreat is available during a player's turn only. A captain cannot retreat.
+            else if ( le.MouseCursor( btnRetreat.area() ) && current_color == hero.GetColor() && !hero.isCaptain() ) {
                 statusMessage = _( "Retreat" );
             }
-            else if ( le.MouseCursor( btnSurrender.area() ) ) {
+            // The surrender is available during a player's turn only. A captain cannot surrender.
+            else if ( le.MouseCursor( btnSurrender.area() ) && current_color == hero.GetColor() && !hero.isCaptain() ) {
                 statusMessage = _( "Surrender" );
             }
             else if ( le.MouseCursor( btnClose.area() ) ) {
                 statusMessage = _( "Cancel" );
             }
-            else if ( le.MouseCursor( portraitArea ) && actionHero != nullptr ) {
+            // The Hero Screen is available for a Hero only (not Captain) and when UI is not read-only.
+            else if ( le.MouseCursor( portraitArea ) && actionHero != nullptr && actionHero->isHeroes() && !readonly ) {
                 statusMessage = _( "Hero Screen" );
             }
             else {
@@ -785,38 +862,39 @@ int Battle::Arena::DialogBattleHero( const HeroBase & hero, const bool buttons, 
         if ( !buttons && !le.MousePressRight() )
             break;
 
-        if ( Game::HotKeyPressEvent( Game::EVENT_BATTLE_CASTSPELL ) || ( btnCast.isEnabled() && le.MouseClickLeft( btnCast.area() ) ) )
+        if ( Game::HotKeyPressEvent( Game::HotKeyEvent::CAST_SPELL ) || ( btnCast.isEnabled() && le.MouseClickLeft( btnCast.area() ) ) )
             result = 1;
 
-        if ( Game::HotKeyPressEvent( Game::EVENT_BATTLE_RETREAT ) || ( btnRetreat.isEnabled() && le.MouseClickLeft( btnRetreat.area() ) ) )
+        if ( Game::HotKeyPressEvent( Game::HotKeyEvent::BATTLE_RETREAT ) || ( btnRetreat.isEnabled() && le.MouseClickLeft( btnRetreat.area() ) ) )
             result = 2;
 
-        if ( Game::HotKeyPressEvent( Game::EVENT_BATTLE_SURRENDER ) || ( btnSurrender.isEnabled() && le.MouseClickLeft( btnSurrender.area() ) ) )
+        if ( Game::HotKeyPressEvent( Game::HotKeyEvent::BATTLE_SURRENDER ) || ( btnSurrender.isEnabled() && le.MouseClickLeft( btnSurrender.area() ) ) )
             result = 3;
 
         if ( le.MouseClickLeft( portraitArea ) && actionHero != nullptr ) {
             // IMPORTANT!!! This is extremely dangerous but we have no choice with current code. Make sure that this trick doesn't allow user to modify the hero.
+            LocalEvent::GetClean();
             const_cast<Heroes *>( actionHero )->OpenDialog( true, false, true, true );
         }
 
-        if ( le.MousePressRight( btnCast.area() ) ) {
+        if ( le.MousePressRight( btnCast.area() ) && current_color == hero.GetColor() ) {
             Dialog::Message( _( "Cast Spell" ),
                              _( "Cast a magical spell. You may only cast one spell per combat round. The round is reset when every creature has had a turn." ),
                              Font::BIG );
         }
-        else if ( le.MousePressRight( btnRetreat.area() ) ) {
+        else if ( le.MousePressRight( btnRetreat.area() ) && current_color == hero.GetColor() && !hero.isCaptain() ) {
             Dialog::Message(
                 _( "Retreat" ),
                 _( "Retreat your hero, abandoning your creatures. Your hero will be available for you to recruit again, however, the hero will have only a novice hero's forces." ),
                 Font::BIG );
         }
-        else if ( le.MousePressRight( btnSurrender.area() ) ) {
+        else if ( le.MousePressRight( btnSurrender.area() ) && current_color == hero.GetColor() && !hero.isCaptain() ) {
             Dialog::Message(
                 _( "Surrender" ),
                 _( "Surrendering costs gold. However if you pay the ransom, the hero and all of his or her surviving creatures will be available to recruit again." ),
                 Font::BIG );
         }
-        else if ( le.MousePressRight( portraitArea ) ) {
+        else if ( le.MousePressRight( portraitArea ) && actionHero != nullptr ) {
             Dialog::Message( _( "Hero Screen" ), _( "Open Hero Screen to view full information about the hero." ), Font::BIG );
         }
         else if ( le.MousePressRight( btnClose.area() ) ) {
@@ -824,7 +902,7 @@ int Battle::Arena::DialogBattleHero( const HeroBase & hero, const bool buttons, 
         }
 
         // exit
-        if ( HotKeyCloseWindow || le.MouseClickLeft( btnClose.area() ) )
+        if ( Game::HotKeyCloseWindow() || le.MouseClickLeft( btnClose.area() ) )
             break;
 
         if ( statusMessage != status.GetMessage() ) {
@@ -836,7 +914,7 @@ int Battle::Arena::DialogBattleHero( const HeroBase & hero, const bool buttons, 
     return result;
 }
 
-bool Battle::DialogBattleSurrender( const HeroBase & hero, u32 cost, Kingdom & kingdom )
+bool Battle::DialogBattleSurrender( const HeroBase & hero, uint32_t cost, Kingdom & kingdom )
 {
     if ( kingdom.GetColor() == hero.GetColor() ) // this is weird. You're surrending to yourself!
         return false;
@@ -857,26 +935,16 @@ bool Battle::DialogBattleSurrender( const HeroBase & hero, u32 cost, Kingdom & k
     fheroes2::Blit( dialog, display, pos_rt.x, pos_rt.y );
 
     const int icn = isEvilInterface ? ICN::SURRENDE : ICN::SURRENDR;
+    const int icnMarket = isEvilInterface ? ICN::EVIL_MARKET_BUTTON : ICN::GOOD_MARKET_BUTTON;
 
-    fheroes2::Button btnAccept( pos_rt.x + 91, pos_rt.y + 152, icn, 0, 1 );
-    fheroes2::Button btnDecline( pos_rt.x + 295, pos_rt.y + 152, icn, 2, 3 );
+    fheroes2::ButtonSprite btnAccept
+        = fheroes2::makeButtonWithShadow( pos_rt.x + 91, pos_rt.y + 152, fheroes2::AGG::GetICN( icn, 0 ), fheroes2::AGG::GetICN( icn, 1 ), display );
 
-    fheroes2::Sprite marketButtonReleased = fheroes2::AGG::GetICN( isEvilInterface ? ICN::ADVEBTNS : ICN::ADVBTNS, 4 );
-    fheroes2::Sprite marketButtonPressed = fheroes2::AGG::GetICN( isEvilInterface ? ICN::ADVEBTNS : ICN::ADVBTNS, 5 );
-    fheroes2::AddTransparency( marketButtonReleased, 36 );
-    fheroes2::AddTransparency( marketButtonPressed, 36 );
+    fheroes2::ButtonSprite btnDecline
+        = fheroes2::makeButtonWithShadow( pos_rt.x + 295, pos_rt.y + 152, fheroes2::AGG::GetICN( icn, 2 ), fheroes2::AGG::GetICN( icn, 3 ), display );
 
-    const fheroes2::Point buttonMarketPos( pos_rt.x + ( pos_rt.width - 16 ) / 2, pos_rt.y + 145 );
-
-    fheroes2::Sprite marketButtonReleasedBack( marketButtonReleased.width(), marketButtonReleased.height(), marketButtonReleased.x(), marketButtonReleased.y() );
-    fheroes2::Copy( display, buttonMarketPos.x, buttonMarketPos.y, marketButtonReleasedBack, 0, 0, marketButtonReleasedBack.width(), marketButtonReleasedBack.height() );
-    fheroes2::Blit( marketButtonReleased, marketButtonReleasedBack );
-
-    fheroes2::Sprite marketButtonPressedBack( marketButtonPressed.width(), marketButtonPressed.height(), marketButtonPressed.x(), marketButtonPressed.y() );
-    fheroes2::Copy( display, buttonMarketPos.x, buttonMarketPos.y, marketButtonPressedBack, 0, 0, marketButtonPressedBack.width(), marketButtonPressedBack.height() );
-    fheroes2::Blit( marketButtonPressed, marketButtonPressedBack );
-
-    fheroes2::ButtonSprite btnMarket( buttonMarketPos.x, buttonMarketPos.y, marketButtonReleasedBack, marketButtonPressedBack );
+    fheroes2::ButtonSprite btnMarket = fheroes2::makeButtonWithShadow( pos_rt.x + ( pos_rt.width - 16 ) / 2, pos_rt.y + 145, fheroes2::AGG::GetICN( icnMarket, 0 ),
+                                                                       fheroes2::AGG::GetICN( icnMarket, 1 ), display );
 
     if ( !kingdom.AllowPayment( payment_t( Resource::GOLD, cost ) ) ) {
         btnAccept.disable();
@@ -912,10 +980,11 @@ bool Battle::DialogBattleSurrender( const HeroBase & hero, u32 cost, Kingdom & k
     fheroes2::Blit( window, display, pos_rt.x + 55, pos_rt.y + 32 );
     hero.PortraitRedraw( pos_rt.x + 60, pos_rt.y + 38, PORT_BIG, display );
 
-    std::string str = _( "%{name} states:" );
+    std::string str = hero.isCaptain() ? _( "Captain of %{name} states:" ) : _( "%{name} states:" );
     StringReplace( str, "%{name}", hero.GetName() );
+
     Text text( str, Font::BIG );
-    text.Blit( pos_rt.x + 320 - text.w() / 2, pos_rt.y + 30 );
+    text.Blit( pos_rt.x + 312 - text.w() / 2, pos_rt.y + 30 );
 
     str = _( "\"I will accept your surrender and grant you and your troops safe passage for the price of %{price} gold.\"" );
     StringReplace( str, "%{price}", cost );
@@ -963,7 +1032,7 @@ bool Battle::DialogBattleSurrender( const HeroBase & hero, u32 cost, Kingdom & k
         }
 
         // exit
-        if ( Game::HotKeyPressEvent( Game::EVENT_DEFAULT_EXIT ) || le.MouseClickLeft( btnDecline.area() ) )
+        if ( Game::HotKeyPressEvent( Game::HotKeyEvent::DEFAULT_CANCEL ) || le.MouseClickLeft( btnDecline.area() ) )
             break;
     }
 

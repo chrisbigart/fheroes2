@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,8 +24,6 @@
 #ifndef H2GAMEINTERFACE_H
 #define H2GAMEINTERFACE_H
 
-#include "gamedefs.h"
-#include "interface_border.h"
 #include "interface_buttons.h"
 #include "interface_cpanel.h"
 #include "interface_gamearea.h"
@@ -35,7 +34,6 @@
 
 class Castle;
 class Heroes;
-class Army;
 
 namespace Maps
 {
@@ -55,7 +53,7 @@ namespace GameFocus
 
 namespace Interface
 {
-    enum redraw_t
+    enum redraw_t : uint32_t
     {
         REDRAW_RADAR = 0x01,
         REDRAW_HEROES = 0x02,
@@ -64,70 +62,116 @@ namespace Interface
         REDRAW_STATUS = 0x10,
         REDRAW_BORDER = 0x20,
         REDRAW_GAMEAREA = 0x40,
-        REDRAW_CURSOR = 0x80,
 
         REDRAW_ICONS = REDRAW_HEROES | REDRAW_CASTLES,
         REDRAW_ALL = 0xFF
     };
 
-    Castle * GetFocusCastle( void );
-    Heroes * GetFocusHeroes( void );
-    int GetFocusType( void );
-    fheroes2::Point GetFocusCenter( void );
+    Castle * GetFocusCastle();
+    Heroes * GetFocusHeroes();
+    int GetFocusType();
 
     class Basic
     {
     public:
-        static Basic & Get( void );
+        static Basic & Get();
 
-        bool NeedRedraw( void ) const;
-        void SetRedraw( int );
-        int GetRedrawMask() const;
-        void Redraw( int f = 0 );
+        bool NeedRedraw() const
+        {
+            return redraw != 0;
+        }
 
-        const fheroes2::Rect & GetScrollLeft( void ) const;
-        const fheroes2::Rect & GetScrollRight( void ) const;
-        const fheroes2::Rect & GetScrollTop( void ) const;
-        const fheroes2::Rect & GetScrollBottom( void ) const;
+        void SetRedraw( const uint32_t r )
+        {
+            redraw |= r;
+        }
+
+        uint32_t GetRedrawMask() const
+        {
+            return redraw;
+        }
+
+        void Redraw( const uint32_t force = 0 );
+
+        static bool isScrollLeft( const fheroes2::Point & cursorPos )
+        {
+            return cursorPos.x < BORDERWIDTH;
+        }
+
+        static bool isScrollRight( const fheroes2::Point & cursorPos )
+        {
+            const fheroes2::Display & display = fheroes2::Display::instance();
+
+            return cursorPos.x >= display.width() - BORDERWIDTH;
+        }
+
+        static bool isScrollTop( const fheroes2::Point & cursorPos )
+        {
+            return cursorPos.y < BORDERWIDTH;
+        }
+
+        static bool isScrollBottom( const fheroes2::Point & cursorPos )
+        {
+            const fheroes2::Display & display = fheroes2::Display::instance();
+
+            return cursorPos.y >= display.height() - BORDERWIDTH;
+        }
 
         int32_t GetDimensionDoorDestination( const int32_t from, const int32_t distance, const bool water );
 
-        GameArea & GetGameArea( void );
-        Radar & GetRadar( void );
-        IconsPanel & GetIconsPanel( void );
-        ButtonsArea & GetButtonsArea( void );
-        StatusWindow & GetStatusWindow( void );
-        ControlPanel & GetControlPanel( void );
+        GameArea & GetGameArea()
+        {
+            return gameArea;
+        }
+
+        Radar & GetRadar()
+        {
+            return radar;
+        }
+
+        IconsPanel & GetIconsPanel()
+        {
+            return iconsPanel;
+        }
+
+        StatusWindow & GetStatusWindow()
+        {
+            return statusWindow;
+        }
+
+        ControlPanel & GetControlPanel()
+        {
+            return controlPanel;
+        }
 
         void SetFocus( Heroes * );
         void SetFocus( Castle * );
         void ResetFocus( int );
-        void RedrawFocus( void );
+        void RedrawFocus();
 
-        void SetHideInterface( bool );
-
-        void EventSwitchHeroSleeping( void );
-        void EventDefaultAction( void );
-        void EventOpenFocus( void ) const;
+        void EventSwitchHeroSleeping();
+        fheroes2::GameMode EventDefaultAction( const fheroes2::GameMode gameMode );
+        void EventOpenFocus() const;
         fheroes2::GameMode EventSaveGame() const;
-        void EventPuzzleMaps( void ) const;
-        void EventGameInfo( void ) const;
-        void EventSystemDialog( void );
-        void EventNextHero( void );
-        void EventNextTown( void );
-        void EventContinueMovement( void ) const;
-        void EventKingdomInfo( void ) const;
-        void EventCastSpell( void );
-        void EventSwitchShowRadar( void ) const;
-        void EventSwitchShowStatus( void ) const;
-        void EventSwitchShowButtons( void ) const;
-        void EventSwitchShowIcons( void );
-        void EventSwitchShowControlPanel( void ) const;
+        void EventPuzzleMaps() const;
+        static fheroes2::GameMode EventScenarioInformation();
+        void EventSystemDialog() const;
+        void EventNextHero();
+        void EventNextTown();
+        void EventContinueMovement() const;
+        void EventKingdomInfo() const;
+        void EventCastSpell();
+        void EventSwitchShowRadar() const;
+        void EventSwitchShowStatus() const;
+        void EventSwitchShowButtons() const;
+        void EventSwitchShowIcons() const;
+        void EventSwitchShowControlPanel() const;
 
         fheroes2::GameMode EventNewGame() const;
         fheroes2::GameMode EventLoadGame() const;
         fheroes2::GameMode EventAdventureDialog();
-        fheroes2::GameMode EventFileDialog( void ) const;
+        void EventViewWorld();
+        fheroes2::GameMode EventFileDialog() const;
         fheroes2::GameMode EventEndTurn() const;
         static fheroes2::GameMode EventExit();
         fheroes2::GameMode EventDigArtifact();
@@ -136,19 +180,20 @@ namespace Interface
         fheroes2::GameMode StartGame();
 
         void MouseCursorAreaClickLeft( const int32_t index_maps );
-        void MouseCursorAreaPressRight( s32 ) const;
+        void MouseCursorAreaPressRight( int32_t ) const;
 
-        static int GetCursorTileIndex( s32 );
+        static int GetCursorTileIndex( int32_t );
         static int GetCursorFocusCastle( const Castle &, const Maps::Tiles & );
         static int GetCursorFocusHeroes( const Heroes &, const Maps::Tiles & );
         static int GetCursorFocusShipmaster( const Heroes &, const Maps::Tiles & );
-        void CalculateHeroPath( Heroes * hero, s32 destinationIdx ) const;
+        void CalculateHeroPath( Heroes * hero, int32_t destinationIdx ) const;
 
-        void Reset(); // call this function only when changing the resolution
+        // Regenerates the game area and updates the panel positions depending on the UI settings
+        void Reset();
 
     private:
         Basic();
-        void ShowPathOrStartMoveHero( Heroes *, s32 );
+        void ShowPathOrStartMoveHero( Heroes *, int32_t );
         void MoveHeroFromArrowKeys( Heroes & hero, int direct );
         fheroes2::GameMode HumanTurn( bool );
 
@@ -159,12 +204,7 @@ namespace Interface
         StatusWindow statusWindow;
         ControlPanel controlPanel;
 
-        int redraw;
-
-        fheroes2::Rect scrollLeft;
-        fheroes2::Rect scrollRight;
-        fheroes2::Rect scrollBottom;
-        fheroes2::Rect scrollTop;
+        uint32_t redraw;
     };
 }
 

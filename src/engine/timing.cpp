@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2021                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2021 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -18,24 +18,24 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#include "timing.h"
-
 #include <thread>
+
+#include "timing.h"
 
 namespace fheroes2
 {
     Time::Time()
-        : _startTime( std::chrono::high_resolution_clock::now() )
+        : _startTime( std::chrono::steady_clock::now() )
     {}
 
     void Time::reset()
     {
-        _startTime = std::chrono::high_resolution_clock::now();
+        _startTime = std::chrono::steady_clock::now();
     }
 
     double Time::get() const
     {
-        const std::chrono::duration<double> time = std::chrono::high_resolution_clock::now() - _startTime;
+        const std::chrono::duration<double> time = std::chrono::steady_clock::now() - _startTime;
         return time.count();
     }
 
@@ -45,7 +45,7 @@ namespace fheroes2
     }
 
     TimeDelay::TimeDelay( const uint64_t delayMs )
-        : _prevTime( std::chrono::high_resolution_clock::now() )
+        : _prevTime( std::chrono::steady_clock::now() )
         , _delayMs( delayMs )
     {}
 
@@ -61,19 +61,19 @@ namespace fheroes2
 
     bool TimeDelay::isPassed( const uint64_t delayMs ) const
     {
-        const std::chrono::duration<double> time = std::chrono::high_resolution_clock::now() - _prevTime;
+        const std::chrono::duration<double> time = std::chrono::steady_clock::now() - _prevTime;
         const uint64_t passedMs = static_cast<uint64_t>( time.count() * 1000 + 0.5 );
         return passedMs >= delayMs;
     }
 
     void TimeDelay::reset()
     {
-        _prevTime = std::chrono::high_resolution_clock::now();
+        _prevTime = std::chrono::steady_clock::now();
     }
 
     void TimeDelay::pass()
     {
-        _prevTime = std::chrono::high_resolution_clock::now() - std::chrono::milliseconds( 2 * _delayMs );
+        _prevTime = std::chrono::steady_clock::now() - std::chrono::milliseconds( 2 * _delayMs );
     }
 
     void delayforMs( const uint32_t delayMs )

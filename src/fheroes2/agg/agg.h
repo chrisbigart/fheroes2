@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -25,24 +26,37 @@
 
 #include <cstdint>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace AGG
 {
-    bool Init( void );
-    void Quit( void );
+    class AGGInitializer
+    {
+    public:
+        AGGInitializer();
+        AGGInitializer( const AGGInitializer & ) = delete;
+        AGGInitializer & operator=( const AGGInitializer & ) = delete;
 
-    std::vector<uint8_t> LoadBINFRM( const char * frm_file );
-#ifdef WITH_TTF
-    uint32_t GetFontHeight( bool small );
-#endif
-    void LoadLOOPXXSounds( const std::vector<int> & vols, bool asyncronizedCall = false );
-    void PlaySound( int m82, bool asyncronizedCall = false );
-    void PlayMusic( int mus, bool loop = true, bool asyncronizedCall = false );
-    void ResetMixer();
+        ~AGGInitializer() = default;
 
-    std::vector<uint8_t> ReadChunk( const std::string & key, bool ignoreExpansion = false );
+        const std::string & getOriginalAGGFilePath() const
+        {
+            return _originalAGGFilePath;
+        }
+
+        const std::string & getExpansionAGGFilePath() const
+        {
+            return _expansionAGGFilePath;
+        }
+
+    private:
+        bool init();
+
+        std::string _originalAGGFilePath;
+        std::string _expansionAGGFilePath;
+    };
+
+    std::vector<uint8_t> getDataFromAggFile( const std::string & key );
 }
 
 #endif

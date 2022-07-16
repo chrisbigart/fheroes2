@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2012 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2012 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -24,6 +25,7 @@
 #define H2INTERFACE_ITEMSBAR_H
 
 #include <algorithm>
+#include <list>
 #include <utility>
 
 #include "gamedefs.h"
@@ -35,13 +37,6 @@ namespace Interface
     template <class Item>
     class ItemsBar
     {
-    protected:
-        using Items = std::list<Item *>;
-        typedef typename std::list<Item *>::iterator ItemsIterator;
-        using ItemIterPos = std::pair<ItemsIterator, fheroes2::Rect>;
-
-        Items items;
-
     public:
         ItemsBar()
             : colrows( 0, 0 )
@@ -132,7 +127,7 @@ namespace Interface
 
             for ( int32_t y = 0; y < colrows.height; ++y ) {
                 for ( int32_t x = 0; x < colrows.width; ++x ) {
-                    RedrawBackground( fheroes2::Rect( dstpt.x, dstpt.y, itemsz.width, itemsz.height ), dstsf );
+                    RedrawBackground( { dstpt.x, dstpt.y, itemsz.width, itemsz.height }, dstsf );
 
                     dstpt.x += hspace + itemsz.width;
                 }
@@ -149,7 +144,7 @@ namespace Interface
             for ( int32_t y = 0; y < colrows.height; ++y ) {
                 for ( int32_t x = 0; x < colrows.width; ++x ) {
                     if ( posItem != items.end() ) {
-                        RedrawItemIter( posItem, fheroes2::Rect( dstpt.x, dstpt.y, itemsz.width, itemsz.height ), dstsf );
+                        RedrawItemIter( posItem, { dstpt.x, dstpt.y, itemsz.width, itemsz.height }, dstsf );
 
                         ++posItem;
                     }
@@ -162,7 +157,7 @@ namespace Interface
             }
         }
 
-        bool QueueEventProcessing( void )
+        bool QueueEventProcessing()
         {
             const fheroes2::Point & cursor = LocalEvent::Get().GetMouseCursor();
 
@@ -170,7 +165,16 @@ namespace Interface
         }
 
     protected:
-        virtual void SetContentItems() {}
+        using Items = std::list<Item *>;
+        using ItemsIterator = typename std::list<Item *>::iterator;
+        using ItemIterPos = std::pair<ItemsIterator, fheroes2::Rect>;
+
+        Items items;
+
+        virtual void SetContentItems()
+        {
+            // Do nothing.
+        }
 
         ItemsIterator GetBeginItemIter()
         {
@@ -248,7 +252,7 @@ namespace Interface
         }
 
     private:
-        void RescanSize( void )
+        void RescanSize()
         {
             barsz.width = colrows.width ? colrows.width * itemsz.width + ( colrows.width - 1 ) * hspace : 0;
             barsz.height = colrows.height ? colrows.height * itemsz.height + ( colrows.height - 1 ) * vspace : 0;
@@ -264,13 +268,6 @@ namespace Interface
     template <class Item>
     class ItemsActionBar : public ItemsBar<Item>
     {
-    protected:
-        typedef typename ItemsBar<Item>::ItemsIterator ItemsIterator;
-        typedef typename ItemsBar<Item>::ItemIterPos ItemIterPos;
-
-        ItemsIterator topItem;
-        ItemIterPos curItemPos;
-
     public:
         ItemsActionBar()
         {
@@ -279,8 +276,15 @@ namespace Interface
 
         ~ItemsActionBar() override = default;
 
-        void RedrawItem( Item &, const fheroes2::Rect &, fheroes2::Image & ) override {}
-        virtual void RedrawItem( Item &, const fheroes2::Rect &, bool, fheroes2::Image & ) {}
+        void RedrawItem( Item &, const fheroes2::Rect &, fheroes2::Image & ) override
+        {
+            // Do nothing.
+        }
+
+        virtual void RedrawItem( Item &, const fheroes2::Rect &, bool, fheroes2::Image & )
+        {
+            // Do nothing.
+        }
 
         bool ActionBarCursor( Item & ) override
         {
@@ -368,7 +372,7 @@ namespace Interface
             return &curItemPos.second;
         }
 
-        s32 GetSelectedIndex()
+        int32_t GetSelectedIndex()
         {
             return std::distance( ItemsBar<Item>::GetBeginItemIter(), GetCurItemIter() );
         }
@@ -391,7 +395,7 @@ namespace Interface
 
         bool QueueEventProcessing( ItemsActionBar<Item> & other )
         {
-            LocalEvent & le = LocalEvent::Get();
+            const LocalEvent & le = LocalEvent::Get();
             const fheroes2::Point & cursor = le.GetMouseCursor();
 
             if ( ItemsBar<Item>::isItemsEmpty() && other.isItemsEmpty() )
@@ -403,6 +407,12 @@ namespace Interface
         }
 
     protected:
+        using ItemsIterator = typename ItemsBar<Item>::ItemsIterator;
+        using ItemIterPos = typename ItemsBar<Item>::ItemIterPos;
+
+        ItemsIterator topItem;
+        ItemIterPos curItemPos;
+
         ItemsIterator GetTopItemIter() override
         {
             return topItem;

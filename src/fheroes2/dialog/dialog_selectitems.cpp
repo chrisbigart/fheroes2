@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -27,37 +28,45 @@
 #include "dialog.h"
 #include "icn.h"
 #include "interface_list.h"
-#include "text.h"
+#include "settings.h"
+#include "translations.h"
+#include "ui_text.h"
 
 class SelectEnum : public Interface::ListBox<int>
 {
 public:
+    using Interface::ListBox<int>::ActionListDoubleClick;
+    using Interface::ListBox<int>::ActionListSingleClick;
+    using Interface::ListBox<int>::ActionListPressRight;
+
     explicit SelectEnum( const fheroes2::Rect & rt )
         : Interface::ListBox<int>( rt.getPosition() )
         , area( rt )
         , ok( false )
     {
-        RedrawBackground( rt.getPosition() );
-        SetScrollButtonUp( ICN::LISTBOX, 3, 4, fheroes2::Point( rt.x + rt.width - 24, rt.y + 25 ) );
-        SetScrollButtonDn( ICN::LISTBOX, 5, 6, fheroes2::Point( rt.x + rt.width - 24, rt.y + rt.height - 55 ) );
+        SelectEnum::RedrawBackground( rt.getPosition() );
 
-        SetScrollBar( fheroes2::AGG::GetICN( ICN::LISTBOX, 10 ), fheroes2::Rect( rt.x + rt.width - 20, rt.y + 48, 14, rt.height - 107 ) );
+        SetScrollButtonUp( ICN::LISTBOX, 3, 4, { rt.x + rt.width - 25, rt.y + 25 } );
+        SetScrollButtonDn( ICN::LISTBOX, 5, 6, { rt.x + rt.width - 25, rt.y + rt.height - 55 } );
+
+        setScrollBarArea( { rt.x + rt.width - 21, rt.y + 48, 14, rt.height - 107 } );
+        setScrollBarImage( fheroes2::AGG::GetICN( ICN::LISTBOX, 10 ) );
         SetAreaMaxItems( 5 );
-        SetAreaItems( fheroes2::Rect( rt.x + 10, rt.y + 30, rt.width - 30, rt.height - 70 ) );
+        SetAreaItems( { rt.x + 10, rt.y + 30, rt.width - 30, rt.height - 70 } );
     }
 
     void RedrawBackground( const fheroes2::Point & dst ) override
     {
-        Dialog::FrameBorder::RenderOther( fheroes2::AGG::GetICN( ICN::CELLWIN, 1 ), fheroes2::Rect( dst.x, dst.y + 25, rtAreaItems.width + 5, rtAreaItems.height + 10 ) );
+        Dialog::FrameBorder::RenderOther( fheroes2::AGG::GetICN( ICN::CELLWIN, 1 ), { dst.x, dst.y + 25, rtAreaItems.width + 5, rtAreaItems.height + 11 } );
 
         // scroll
         fheroes2::Display & display = fheroes2::Display::instance();
-        fheroes2::Blit( fheroes2::AGG::GetICN( ICN::LISTBOX, 7 ), display, dst.x + area.width - 24, dst.y + 45 );
+        fheroes2::Blit( fheroes2::AGG::GetICN( ICN::LISTBOX, 7 ), display, dst.x + area.width - 25, dst.y + 45 );
 
-        for ( u32 ii = 1; ii < 9; ++ii )
-            fheroes2::Blit( fheroes2::AGG::GetICN( ICN::LISTBOX, 8 ), display, dst.x + area.width - 24, dst.y + 44 + ( ii * 19 ) );
+        for ( int32_t i = 1; i < 9; ++i )
+            fheroes2::Blit( fheroes2::AGG::GetICN( ICN::LISTBOX, 8 ), display, dst.x + area.width - 25, dst.y + 44 + ( i * 19 ) );
 
-        fheroes2::Blit( fheroes2::AGG::GetICN( ICN::LISTBOX, 9 ), display, dst.x + area.width - 24, dst.y + area.height - 74 );
+        fheroes2::Blit( fheroes2::AGG::GetICN( ICN::LISTBOX, 9 ), display, dst.x + area.width - 25, dst.y + area.height - 74 );
     }
 
     void ActionListDoubleClick( int & /*index*/ ) override
@@ -65,11 +74,30 @@ public:
         ok = true;
     }
 
-    void RedrawItem( const int &, s32, s32, bool ) override {}
-    void ActionCurrentUp( void ) override {}
-    void ActionCurrentDn( void ) override {}
-    void ActionListSingleClick( int & ) override {}
-    void ActionListPressRight( int & ) override {}
+    void RedrawItem( const int & /* unused */, int32_t /* ox */, int32_t /* oy */, bool /* current */ ) override
+    {
+        // Do nothing.
+    }
+
+    void ActionCurrentUp() override
+    {
+        // Do nothing.
+    }
+
+    void ActionCurrentDn() override
+    {
+        // Do nothing.
+    }
+
+    void ActionListSingleClick( int & ) override
+    {
+        // Do nothing.
+    }
+
+    void ActionListPressRight( int & ) override
+    {
+        // Do nothing.
+    }
 
     fheroes2::Rect area;
     bool ok;
@@ -78,23 +106,29 @@ public:
 class SelectEnumMonster : public SelectEnum
 {
 public:
-    explicit SelectEnumMonster( const fheroes2::Rect & rt )
-        : SelectEnum( rt )
-    {}
+    using SelectEnum::SelectEnum;
 
-    void RedrawItem( const int & index, s32 dstx, s32 dsty, bool current ) override
+    using SelectEnum::ActionListPressRight;
+
+    void RedrawItem( const int & index, int32_t dstx, int32_t dsty, bool current ) override
     {
         Monster mons( index );
         fheroes2::Blit( fheroes2::AGG::GetICN( ICN::MONS32, mons.GetSpriteIndex() ), fheroes2::Display::instance(), dstx + 5, dsty + 3 );
 
-        Text text( mons.GetName(), ( current ? Font::YELLOW_BIG : Font::BIG ) );
-        text.Blit( dstx + 50, dsty + 10 );
+        if ( current ) {
+            fheroes2::Text text( mons.GetName(), fheroes2::FontType::normalYellow() );
+            text.draw( dstx + 50, dsty + 10, fheroes2::Display::instance() );
+        }
+        else {
+            fheroes2::Text text( mons.GetName(), fheroes2::FontType() );
+            text.draw( dstx + 50, dsty + 10, fheroes2::Display::instance() );
+        }
     }
 
     void RedrawBackground( const fheroes2::Point & dst ) override
     {
-        Text text( "Select Monster:", Font::YELLOW_BIG );
-        text.Blit( dst.x + ( area.width - text.w() ) / 2, dst.y );
+        fheroes2::Text text( _( "Select Monster:" ), fheroes2::FontType::normalYellow() );
+        text.draw( dst.x + ( area.width - text.width() ) / 2, dst.y, fheroes2::Display::instance() );
 
         SelectEnum::RedrawBackground( dst );
     }
@@ -115,21 +149,27 @@ public:
         SetAreaMaxItems( 6 );
     }
 
-    void RedrawItem( const int & index, s32 dstx, s32 dsty, bool current ) override
+    void RedrawItem( const int & index, int32_t dstx, int32_t dsty, bool current ) override
     {
         const fheroes2::Sprite & port = Heroes::GetPortrait( index, PORT_SMALL );
 
         if ( !port.empty() )
             fheroes2::Blit( port, fheroes2::Display::instance(), dstx + 5, dsty + 3 );
 
-        Text text( Heroes::GetName( index ), ( current ? Font::YELLOW_BIG : Font::BIG ) );
-        text.Blit( dstx + 50, dsty + 5 );
+        if ( current ) {
+            fheroes2::Text text( Heroes::GetName( index ), fheroes2::FontType::normalYellow() );
+            text.draw( dstx + 50, dsty + 5, fheroes2::Display::instance() );
+        }
+        else {
+            fheroes2::Text text( Heroes::GetName( index ), fheroes2::FontType() );
+            text.draw( dstx + 50, dsty + 5, fheroes2::Display::instance() );
+        }
     }
 
     void RedrawBackground( const fheroes2::Point & dst ) override
     {
-        Text text( "Select Hero:", Font::YELLOW_BIG );
-        text.Blit( dst.x + ( area.width - text.w() ) / 2, dst.y );
+        fheroes2::Text text( _( "Select Hero:" ), fheroes2::FontType::normalYellow() );
+        text.draw( dst.x + ( area.width - text.width() ) / 2, dst.y, fheroes2::Display::instance() );
 
         SelectEnum::RedrawBackground( dst );
     }
@@ -138,23 +178,31 @@ public:
 class SelectEnumArtifact : public SelectEnum
 {
 public:
-    explicit SelectEnumArtifact( const fheroes2::Rect & rt )
-        : SelectEnum( rt )
-    {}
+    using SelectEnum::SelectEnum;
 
-    void RedrawItem( const int & index, s32 dstx, s32 dsty, bool current ) override
+    void RedrawItem( const int & index, int32_t dstx, int32_t dsty, bool current ) override
     {
-        Artifact art( index );
-        fheroes2::Blit( fheroes2::AGG::GetICN( ICN::ARTFX, art.IndexSprite32() ), fheroes2::Display::instance(), dstx + 5, dsty + 3 );
+        fheroes2::Display & display = fheroes2::Display::instance();
 
-        Text text( art.GetName(), ( current ? Font::YELLOW_BIG : Font::BIG ) );
-        text.Blit( dstx + 50, dsty + 10 );
+        const Artifact art( index );
+
+        const fheroes2::Sprite & artifactSprite = fheroes2::AGG::GetICN( ICN::ARTFX, art.IndexSprite32() );
+        fheroes2::Blit( artifactSprite, display, dstx + 5, dsty + 3 );
+
+        if ( current ) {
+            fheroes2::Text text( art.GetName(), fheroes2::FontType::normalYellow() );
+            text.draw( dstx + 50, dsty + 10, display );
+        }
+        else {
+            fheroes2::Text text( art.GetName(), fheroes2::FontType() );
+            text.draw( dstx + 50, dsty + 10, display );
+        }
     }
 
     void RedrawBackground( const fheroes2::Point & dst ) override
     {
-        Text text( "Select Artifact:", Font::YELLOW_BIG );
-        text.Blit( dst.x + ( area.width - text.w() ) / 2, dst.y );
+        fheroes2::Text text( _( "Select Artifact:" ), fheroes2::FontType::normalYellow() );
+        text.draw( dst.x + ( area.width - text.width() ) / 2, dst.y, fheroes2::Display::instance() );
 
         SelectEnum::RedrawBackground( dst );
     }
@@ -169,19 +217,25 @@ public:
         SetAreaMaxItems( 4 );
     }
 
-    void RedrawItem( const int & index, s32 dstx, s32 dsty, bool current ) override
+    void RedrawItem( const int & index, int32_t dstx, int32_t dsty, bool current ) override
     {
         Spell spell( index );
         fheroes2::Blit( fheroes2::AGG::GetICN( ICN::SPELLS, spell.IndexSprite() ), fheroes2::Display::instance(), dstx + 5, dsty + 3 );
 
-        Text text( spell.GetName(), ( current ? Font::YELLOW_BIG : Font::BIG ) );
-        text.Blit( dstx + 80, dsty + 10 );
+        if ( current ) {
+            fheroes2::Text text( spell.GetName(), fheroes2::FontType::normalYellow() );
+            text.draw( dstx + 80, dsty + 10, fheroes2::Display::instance() );
+        }
+        else {
+            fheroes2::Text text( spell.GetName(), fheroes2::FontType() );
+            text.draw( dstx + 80, dsty + 10, fheroes2::Display::instance() );
+        }
     }
 
     void RedrawBackground( const fheroes2::Point & dst ) override
     {
-        Text text( "Select Spell:", Font::YELLOW_BIG );
-        text.Blit( dst.x + ( area.width - text.w() ) / 2, dst.y );
+        fheroes2::Text text( _( "Select Spell:" ), fheroes2::FontType::normalYellow() );
+        text.draw( dst.x + ( area.width - text.width() ) / 2, dst.y, fheroes2::Display::instance() );
 
         SelectEnum::RedrawBackground( dst );
     }
@@ -196,25 +250,32 @@ public:
         SetAreaMaxItems( 5 );
     }
 
-    void RedrawItem( const int & index, s32 dstx, s32 dsty, bool current ) override
+    void RedrawItem( const int & index, int32_t dstx, int32_t dsty, bool current ) override
     {
         Skill::Secondary skill( 1 + index / 3, 1 + ( index % 3 ) );
         fheroes2::Blit( fheroes2::AGG::GetICN( ICN::MINISS, skill.GetIndexSprite2() ), fheroes2::Display::instance(), dstx + 5, dsty + 3 );
         std::string str = skill.GetName();
-        Text text( str, ( current ? Font::YELLOW_BIG : Font::BIG ) );
-        text.Blit( dstx + 50, dsty + 10 );
+
+        if ( current ) {
+            fheroes2::Text text( str, fheroes2::FontType::normalYellow() );
+            text.draw( dstx + 50, dsty + 10, fheroes2::Display::instance() );
+        }
+        else {
+            fheroes2::Text text( str, fheroes2::FontType() );
+            text.draw( dstx + 50, dsty + 10, fheroes2::Display::instance() );
+        }
     }
 
     void RedrawBackground( const fheroes2::Point & dst ) override
     {
-        Text text( "Select Skill:", Font::YELLOW_BIG );
-        text.Blit( dst.x + ( area.width - text.w() ) / 2, dst.y );
+        fheroes2::Text text( _( "Select Skill:" ), fheroes2::FontType::normalYellow() );
+        text.draw( dst.x + ( area.width - text.width() ) / 2, dst.y, fheroes2::Display::instance() );
 
         SelectEnum::RedrawBackground( dst );
     }
 };
 
-Skill::Secondary Dialog::SelectSecondarySkill( void )
+Skill::Secondary Dialog::SelectSecondarySkill()
 {
     fheroes2::Display & display = fheroes2::Display::instance();
     LocalEvent & le = LocalEvent::Get();
@@ -227,7 +288,7 @@ Skill::Secondary Dialog::SelectSecondarySkill( void )
     for ( int i = 0; i < MAXSECONDARYSKILL * 3; ++i )
         skills[i] = i;
 
-    Dialog::FrameBorder frameborder( fheroes2::Size( 310, 280 ), fheroes2::AGG::GetICN( ICN::TEXTBAK2, 0 ) );
+    Dialog::FrameBorder frameborder( { 310, 280 }, fheroes2::AGG::GetICN( ICN::TEXTBAK2, 0 ) );
     const fheroes2::Rect & area = frameborder.GetArea();
 
     SelectEnumSecSkill listbox( area );
@@ -272,12 +333,12 @@ Spell Dialog::SelectSpell( int cur )
     // setup cursor
     const CursorRestorer cursorRestorer( true, Cursor::POINTER );
 
-    std::vector<int> spells( static_cast<int>( Spell::STONE - 1 ), Spell::NONE );
+    std::vector<int> spells( static_cast<int>( Spell::RANDOM - 1 ), Spell::NONE );
 
     for ( size_t i = 0; i < spells.size(); ++i )
         spells[i] = static_cast<int>( i + 1 ); // safe to do this as the number of spells can't be more than 2 billion
 
-    Dialog::FrameBorder frameborder( fheroes2::Size( 340, 280 ), fheroes2::AGG::GetICN( ICN::TEXTBAK2, 0 ) );
+    Dialog::FrameBorder frameborder( { 340, 280 }, fheroes2::AGG::GetICN( ICN::TEXTBAK2, 0 ) );
     const fheroes2::Rect & area = frameborder.GetArea();
 
     SelectEnumSpell listbox( area );
@@ -321,7 +382,7 @@ Artifact Dialog::SelectArtifact( int cur )
     for ( size_t i = 0; i < artifacts.size(); ++i )
         artifacts[i] = static_cast<int>( i ); // safe to do this as the number of artifacts can't be more than 2 billion
 
-    Dialog::FrameBorder frameborder( fheroes2::Size( 370, 280 ), fheroes2::AGG::GetICN( ICN::TEXTBAK2, 0 ) );
+    Dialog::FrameBorder frameborder( { 370, 280 }, fheroes2::AGG::GetICN( ICN::TEXTBAK2, 0 ) );
     const fheroes2::Rect & area = frameborder.GetArea();
 
     SelectEnumArtifact listbox( area );
@@ -365,7 +426,7 @@ Monster Dialog::SelectMonster( int id )
     for ( size_t i = 0; i < monsters.size(); ++i )
         monsters[i] = static_cast<int>( i + 1 ); // skip Monser::UNKNOWN, safe to do this as the monsters of spells can't be more than 2 billion
 
-    Dialog::FrameBorder frameborder( fheroes2::Size( 260, 280 ), fheroes2::AGG::GetICN( ICN::TEXTBAK2, 0 ) );
+    Dialog::FrameBorder frameborder( { 260, 280 }, fheroes2::AGG::GetICN( ICN::TEXTBAK2, 0 ) );
     const fheroes2::Rect & area = frameborder.GetArea();
 
     SelectEnumMonster listbox( area );
@@ -409,7 +470,7 @@ int Dialog::SelectHeroes( int cur )
     for ( size_t i = 0; i < heroes.size(); ++i )
         heroes[i] = static_cast<int>( i ); // safe to do this as the heroes of spells can't be more than 2 billion
 
-    Dialog::FrameBorder frameborder( fheroes2::Size( 240, 280 ), fheroes2::AGG::GetICN( ICN::TEXTBAK2, 0 ) );
+    Dialog::FrameBorder frameborder( { 240, 280 }, fheroes2::AGG::GetICN( ICN::TEXTBAK2, 0 ) );
     const fheroes2::Rect & area = frameborder.GetArea();
 
     SelectEnumHeroes listbox( area );

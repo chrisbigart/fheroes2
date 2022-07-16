@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -25,14 +26,19 @@
 #include "army_troop.h"
 #include "cursor.h"
 #include "dialog.h"
-#include "game.h"
 #include "heroes.h"
 #include "heroes_indicator.h"
 #include "icn.h"
 #include "text.h"
+#include "translations.h"
 #include "ui_button.h"
 #include "ui_window.h"
 #include "world.h"
+
+namespace
+{
+    const uint32_t maximumTroopCount = 65535;
+}
 
 class ArmyCell : public fheroes2::Rect
 {
@@ -226,11 +232,11 @@ bool Dialog::SetGuardian( Heroes & hero, Troop & troop, CapturedObject & co, boo
 
                 if ( troop1 ) {
                     // combine
-                    if ( troop() == troop1->GetID() ) {
+                    if ( troop.GetMonster() == troop1->GetID() ) {
                         troop1->SetCount( troop.GetCount() + troop1->GetCount() );
                         troop.Reset();
                     }
-                    else if ( troop1->GetCount() >= MAXU16 )
+                    else if ( troop1->GetCount() >= maximumTroopCount )
                         Dialog::Message( "", _( "Your army too big!" ), Font::BIG, Dialog::OK );
                     // swap
                     else {
@@ -264,17 +270,17 @@ bool Dialog::SetGuardian( Heroes & hero, Troop & troop, CapturedObject & co, boo
 
                 if ( troop1 ) {
                     // combine
-                    if ( troop() == troop1->GetID() ) {
-                        if ( troop1->GetCount() + troop.GetCount() < MAXU16 ) {
+                    if ( troop.GetMonster() == troop1->GetID() ) {
+                        if ( troop1->GetCount() + troop.GetCount() < maximumTroopCount ) {
                             troop.SetCount( troop1->GetCount() + troop.GetCount() );
                             troop1->Reset();
                         }
                         else {
-                            troop1->SetCount( troop1->GetCount() + troop.GetCount() - MAXU16 );
-                            troop.SetCount( MAXU16 );
+                            troop1->SetCount( troop1->GetCount() + troop.GetCount() - maximumTroopCount );
+                            troop.SetCount( maximumTroopCount );
                         }
                     }
-                    else if ( troop1->GetCount() >= MAXU16 )
+                    else if ( troop1->GetCount() >= maximumTroopCount )
                         Dialog::Message( "", _( "Your army too big!" ), Font::BIG, Dialog::OK );
                     // swap
                     else {
@@ -316,5 +322,5 @@ bool Dialog::SetGuardian( Heroes & hero, Troop & troop, CapturedObject & co, boo
         display.render();
     }
 
-    return shadow() != troop() || shadow.GetCount() != troop.GetCount();
+    return shadow.GetMonster() != troop.GetMonster() || shadow.GetCount() != troop.GetCount();
 }

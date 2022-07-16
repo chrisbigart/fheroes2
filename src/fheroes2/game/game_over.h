@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -26,43 +27,48 @@
 #include <string>
 
 #include "game_mode.h"
-#include "serialize.h"
+
+class StreamBase;
 
 namespace GameOver
 {
-    enum conditions_t
+    enum conditions_t : uint32_t
     {
-        COND_NONE = 0x0000,
+        COND_NONE = 0x00000000,
 
-        WINS_ALL = 0x0001,
-        WINS_TOWN = 0x0002,
-        WINS_HERO = 0x0004,
-        WINS_ARTIFACT = 0x0008,
-        WINS_SIDE = 0x0010,
-        WINS_GOLD = 0x0020,
+        WINS_ALL = 0x00000001,
+        WINS_TOWN = 0x00000002,
+        WINS_HERO = 0x00000004,
+        WINS_ARTIFACT = 0x00000008,
+        WINS_SIDE = 0x00000010,
+        WINS_GOLD = 0x00000020,
+
         WINS = WINS_ALL | WINS_TOWN | WINS_HERO | WINS_ARTIFACT | WINS_SIDE | WINS_GOLD,
 
-        LOSS_ALL = 0x0100,
-        LOSS_TOWN = 0x0200,
-        LOSS_HERO = 0x0400,
-        LOSS_TIME = 0x0800,
-        LOSS_STARTHERO = 0x1000,
-        LOSS = LOSS_ALL | LOSS_TOWN | LOSS_HERO | LOSS_TIME | LOSS_STARTHERO
+        LOSS_ALL = 0x00000100,
+        LOSS_TOWN = 0x00000200,
+        LOSS_HERO = 0x00000400,
+        LOSS_TIME = 0x00000800,
+        // These loss conditions apply if the enemy player won because of the corresponding win condition
+        LOSS_ENEMY_WINS_TOWN = 0x00010000,
+        LOSS_ENEMY_WINS_GOLD = 0x00020000,
+
+        LOSS = LOSS_ALL | LOSS_TOWN | LOSS_HERO | LOSS_TIME | LOSS_ENEMY_WINS_TOWN | LOSS_ENEMY_WINS_GOLD,
+        LOSS_ENEMY_WINS = LOSS_ENEMY_WINS_TOWN | LOSS_ENEMY_WINS_GOLD
     };
 
-    const char * GetString( int );
-    std::string GetActualDescription( int );
-    void DialogWins( int );
-    void DialogLoss( int );
+    const char * GetString( uint32_t cond );
+    std::string GetActualDescription( uint32_t cond );
 
     class Result
     {
     public:
-        static Result & Get( void );
+        static Result & Get();
 
-        void Reset( void );
-        void SetResult( int );
-        int GetResult( void ) const;
+        void Reset(); // Resets everything
+        void ResetResult(); // Resets just the result
+
+        uint32_t GetResult() const;
         fheroes2::GameMode LocalCheckGameOver();
 
     private:
@@ -72,8 +78,8 @@ namespace GameOver
         Result();
 
         int colors;
-        int result;
-        bool continue_game;
+        uint32_t result;
+        bool continueAfterVictory;
     };
 
     StreamBase & operator<<( StreamBase &, const Result & );

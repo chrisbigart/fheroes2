@@ -1,8 +1,6 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
- *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2022                                                    *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,87 +19,83 @@
  ***************************************************************************/
 
 #include "thread.h"
-#include "system.h"
 
-using namespace SDL;
+#include <cassert>
+#include <memory>
 
-Thread::Thread()
-    : thread( nullptr )
-{}
-
-Thread::~Thread()
+namespace MultiThreading
 {
-    Kill();
-}
+    void AsyncManager::createWorker()
+    {
+        if ( !_worker ) {
+            _runFlag = true;
+            _worker = std::make_unique<std::thread>( AsyncManager::_workerThread, this );
 
-Thread::Thread( const Thread & )
-    : thread( nullptr )
-{}
+            {
+                std::unique_lock<std::mutex> lock( _mutex );
 
-Thread & Thread::operator=( const Thread & )
-{
-    return *this;
-}
-
-void Thread::Create( int ( *fn )( void * ), void * param )
-{
-#if SDL_VERSION_ATLEAST( 2, 0, 0 )
-    thread = SDL_CreateThread( fn, "", param );
-#else
-    thread = SDL_CreateThread( fn, param );
-#endif
-}
-
-int Thread::Wait( void )
-{
-    int status = 0;
-    if ( thread )
-        SDL_WaitThread( thread, &status );
-    thread = nullptr;
-    return status;
-}
-
-void Thread::Kill( void )
-{
-#if SDL_VERSION_ATLEAST( 2, 0, 0 )
-#else
-    if ( thread )
-        SDL_KillThread( thread );
-    thread = nullptr;
-#endif
-}
-
-bool Thread::IsRun( void ) const
-{
-    return GetID() != 0;
-}
-
-u32 Thread::GetID( void ) const
-{
-    return thread ? SDL_GetThreadID( thread ) : 0;
-}
-
-Timer::Timer()
-    : id( 0 )
-{}
-
-void Timer::Run( u32 interval, u32 ( *fn )( u32, void * ), void * param )
-{
-    if ( id )
-        Remove();
-
-    id = SDL_AddTimer( interval, fn, param );
-}
-
-void Timer::Remove( void )
-{
-    if ( id ) {
-        SDL_RemoveTimer( id );
-        id = 0;
+                _masterNotification.wait( lock, [this] { return !_runFlag; } );
+            }
+        }
     }
-}
 
-bool Timer::IsValid( void ) const
-{
-    return id != 0;
+    void AsyncManager::stopWorker()
+    {
+        if ( _worker ) {
+            {
+                std::scoped_lock<std::mutex> lock( _mutex );
+
+                _exitFlag = true;
+                _runFlag = true;
+            }
+
+            _workerNotification.notify_all();
+
+            _worker->join();
+            _worker.reset();
+        }
+    }
+
+    void AsyncManager::notifyWorker()
+    {
+        _runFlag = true;
+
+        _workerNotification.notify_all();
+    }
+
+    void AsyncManager::_workerThread( AsyncManager * manager )
+    {
+        assert( manager != nullptr );
+
+        {
+            std::scoped_lock<std::mutex> lock( manager->_mutex );
+
+            manager->_runFlag = false;
+        }
+
+        manager->_masterNotification.notify_one();
+
+        while ( !manager->_exitFlag ) {
+            {
+                std::unique_lock<std::mutex> lock( manager->_mutex );
+
+                manager->_workerNotification.wait( lock, [manager] { return manager->_runFlag; } );
+            }
+
+            if ( manager->_exitFlag ) {
+                break;
+            }
+
+            {
+                std::scoped_lock<std::mutex> lock( manager->_mutex );
+
+                const bool moreTasks = manager->prepareTask();
+                if ( !moreTasks ) {
+                    manager->_runFlag = false;
+                }
+            }
+
+            manager->executeTask();
+        }
+    }
 }

@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -30,22 +31,36 @@ class UltimateArtifact : public Artifact
 public:
     UltimateArtifact();
 
-    bool isPosition( s32 ) const;
-    bool isFound( void ) const;
-    void SetFound( bool );
-    void Set( s32, const Artifact & );
-    void Reset( void );
+    bool isPosition( const int32_t position ) const;
+
+    int32_t getPosition() const
+    {
+        return _index;
+    }
+
+    bool isFound() const
+    {
+        return _isFound;
+    }
+
+    void markAsFound()
+    {
+        _isFound = true;
+    }
+
+    void Set( const int32_t position, const Artifact & );
+    void Reset();
 
     fheroes2::Image GetPuzzleMapSurface() const;
-    const Artifact & GetArtifact( void ) const;
+    const Artifact & GetArtifact() const;
 
 private:
     friend StreamBase & operator<<( StreamBase &, const UltimateArtifact & );
     friend StreamBase & operator>>( StreamBase &, UltimateArtifact & );
 
-    fheroes2::Image puzzlemap;
-    s32 index;
-    bool isfound;
+    fheroes2::Point _offset;
+    int32_t _index;
+    bool _isFound;
 };
 
 StreamBase & operator<<( StreamBase &, const UltimateArtifact & );

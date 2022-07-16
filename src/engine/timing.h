@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2021                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2021 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -25,6 +25,9 @@
 
 namespace fheroes2
 {
+    // IMPORTANT!!! According to https://en.cppreference.com/w/cpp/chrono/high_resolution_clock we should never use high_resolution_clock for time internal measurements
+    // because for high_resolution_clock the time may go backwards.
+
     class Time
     {
     public:
@@ -35,7 +38,7 @@ namespace fheroes2
         uint64_t getMs() const; // returns rounded time in milliseconds
 
     private:
-        std::chrono::time_point<std::chrono::high_resolution_clock> _startTime;
+        std::chrono::time_point<std::chrono::steady_clock> _startTime;
     };
 
     class TimeDelay
@@ -47,6 +50,11 @@ namespace fheroes2
 
         void setDelay( const uint64_t delayMs );
 
+        uint64_t getDelay() const
+        {
+            return _delayMs;
+        }
+
         bool isPassed() const;
         bool isPassed( const uint64_t delayMs ) const;
 
@@ -57,7 +65,7 @@ namespace fheroes2
         void pass();
 
     private:
-        std::chrono::time_point<std::chrono::high_resolution_clock> _prevTime;
+        std::chrono::time_point<std::chrono::steady_clock> _prevTime;
         uint64_t _delayMs;
     };
 

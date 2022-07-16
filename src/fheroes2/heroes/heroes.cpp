@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,115 +22,152 @@
  ***************************************************************************/
 
 #include <algorithm>
+#include <array>
+#include <cassert>
 #include <cmath>
 #include <functional>
 
-#include "agg.h"
 #include "agg_image.h"
 #include "ai.h"
 #include "artifact.h"
+#include "audio_manager.h"
 #include "battle.h"
 #include "castle.h"
-#include "cursor.h"
+#include "dialog.h"
 #include "difficulty.h"
 #include "direction.h"
 #include "game.h"
-#include "game_interface.h"
 #include "game_static.h"
 #include "ground.h"
 #include "heroes.h"
 #include "icn.h"
+#include "interface_icons.h"
 #include "kingdom.h"
 #include "logging.h"
 #include "luck.h"
+#include "maps_objects.h"
 #include "monster.h"
 #include "morale.h"
 #include "mp2.h"
 #include "payment.h"
-#include "profit.h"
 #include "race.h"
+#include "save_format_version.h"
+#include "serialize.h"
+#include "settings.h"
 #include "speed.h"
 #include "text.h"
+#include "tools.h"
+#include "translations.h"
+#include "ui_dialog.h"
+#include "ui_text.h"
 #include "world.h"
 
 namespace
 {
-    template <class T>
-    void hashCombine( std::size_t & seed, const T & v )
+    const size_t maxHeroCount = 71;
+
+    int ObjectVisitedModifiersResult( const std::vector<MP2::MapObjectType> & objectTypes, const Heroes & hero, std::string * strs )
     {
-        std::hash<T> hasher;
-        seed ^= hasher( v ) + 0x9e3779b9 + ( seed << 6 ) + ( seed >> 2 );
+        int result = 0;
+
+        for ( const MP2::MapObjectType objectType : objectTypes ) {
+            if ( hero.isObjectTypeVisited( objectType ) ) {
+                result += GameStatic::ObjectVisitedModifiers( objectType );
+
+                if ( strs ) {
+                    switch ( objectType ) {
+                    case MP2::OBJ_GRAVEYARD:
+                    case MP2::OBJN_GRAVEYARD:
+                    case MP2::OBJ_SHIPWRECK:
+                    case MP2::OBJN_SHIPWRECK:
+                    case MP2::OBJ_DERELICTSHIP:
+                    case MP2::OBJN_DERELICTSHIP: {
+                        std::string modRobber = _( "%{object} robber" );
+                        StringReplace( modRobber, "%{object}", MP2::StringObject( objectType ) );
+                        strs->append( modRobber );
+                        break;
+                    }
+                    case MP2::OBJ_PYRAMID:
+                    case MP2::OBJN_PYRAMID: {
+                        std::string modRaided = _( "%{object} raided" );
+                        StringReplace( modRaided, "%{object}", MP2::StringObject( objectType ) );
+                        strs->append( modRaided );
+                        break;
+                    }
+                    default:
+                        strs->append( MP2::StringObject( objectType ) );
+                        break;
+                    }
+
+                    StringAppendModifiers( *strs, GameStatic::ObjectVisitedModifiers( objectType ) );
+                    strs->append( "\n" );
+                }
+            }
+        }
+
+        return result;
+    }
+
+    std::string GetHeroRoleString( const Heroes & hero )
+    {
+        switch ( hero.getAIRole() ) {
+        case Heroes::Role::SCOUT:
+            return "Scout";
+        case Heroes::Role::COURIER:
+            return "Courier";
+        case Heroes::Role::HUNTER:
+            return "Hunter";
+        case Heroes::Role::FIGHTER:
+            return "Fighter";
+        case Heroes::Role::CHAMPION:
+            return "Champion";
+        default:
+            // Did you add a new AI hero role? Add the appropriate logic for it!
+            assert( 0 );
+            break;
+        }
+
+        return "Unknown";
     }
 }
 
-const char * Heroes::GetName( int id )
+const char * Heroes::GetName( int heroid )
 {
-    const char * names[]
+    assert( heroid >= 0 && heroid <= UNKNOWN );
+
+    const std::array<const char *, UNKNOWN + 1> names
         = { // knight
-            _( "Lord Kilburn" ), _( "Sir Gallant" ), _( "Ector" ), _( "Gwenneth" ), _( "Tyro" ), _( "Ambrose" ), _( "Ruby" ), _( "Maximus" ), _( "Dimitry" ),
+            gettext_noop( "Lord Kilburn" ), gettext_noop( "Sir Gallant" ), gettext_noop( "Ector" ), gettext_noop( "Gwenneth" ), gettext_noop( "Tyro" ),
+            gettext_noop( "Ambrose" ), gettext_noop( "Ruby" ), gettext_noop( "Maximus" ), gettext_noop( "Dimitry" ),
             // barbarian
-            _( "Thundax" ), _( "Fineous" ), _( "Jojosh" ), _( "Crag Hack" ), _( "Jezebel" ), _( "Jaclyn" ), _( "Ergon" ), _( "Tsabu" ), _( "Atlas" ),
+            gettext_noop( "Thundax" ), gettext_noop( "Fineous" ), gettext_noop( "Jojosh" ), gettext_noop( "Crag Hack" ), gettext_noop( "Jezebel" ),
+            gettext_noop( "Jaclyn" ), gettext_noop( "Ergon" ), gettext_noop( "Tsabu" ), gettext_noop( "Atlas" ),
             // sorceress
-            _( "Astra" ), _( "Natasha" ), _( "Troyan" ), _( "Vatawna" ), _( "Rebecca" ), _( "Gem" ), _( "Ariel" ), _( "Carlawn" ), _( "Luna" ),
+            gettext_noop( "Astra" ), gettext_noop( "Natasha" ), gettext_noop( "Troyan" ), gettext_noop( "Vatawna" ), gettext_noop( "Rebecca" ), gettext_noop( "Gem" ),
+            gettext_noop( "Ariel" ), gettext_noop( "Carlawn" ), gettext_noop( "Luna" ),
             // warlock
-            _( "Arie" ), _( "Alamar" ), _( "Vesper" ), _( "Crodo" ), _( "Barok" ), _( "Kastore" ), _( "Agar" ), _( "Falagar" ), _( "Wrathmont" ),
+            gettext_noop( "Arie" ), gettext_noop( "Alamar" ), gettext_noop( "Vesper" ), gettext_noop( "Crodo" ), gettext_noop( "Barok" ), gettext_noop( "Kastore" ),
+            gettext_noop( "Agar" ), gettext_noop( "Falagar" ), gettext_noop( "Wrathmont" ),
             // wizard
-            _( "Myra" ), _( "Flint" ), _( "Dawn" ), _( "Halon" ), _( "Myrini" ), _( "Wilfrey" ), _( "Sarakin" ), _( "Kalindra" ), _( "Mandigal" ),
+            gettext_noop( "Myra" ), gettext_noop( "Flint" ), gettext_noop( "Dawn" ), gettext_noop( "Halon" ), gettext_noop( "Myrini" ), gettext_noop( "Wilfrey" ),
+            gettext_noop( "Sarakin" ), gettext_noop( "Kalindra" ), gettext_noop( "Mandigal" ),
             // necromant
-            _( "Zom" ), _( "Darlana" ), _( "Zam" ), _( "Ranloo" ), _( "Charity" ), _( "Rialdo" ), _( "Roxana" ), _( "Sandro" ), _( "Celia" ),
+            gettext_noop( "Zom" ), gettext_noop( "Darlana" ), gettext_noop( "Zam" ), gettext_noop( "Ranloo" ), gettext_noop( "Charity" ), gettext_noop( "Rialdo" ),
+            gettext_noop( "Roxana" ), gettext_noop( "Sandro" ), gettext_noop( "Celia" ),
             // campains
-            _( "Roland" ), _( "Lord Corlagon" ), _( "Sister Eliza" ), _( "Archibald" ), _( "Lord Halton" ), _( "Brother Brax" ),
+            gettext_noop( "Roland" ), gettext_noop( "Lord Corlagon" ), gettext_noop( "Sister Eliza" ), gettext_noop( "Archibald" ), gettext_noop( "Lord Halton" ),
+            gettext_noop( "Brother Brax" ),
             // loyalty version
-            _( "Solmyr" ), _( "Dainwin" ), _( "Mog" ), _( "Uncle Ivan" ), _( "Joseph" ), _( "Gallavant" ), _( "Elderian" ), _( "Ceallach" ), _( "Drakonia" ),
-            _( "Martine" ), _( "Jarkonas" ),
+            gettext_noop( "Solmyr" ), gettext_noop( "Dainwin" ), gettext_noop( "Mog" ), gettext_noop( "Uncle Ivan" ), gettext_noop( "Joseph" ),
+            gettext_noop( "Gallavant" ), _( "Elderian" ), gettext_noop( "Ceallach" ), gettext_noop( "Drakonia" ), gettext_noop( "Martine" ), gettext_noop( "Jarkonas" ),
             // debug
             "Debug Hero", "Unknown" };
 
-    return names[id];
-}
-
-int ObjectVisitedModifiersResult( int /*type*/, const u8 * objs, u32 size, const Heroes & hero, std::string * strs )
-{
-    int result = 0;
-
-    for ( u32 ii = 0; ii < size; ++ii ) {
-        if ( hero.isObjectTypeVisited( objs[ii] ) ) {
-            result += GameStatic::ObjectVisitedModifiers( objs[ii] );
-
-            if ( strs ) {
-                switch ( objs[ii] ) {
-                case MP2::OBJ_GRAVEYARD:
-                case MP2::OBJN_GRAVEYARD:
-                case MP2::OBJ_SHIPWRECK:
-                case MP2::OBJN_SHIPWRECK:
-                case MP2::OBJ_DERELICTSHIP:
-                case MP2::OBJN_DERELICTSHIP: {
-                    std::string modRobber = _( "%{object} robber" );
-                    StringReplace( modRobber, "%{object}", _( MP2::StringObject( objs[ii] ) ) );
-                    strs->append( modRobber );
-                } break;
-                case MP2::OBJ_PYRAMID:
-                case MP2::OBJN_PYRAMID: {
-                    std::string modRaided = _( "%{object} raided" );
-                    StringReplace( modRaided, "%{object}", _( MP2::StringObject( objs[ii] ) ) );
-                    strs->append( modRaided );
-                } break;
-                default:
-                    strs->append( _( MP2::StringObject( objs[ii] ) ) );
-                    break;
-                }
-
-                StringAppendModifiers( *strs, GameStatic::ObjectVisitedModifiers( objs[ii] ) );
-                strs->append( "\n" );
-            }
-        }
-    }
-
-    return result;
+    return _( names[heroid] );
 }
 
 Heroes::Heroes()
-    : move_point_scale( -1 )
+    : experience( 0 )
     , army( this )
     , hid( UNKNOWN )
     , portrait( UNKNOWN )
@@ -141,6 +179,7 @@ Heroes::Heroes()
     , patrol_square( 0 )
     , _alphaValue( 255 )
     , _attackedMonsterTileIndex( -1 )
+    , _aiRole( Role::HUNTER )
 {}
 
 Heroes::Heroes( int heroID, int race, int initialLevel )
@@ -158,7 +197,6 @@ Heroes::Heroes( int heroid, int rc )
     : HeroBase( HeroBase::HEROES, rc )
     , ColorBase( Color::NONE )
     , experience( GetStartingXp() )
-    , move_point_scale( -1 )
     , secondary_skills( rc )
     , army( this )
     , hid( heroid )
@@ -171,6 +209,7 @@ Heroes::Heroes( int heroid, int rc )
     , patrol_square( 0 )
     , _alphaValue( 255 )
     , _attackedMonsterTileIndex( -1 )
+    , _aiRole( Role::HUNTER )
 {
     name = _( Heroes::GetName( heroid ) );
 
@@ -200,7 +239,7 @@ Heroes::Heroes( int heroid, int rc )
         magic_point = 120;
 
         // all spell in magic book
-        for ( u32 spell = Spell::FIREBALL; spell < Spell::STONE; ++spell )
+        for ( int32_t spell = Spell::FIREBALL; spell < Spell::RANDOM; ++spell )
             AppendSpellToBook( Spell( spell ), true );
         break;
 
@@ -213,72 +252,85 @@ Heroes::Heroes( int heroid, int rc )
     move_point = GetMaxMovePoints();
 }
 
-void Heroes::LoadFromMP2( s32 map_index, int cl, int rc, StreamBuf st )
+void Heroes::LoadFromMP2( int32_t map_index, int cl, int rc, StreamBuf st )
 {
-    // reset modes
     modes = 0;
 
     SetIndex( map_index );
     SetColor( cl );
 
-    // unknown
+    // Unknown
     st.skip( 1 );
 
-    // custom troops
+    // Custom troops
     if ( st.get() ) {
         Troop troops[5];
 
-        // set monster id
-        for ( u32 ii = 0; ii < ARRAY_COUNT( troops ); ++ii )
-            troops[ii].SetMonster( st.get() + 1 );
+        // Monster id
+        for ( Troop & troop : troops )
+            troop.SetMonster( st.get() + 1 );
 
-        // set count
-        for ( u32 ii = 0; ii < ARRAY_COUNT( troops ); ++ii )
-            troops[ii].SetCount( st.getLE16() );
+        // Count
+        for ( Troop & troop : troops )
+            troop.SetCount( st.getLE16() );
 
         army.Assign( troops, std::end( troops ) );
     }
     else
         st.skip( 15 );
 
-    // custom portrate
+    // Custom portrait
     bool custom_portrait = ( st.get() != 0 );
 
     if ( custom_portrait ) {
         SetModes( NOTDEFAULTS );
 
-        // index sprite portrait
+        // Portrait sprite index
         portrait = st.get();
 
         if ( UNKNOWN <= portrait ) {
-            DEBUG_LOG( DBG_GAME, DBG_WARN, "custom portrait incorrect: " << portrait );
+            DEBUG_LOG( DBG_GAME, DBG_WARN, "custom portrait incorrect: " << portrait )
             portrait = hid;
         }
 
-        // fixed race for custom portrait (after level up)
+        // Hero's race may not match the custom portrait
         _race = rc;
+
+        // Since we changed the hero's race, we have to update the initial spell as well. Let's remove the
+        // existing spell and the spell book itself for now, the new one will be added later if necessary.
+        spell_book.clear();
+        bag_artifacts.RemoveArtifact( Artifact::MAGIC_BOOK );
     }
     else {
         st.skip( 1 );
     }
 
-    // 3 artifacts
-    PickupArtifact( Artifact( st.get() ) );
-    PickupArtifact( Artifact( st.get() ) );
-    PickupArtifact( Artifact( st.get() ) );
+    auto addInitialArtifact = [this]( const Artifact & art ) {
+        // Perhaps the hero already has a spell book because of his race
+        if ( art == Artifact::MAGIC_BOOK && HaveSpellBook() ) {
+            return;
+        }
 
-    // unknown byte
+        PickupArtifact( art );
+    };
+
+    // 3 artifacts
+    addInitialArtifact( Artifact( st.get() ) );
+    addInitialArtifact( Artifact( st.get() ) );
+    addInitialArtifact( Artifact( st.get() ) );
+
+    // Unknown
     st.skip( 1 );
 
-    // experience
+    // Experience
     experience = st.getLE32();
 
     if ( experience == 0 )
         experience = GetStartingXp();
 
+    // Custom secondary skills
     const bool custom_secskill = ( st.get() != 0 );
 
-    // custom skill
     if ( custom_secskill ) {
         SetModes( NOTDEFAULTS );
         SetModes( CUSTOMSKILLS );
@@ -300,59 +352,54 @@ void Heroes::LoadFromMP2( s32 map_index, int cl, int rc, StreamBuf st )
         st.skip( 16 );
     }
 
-    // unknown
+    // Unknown
     st.skip( 1 );
 
-    // custom name
+    // Custom name
     if ( st.get() ) {
         SetModes( NOTDEFAULTS );
-        name = Game::GetEncodeString( st.toString( 13 ) );
+        name = st.toString( 13 );
     }
     else {
         st.skip( 13 );
     }
 
-    // patrol
+    // Patrol
     if ( st.get() ) {
         SetModes( PATROL );
         patrol_center = GetCenter();
     }
 
-    // count square
+    // Patrol square
     patrol_square = st.get();
 
     PostLoad();
 }
 
-void Heroes::PostLoad( void )
+void Heroes::PostLoad()
 {
-    killer_color.SetColor( Color::NONE );
-
-    // save general object
+    // An object on which the hero currently stands
     save_maps_object = MP2::OBJ_ZERO;
 
-    // fix zero army
-    if ( !army.isValid() )
-        army.Reset( true );
-    else
-        SetModes( CUSTOMARMY );
+    // Fix a custom hero without an army
+    if ( !army.isValid() ) {
+        army.Reset( false );
+    }
 
-    // level up
+    // Level up if needed
     int level = GetLevel();
     while ( 1 < level-- ) {
         SetModes( NOTDEFAULTS );
         LevelUp( Modes( CUSTOMSKILLS ), true );
     }
 
-    if ( ( _race & ( Race::SORC | Race::WRLK | Race::WZRD | Race::NECR ) ) && !HaveSpellBook() ) {
-        Spell spell = Skill::Primary::GetInitialSpell( _race );
-        if ( spell.isValid() ) {
-            SpellBookActivate();
-            AppendSpellToBook( spell, true );
-        }
+    // Hero's race could be changed during load, so we may need to add an initial spell once again
+    const Spell spell = Skill::Primary::GetInitialSpell( _race );
+    if ( spell.isValid() ) {
+        SpellBookActivate();
+        AppendSpellToBook( spell, true );
     }
 
-    // other param
     SetSpellPoints( GetMaxSpellPoints() );
     move_point = GetMaxMovePoints();
 
@@ -360,52 +407,47 @@ void Heroes::PostLoad( void )
         AI::Get().HeroesPostLoad( *this );
     }
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, name << ", color: " << Color::String( GetColor() ) << ", race: " << Race::String( _race ) );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, name << ", color: " << Color::String( GetColor() ) << ", race: " << Race::String( _race ) )
 }
 
-int Heroes::GetID( void ) const
-{
-    return hid;
-}
-
-int Heroes::GetRace( void ) const
+int Heroes::GetRace() const
 {
     return _race;
 }
 
-const std::string & Heroes::GetName( void ) const
+const std::string & Heroes::GetName() const
 {
     return name;
 }
 
-int Heroes::GetColor( void ) const
+int Heroes::GetColor() const
 {
     return ColorBase::GetColor();
 }
 
-int Heroes::GetType( void ) const
+int Heroes::GetType() const
 {
     return HeroBase::HEROES;
 }
 
-const Army & Heroes::GetArmy( void ) const
+const Army & Heroes::GetArmy() const
 {
     return army;
 }
 
-Army & Heroes::GetArmy( void )
+Army & Heroes::GetArmy()
 {
     return army;
 }
 
-int Heroes::GetMobilityIndexSprite( void ) const
+int Heroes::GetMobilityIndexSprite() const
 {
     // valid range (0 - 25)
     int index = CanMove() ? ( move_point + 50 ) / 100 : 0;
     return 25 >= index ? index : 25;
 }
 
-int Heroes::GetManaIndexSprite( void ) const
+int Heroes::GetManaIndexSprite() const
 {
     // Add 2 to round values.
     const int value = ( GetSpellPoints() + 2 ) / 5;
@@ -420,23 +462,27 @@ int Heroes::getStatsValue() const
 
 double Heroes::getRecruitValue() const
 {
-    return army.GetStrength() + ( ( bag_artifacts.getArtifactValue() * 2.0 + getStatsValue() ) * SKILL_VALUE );
+    return army.GetStrength() + ( ( bag_artifacts.getArtifactValue() * 10.0 + getStatsValue() ) * SKILL_VALUE );
 }
 
 double Heroes::getMeetingValue( const Heroes & recievingHero ) const
 {
-    const uint32_t artCount = bag_artifacts.CountArtifacts();
+    // TODO: add logic to check artifacts with curses and those which are invaluable for a hero.
+
+    // Magic Book is not transferable.
+    const uint32_t artCount = bag_artifacts.CountArtifacts() - bag_artifacts.Count( Artifact::MAGIC_BOOK );
     const uint32_t canFit = HEROESMAXARTIFACT - recievingHero.bag_artifacts.CountArtifacts();
 
-    double artifactValue = bag_artifacts.getArtifactValue() * 2.0;
+    double artifactValue = bag_artifacts.getArtifactValue() * 5.0;
     if ( artCount > canFit ) {
         artifactValue = canFit * ( artifactValue / artCount );
     }
 
+    // TODO: leaving only one monster in an army is very risky. Add logic to find out which part of the army would be useful to get.
     return recievingHero.army.getReinforcementValue( army ) + artifactValue * SKILL_VALUE;
 }
 
-int Heroes::GetAttack( void ) const
+int Heroes::GetAttack() const
 {
     return GetAttack( nullptr );
 }
@@ -447,7 +493,7 @@ int Heroes::GetAttack( std::string * strs ) const
     return result < 0 ? 0 : ( result > 255 ? 255 : result );
 }
 
-int Heroes::GetDefense( void ) const
+int Heroes::GetDefense() const
 {
     return GetDefense( nullptr );
 }
@@ -458,7 +504,7 @@ int Heroes::GetDefense( std::string * strs ) const
     return result < 0 ? 0 : ( result > 255 ? 255 : result );
 }
 
-int Heroes::GetPower( void ) const
+int Heroes::GetPower() const
 {
     return GetPower( nullptr );
 }
@@ -469,7 +515,7 @@ int Heroes::GetPower( std::string * strs ) const
     return result < 1 ? 1 : ( result > 255 ? 255 : result );
 }
 
-int Heroes::GetKnowledge( void ) const
+int Heroes::GetKnowledge() const
 {
     return GetKnowledge( nullptr );
 }
@@ -500,30 +546,14 @@ void Heroes::IncreasePrimarySkill( int skill )
     }
 }
 
-u32 Heroes::GetExperience( void ) const
-{
-    return experience;
-}
-
-void Heroes::IncreaseMovePoints( u32 point )
-{
-    move_point += point;
-}
-
-u32 Heroes::GetMovePoints( void ) const
-{
-    return move_point;
-}
-
-u32 Heroes::GetMaxSpellPoints( void ) const
+uint32_t Heroes::GetMaxSpellPoints() const
 {
     return 10 * GetKnowledge();
 }
 
-u32 Heroes::GetMaxMovePoints( void ) const
+uint32_t Heroes::GetMaxMovePoints() const
 {
-    int point = 0;
-    int acount = 0;
+    uint32_t point = 0;
 
     // start point
     if ( isShipMaster() ) {
@@ -533,9 +563,7 @@ u32 Heroes::GetMaxMovePoints( void ) const
         point = UpdateMovementPoints( point, Skill::Secondary::NAVIGATION );
 
         // artifact bonus
-        acount = HasArtifact( Artifact::SAILORS_ASTROLABE_MOBILITY );
-        if ( acount )
-            point += acount * 1000;
+        point += GetBagArtifacts().getTotalArtifactEffectValue( fheroes2::ArtifactBonusType::SEA_MOBILITY );
 
         // visited object
         point += 500 * world.CountCapturedObject( MP2::OBJ_LIGHTHOUSE, GetColor() );
@@ -574,22 +602,12 @@ u32 Heroes::GetMaxMovePoints( void ) const
         point = UpdateMovementPoints( point, Skill::Secondary::LOGISTICS );
 
         // artifact bonus
-        acount = HasArtifact( Artifact::NOMAD_BOOTS_MOBILITY );
-        if ( acount )
-            point += acount * 600;
-
-        acount = HasArtifact( Artifact::TRAVELER_BOOTS_MOBILITY );
-        if ( acount )
-            point += acount * 300;
+        point += GetBagArtifacts().getTotalArtifactEffectValue( fheroes2::ArtifactBonusType::LAND_MOBILITY );
 
         // visited object
         if ( isObjectTypeVisited( MP2::OBJ_STABLES ) )
             point += 400;
     }
-
-    acount = HasArtifact( Artifact::TRUE_COMPASS_MOBILITY );
-    if ( acount )
-        point += acount * 500;
 
     if ( isControlAI() ) {
         point += Difficulty::GetHeroMovementBonus( Game::getDifficulty() );
@@ -598,7 +616,7 @@ u32 Heroes::GetMaxMovePoints( void ) const
     return point;
 }
 
-int Heroes::GetMorale( void ) const
+int Heroes::GetMorale() const
 {
     return GetMoraleWithModificators( nullptr );
 }
@@ -607,34 +625,31 @@ int Heroes::GetMoraleWithModificators( std::string * strs ) const
 {
     int result = Morale::NORMAL;
 
-    // bonus artifact
-    result += GetMoraleModificator( strs );
-
     // bonus leadership
     result += Skill::GetLeadershipModifiers( GetLevelSkill( Skill::Secondary::LEADERSHIP ), strs );
 
     // object visited
-    const u8 objs[] = { MP2::OBJ_BUOY, MP2::OBJ_OASIS, MP2::OBJ_WATERINGHOLE, MP2::OBJ_TEMPLE, MP2::OBJ_GRAVEYARD, MP2::OBJ_DERELICTSHIP, MP2::OBJ_SHIPWRECK };
-    result += ObjectVisitedModifiersResult( MDF_MORALE, objs, ARRAY_COUNT( objs ), *this, strs );
+    const std::vector<MP2::MapObjectType> objectTypes{ MP2::OBJ_BUOY,      MP2::OBJ_OASIS,        MP2::OBJ_WATERINGHOLE, MP2::OBJ_TEMPLE,
+                                                       MP2::OBJ_GRAVEYARD, MP2::OBJ_DERELICTSHIP, MP2::OBJ_SHIPWRECK };
+    result += ObjectVisitedModifiersResult( objectTypes, *this, strs );
 
-    // result
-    if ( result < Morale::AWFUL )
-        return Morale::TREASON;
-    else if ( result < Morale::POOR )
-        return Morale::AWFUL;
-    else if ( result < Morale::NORMAL )
-        return Morale::POOR;
-    else if ( result < Morale::GOOD )
-        return Morale::NORMAL;
-    else if ( result < Morale::GREAT )
-        return Morale::GOOD;
-    else if ( result < Morale::BLOOD )
-        return Morale::GREAT;
+    // bonus artifact
+    result += GetMoraleModificator( strs );
 
-    return Morale::BLOOD;
+    // A special artifact ability presence must be the last check.
+    const Artifact maxMoraleArtifact = bag_artifacts.getFirstArtifactWithBonus( fheroes2::ArtifactBonusType::MAXIMUM_MORALE );
+    if ( maxMoraleArtifact.isValid() ) {
+        if ( strs != nullptr ) {
+            *strs += maxMoraleArtifact.GetName();
+            *strs += _( " gives you maximum morale" );
+        }
+        result = Morale::BLOOD;
+    }
+
+    return Morale::Normalize( result );
 }
 
-int Heroes::GetLuck( void ) const
+int Heroes::GetLuck() const
 {
     return GetLuckWithModificators( nullptr );
 }
@@ -643,108 +658,115 @@ int Heroes::GetLuckWithModificators( std::string * strs ) const
 {
     int result = Luck::NORMAL;
 
-    // bonus artifact
-    result += GetLuckModificator( strs );
-
     // bonus luck
     result += Skill::GetLuckModifiers( GetLevelSkill( Skill::Secondary::LUCK ), strs );
 
     // object visited
-    const u8 objs[] = { MP2::OBJ_MERMAID, MP2::OBJ_FAERIERING, MP2::OBJ_FOUNTAIN, MP2::OBJ_IDOL, MP2::OBJ_PYRAMID };
-    result += ObjectVisitedModifiersResult( MDF_LUCK, objs, ARRAY_COUNT( objs ), *this, strs );
+    const std::vector<MP2::MapObjectType> objectTypes{ MP2::OBJ_MERMAID, MP2::OBJ_FAERIERING, MP2::OBJ_FOUNTAIN, MP2::OBJ_IDOL, MP2::OBJ_PYRAMID };
+    result += ObjectVisitedModifiersResult( objectTypes, *this, strs );
 
-    if ( result < Luck::AWFUL )
-        return Luck::CURSED;
-    else if ( result < Luck::BAD )
-        return Luck::AWFUL;
-    else if ( result < Luck::NORMAL )
-        return Luck::BAD;
-    else if ( result < Luck::GOOD )
-        return Luck::NORMAL;
-    else if ( result < Luck::GREAT )
-        return Luck::GOOD;
-    else if ( result < Luck::IRISH )
-        return Luck::GREAT;
+    // bonus artifact
+    result += GetLuckModificator( strs );
 
-    return Luck::IRISH;
+    const Artifact maxLuckArtifact = bag_artifacts.getFirstArtifactWithBonus( fheroes2::ArtifactBonusType::MAXIMUM_LUCK );
+    if ( maxLuckArtifact.isValid() ) {
+        if ( strs != nullptr ) {
+            *strs += maxLuckArtifact.GetName();
+            *strs += _( " gives you maximum luck" );
+        }
+        result = Luck::IRISH;
+    }
+
+    return Luck::Normalize( result );
 }
 
-/* recrut hero */
-bool Heroes::Recruit( int cl, const fheroes2::Point & pt )
+bool Heroes::Recruit( const int col, const fheroes2::Point & pt )
 {
     if ( GetColor() != Color::NONE ) {
-        DEBUG_LOG( DBG_GAME, DBG_WARN, "not freeman" );
+        DEBUG_LOG( DBG_GAME, DBG_WARN, "hero is not a freeman" )
+
         return false;
     }
 
-    Kingdom & kingdom = world.GetKingdom( cl );
+    Kingdom & kingdom = world.GetKingdom( col );
 
-    if ( kingdom.AllowRecruitHero( false, 0 ) ) {
-        Maps::Tiles & tiles = world.GetTiles( pt.x, pt.y );
-        SetColor( cl );
-        killer_color.SetColor( Color::NONE );
-        SetCenter( pt );
-        setDirection( Direction::RIGHT );
-        if ( !Modes( SAVE_MP_POINTS ) )
-            move_point = GetMaxMovePoints();
-        MovePointsScaleFixed();
-
-        if ( !army.isValid() )
-            army.Reset( false );
-
-        tiles.SetHeroes( this );
-        kingdom.AddHeroes( this );
-
-        return true;
+    if ( !kingdom.AllowRecruitHero( false ) ) {
+        return false;
     }
 
-    return false;
+    ResetModes( RECRUIT );
+    ResetModes( JAIL );
+
+    SetColor( col );
+
+    SetCenter( pt );
+    setDirection( Direction::RIGHT );
+
+    if ( !Modes( SAVEMP ) ) {
+        move_point = GetMaxMovePoints();
+    }
+
+    if ( !army.isValid() ) {
+        army.Reset( false );
+    }
+
+    world.GetTiles( pt.x, pt.y ).SetHeroes( this );
+
+    kingdom.AddHeroes( this );
+    // Update the set of recruits in the kingdom
+    kingdom.GetRecruits();
+
+    return true;
 }
 
 bool Heroes::Recruit( const Castle & castle )
 {
-    if ( Recruit( castle.GetColor(), castle.GetCenter() ) ) {
-        if ( castle.GetLevelMageGuild() ) {
-            // learn spells
-            castle.MageGuildEducateHero( *this );
-        }
-        SetVisited( GetIndex() );
-        return true;
+    if ( !Recruit( castle.GetColor(), castle.GetCenter() ) ) {
+        return false;
     }
 
-    return false;
+    if ( castle.GetLevelMageGuild() ) {
+        // learn spells
+        castle.MageGuildEducateHero( *this );
+    }
+
+    SetVisited( GetIndex() );
+
+    return true;
 }
 
-void Heroes::ActionNewDay( void )
+void Heroes::ActionNewDay()
 {
     // recovery move points
     move_point = GetMaxMovePoints();
-    MovePointsScaleFixed();
+
+    // replenish spell points
+    ReplenishSpellPoints();
 
     // remove day visit object
     visit_object.remove_if( Visit::isDayLife );
 
     // new day, new capacities
-    ResetModes( SAVE_MP_POINTS );
+    ResetModes( SAVEMP );
 }
 
-void Heroes::ActionNewWeek( void )
+void Heroes::ActionNewWeek()
 {
     // remove week visit object
     visit_object.remove_if( Visit::isWeekLife );
 }
 
-void Heroes::ActionNewMonth( void )
+void Heroes::ActionNewMonth()
 {
     // remove month visit object
     visit_object.remove_if( Visit::isMonthLife );
 }
 
-void Heroes::ActionAfterBattle( void )
+void Heroes::ActionAfterBattle()
 {
     // remove month visit object
     visit_object.remove_if( Visit::isBattleLife );
-    //
+
     SetModes( ACTION );
 }
 
@@ -762,23 +784,14 @@ void Heroes::ReplenishSpellPoints()
 
     // in castle?
     if ( castle && castle->GetLevelMageGuild() ) {
-        // restore from mage guild
-        if ( Settings::Get().ExtCastleGuildRestorePointsTurn() ) {
-            curr += maxp * GameStatic::GetMageGuildRestoreSpellPointsPercentDay( castle->GetLevelMageGuild() ) / 100;
-        }
-        else {
-            curr = maxp;
-        }
+        curr = maxp;
     }
 
     // everyday
     curr += GameStatic::GetHeroesRestoreSpellPointsPerDay();
 
-    // power ring action
-    const int acount = HasArtifact( Artifact::POWER_RING );
-    if ( acount ) {
-        curr += acount * Artifact( Artifact::POWER_RING ).ExtraValue();
-    }
+    // Spell points from artifacts.
+    curr += GetBagArtifacts().getTotalArtifactEffectValue( fheroes2::ArtifactBonusType::SPELL_POINTS_DAILY_GENERATION );
 
     // secondary skill
     curr += GetSecondaryValues( Skill::Secondary::MYSTICISM );
@@ -786,99 +799,105 @@ void Heroes::ReplenishSpellPoints()
     SetSpellPoints( std::min( curr, maxp ) );
 }
 
-void Heroes::RescanPathPassable( void )
+void Heroes::calculatePath( int32_t dstIdx )
 {
-    if ( path.isValid() )
-        path.RescanPassable();
-}
-
-void Heroes::RescanPath( void )
-{
-    if ( !path.isValid() )
-        path.clear();
-
-    if ( path.isValid() ) {
-        const Maps::Tiles & tile = world.GetTiles( path.GetDestinationIndex() );
-
-        if ( !isShipMaster() && tile.isWater() && !MP2::isNeedStayFront( tile.GetObject() ) )
-            path.PopBack();
+    if ( dstIdx < 0 ) {
+        // Recalculating an existing path
+        dstIdx = path.GetDestinationIndex();
     }
 
-    if ( path.isValid() ) {
-        if ( isControlAI() ) {
-            if ( path.hasObstacle() )
-                path.Reset();
-        }
-        else {
-            path.RescanObstacle();
-        }
+    if ( !path.isValid() ) {
+        path.Reset();
+    }
+
+    if ( dstIdx < 0 ) {
+        return;
+    }
+
+    path.setPath( world.getPath( *this, dstIdx ), dstIdx );
+
+    if ( !path.isValid() ) {
+        path.Reset();
     }
 }
 
 /* if hero in castle */
-const Castle * Heroes::inCastle( void ) const
+const Castle * Heroes::inCastle() const
 {
-    const Castle * castle = Color::NONE != GetColor() ? world.GetCastle( GetCenter() ) : nullptr;
-    return castle && castle->GetHeroes() == this ? castle : nullptr;
+    return inCastleMutable();
 }
 
-Castle * Heroes::inCastle( void )
+Castle * Heroes::inCastleMutable() const
 {
-    Castle * castle = Color::NONE != GetColor() ? world.GetCastle( GetCenter() ) : nullptr;
+    if ( GetColor() == Color::NONE ) {
+        return nullptr;
+    }
+
+    if ( Modes( Heroes::GUARDIAN ) ) {
+        const fheroes2::Point & heroPoint = GetCenter();
+        const fheroes2::Point castlePoint( heroPoint.x, heroPoint.y + 1 );
+
+        Castle * castle = world.getCastleEntrance( castlePoint );
+
+        return castle && castle->GetHeroes() == this ? castle : nullptr;
+    }
+
+    Castle * castle = world.getCastleEntrance( GetCenter() );
+
     return castle && castle->GetHeroes() == this ? castle : nullptr;
 }
 
 bool Heroes::isVisited( const Maps::Tiles & tile, Visit::type_t type ) const
 {
     const int32_t index = tile.GetIndex();
-    int object = tile.GetObject( false );
+    const MP2::MapObjectType objectType = tile.GetObject( false );
 
     if ( Visit::GLOBAL == type )
-        return GetKingdom().isVisited( index, object );
+        return GetKingdom().isVisited( index, objectType );
 
-    return visit_object.end() != std::find( visit_object.begin(), visit_object.end(), IndexObject( index, object ) );
+    return visit_object.end() != std::find( visit_object.begin(), visit_object.end(), IndexObject( index, objectType ) );
 }
 
-bool Heroes::isObjectTypeVisited( int object, Visit::type_t type ) const
+bool Heroes::isObjectTypeVisited( const MP2::MapObjectType objectType, Visit::type_t type ) const
 {
     if ( Visit::GLOBAL == type )
-        return GetKingdom().isVisited( object );
+        return GetKingdom().isVisited( objectType );
 
-    return visit_object.end() != std::find_if( visit_object.begin(), visit_object.end(), [object]( const IndexObject & v ) { return v.isObject( object ); } );
+    return std::any_of( visit_object.begin(), visit_object.end(), [objectType]( const IndexObject & v ) { return v.isObject( objectType ); } );
 }
 
-void Heroes::SetVisited( s32 index, Visit::type_t type )
+void Heroes::SetVisited( int32_t index, Visit::type_t type )
 {
     const Maps::Tiles & tile = world.GetTiles( index );
-    int object = tile.GetObject( false );
+    const MP2::MapObjectType objectType = tile.GetObject( false );
 
     if ( Visit::GLOBAL == type ) {
-        GetKingdom().SetVisited( index, object );
+        GetKingdom().SetVisited( index, objectType );
     }
-    else if ( !isVisited( tile ) && MP2::OBJ_ZERO != object ) {
-        visit_object.push_front( IndexObject( index, object ) );
+    else if ( !isVisited( tile ) && MP2::OBJ_ZERO != objectType ) {
+        visit_object.push_front( IndexObject( index, objectType ) );
     }
 }
 
 void Heroes::setVisitedForAllies( const int32_t tileIndex ) const
 {
     const Maps::Tiles & tile = world.GetTiles( tileIndex );
-    const int objectId = tile.GetObject( false );
+    const MP2::MapObjectType objectType = tile.GetObject( false );
 
     // Set visited to all allies as well.
     const Colors friendColors( Players::GetPlayerFriends( GetColor() ) );
     for ( const int friendColor : friendColors ) {
-        world.GetKingdom( friendColor ).SetVisited( tileIndex, objectId );
+        world.GetKingdom( friendColor ).SetVisited( tileIndex, objectType );
     }
 }
 
-void Heroes::SetVisitedWideTile( s32 index, int object, Visit::type_t type )
+void Heroes::SetVisitedWideTile( int32_t index, const MP2::MapObjectType objectType, Visit::type_t type )
 {
     const Maps::Tiles & tile = world.GetTiles( index );
     const uint32_t uid = tile.GetObjectUID();
     int wide = 0;
 
-    switch ( object ) {
+    switch ( objectType ) {
     case MP2::OBJ_SKELETON:
     case MP2::OBJ_OASIS:
     case MP2::OBJ_STANDINGSTONES:
@@ -892,8 +911,8 @@ void Heroes::SetVisitedWideTile( s32 index, int object, Visit::type_t type )
         break;
     }
 
-    if ( tile.GetObject( false ) == object && wide ) {
-        for ( s32 ii = tile.GetIndex() - ( wide - 1 ); ii <= tile.GetIndex() + ( wide - 1 ); ++ii )
+    if ( tile.GetObject( false ) == objectType && wide ) {
+        for ( int32_t ii = tile.GetIndex() - ( wide - 1 ); ii <= tile.GetIndex() + ( wide - 1 ); ++ii )
             if ( Maps::isValidAbsIndex( ii ) && world.GetTiles( ii ).GetObjectUID() == uid )
                 SetVisited( ii, type );
     }
@@ -923,42 +942,32 @@ bool Heroes::hasMetWithHero( int heroID ) const
     return visit_object.end() != std::find( visit_object.begin(), visit_object.end(), IndexObject( heroID, MP2::OBJ_HEROES ) );
 }
 
-int Heroes::GetSpriteIndex( void ) const
+bool Heroes::isLosingGame() const
 {
-    return sprite_index;
+    return GetKingdom().isLosingGame();
 }
 
-void Heroes::SetSpriteIndex( int index )
-{
-    sprite_index = index;
-}
-
-void Heroes::SetOffset( const fheroes2::Point & offset )
-{
-    _offset = offset;
-}
-
-bool Heroes::isAction( void ) const
+bool Heroes::isAction() const
 {
     return Modes( ACTION );
 }
 
-void Heroes::ResetAction( void )
+void Heroes::ResetAction()
 {
     ResetModes( ACTION );
 }
 
-u32 Heroes::GetCountArtifacts( void ) const
+uint32_t Heroes::GetCountArtifacts() const
 {
     return bag_artifacts.CountArtifacts();
 }
 
-bool Heroes::HasUltimateArtifact( void ) const
+bool Heroes::HasUltimateArtifact() const
 {
     return bag_artifacts.ContainUltimateArtifact();
 }
 
-bool Heroes::IsFullBagArtifacts( void ) const
+bool Heroes::IsFullBagArtifacts() const
 {
     return bag_artifacts.isFull();
 }
@@ -970,59 +979,42 @@ bool Heroes::PickupArtifact( const Artifact & art )
 
     if ( !bag_artifacts.PushArtifact( art ) ) {
         if ( isControlHuman() ) {
-            art() == Artifact::MAGIC_BOOK ? Dialog::Message(
+            art.GetID() == Artifact::MAGIC_BOOK ? Dialog::Message(
                 GetName(),
                 _( "You must purchase a spell book to use the mage guild, but you currently have no room for a spell book. Try giving one of your artifacts to another hero." ),
                 Font::BIG, Dialog::OK )
-                                          : Dialog::Message( art.GetName(), _( "You cannot pick up this artifact, you already have a full load!" ), Font::BIG,
-                                                             Dialog::OK );
+                                                : Dialog::Message( art.GetName(), _( "You cannot pick up this artifact, you already have a full load!" ), Font::BIG,
+                                                                   Dialog::OK );
         }
         return false;
     }
 
-    // check: anduran garb
-    if ( bag_artifacts.MakeBattleGarb() ) {
-        if ( isControlHuman() )
-            Dialog::ArtifactInfo( "", _( "The three Anduran artifacts magically combine into one." ), Artifact::BATTLE_GARB );
+    // check: artifact sets such as anduran garb
+    const auto assembledArtifacts = bag_artifacts.assembleArtifactSetIfPossible();
+    if ( isControlHuman() ) {
+        for ( const ArtifactSetData & artifactSetData : assembledArtifacts ) {
+            const fheroes2::ArtifactDialogElement artifactUI( artifactSetData._assembledArtifactID );
+            fheroes2::showMessage( fheroes2::Text( Artifact( static_cast<int>( artifactSetData._assembledArtifactID ) ).GetName(), fheroes2::FontType::normalYellow() ),
+                                   fheroes2::Text( _( artifactSetData._assembleMessage ), fheroes2::FontType::normalWhite() ), Dialog::OK, { &artifactUI } );
+        }
     }
 
     return true;
 }
 
-/* return level hero */
-int Heroes::GetLevel( void ) const
+void Heroes::IncreaseExperience( const uint32_t amount, const bool autoselect )
 {
-    return GetLevelFromExperience( experience );
-}
+    int oldLevel = GetLevelFromExperience( experience );
+    int newLevel = GetLevelFromExperience( experience + amount );
 
-const Route::Path & Heroes::GetPath( void ) const
-{
-    return path;
-}
+    for ( int level = oldLevel; level < newLevel; ++level )
+        LevelUp( false, autoselect );
 
-Route::Path & Heroes::GetPath( void )
-{
-    return path;
-}
-
-void Heroes::ShowPath( bool f )
-{
-    f ? path.Show() : path.Hide();
-}
-
-void Heroes::IncreaseExperience( u32 exp )
-{
-    int level_old = GetLevelFromExperience( experience );
-    int level_new = GetLevelFromExperience( experience + exp );
-
-    for ( int ii = 0; ii < level_new - level_old; ++ii )
-        LevelUp( false );
-
-    experience += exp;
+    experience += amount;
 }
 
 /* calc level from exp */
-int Heroes::GetLevelFromExperience( u32 exp )
+int Heroes::GetLevelFromExperience( uint32_t exp )
 {
     for ( int lvl = 1; lvl < 255; ++lvl )
         if ( exp < GetExperienceFromLevel( lvl ) )
@@ -1032,7 +1024,7 @@ int Heroes::GetLevelFromExperience( u32 exp )
 }
 
 /* calc exp from level */
-u32 Heroes::GetExperienceFromLevel( int lvl )
+uint32_t Heroes::GetExperienceFromLevel( int lvl )
 {
     switch ( lvl ) {
     case 0:
@@ -1120,8 +1112,8 @@ u32 Heroes::GetExperienceFromLevel( int lvl )
         break;
     }
 
-    const u32 l1 = GetExperienceFromLevel( lvl - 1 );
-    return ( l1 + static_cast<u32>( round( ( l1 - GetExperienceFromLevel( lvl - 2 ) ) * 1.2 / 100 ) * 100 ) );
+    const uint32_t l1 = GetExperienceFromLevel( lvl - 1 );
+    return ( l1 + static_cast<uint32_t>( round( ( l1 - GetExperienceFromLevel( lvl - 2 ) ) * 1.2 / 100 ) * 100 ) );
 }
 
 /* buy book */
@@ -1138,28 +1130,26 @@ bool Heroes::BuySpellBook( const Castle * castle, int shrine )
 
     if ( !kingdom.AllowPayment( payment ) ) {
         if ( isControlHuman() ) {
-            const fheroes2::Sprite & border = fheroes2::AGG::GetICN( ICN::RESOURCE, 7 );
-            fheroes2::Sprite sprite = border;
-            fheroes2::Blit( fheroes2::AGG::GetICN( ICN::ARTIFACT, Artifact( Artifact::MAGIC_BOOK ).IndexSprite64() ), sprite, 5, 5 );
-
             header.append( " " );
             header.append( _( "Unfortunately, you seem to be a little short of cash at the moment." ) );
-            Dialog::SpriteInfo( "", header, sprite, Dialog::OK );
+
+            const fheroes2::ArtifactDialogElement artifactUI( Artifact::MAGIC_BOOK );
+            fheroes2::showMessage( fheroes2::Text( GetName(), fheroes2::FontType::normalYellow() ), fheroes2::Text( header, fheroes2::FontType::normalWhite() ),
+                                   Dialog::OK, { &artifactUI } );
         }
         return false;
     }
 
     if ( isControlHuman() ) {
-        const fheroes2::Sprite & border = fheroes2::AGG::GetICN( ICN::RESOURCE, 7 );
-        fheroes2::Sprite sprite = border;
-
-        fheroes2::Blit( fheroes2::AGG::GetICN( ICN::ARTIFACT, Artifact( Artifact::MAGIC_BOOK ).IndexSprite64() ), sprite, 5, 5 );
-
         header.append( " " );
         header.append( _( "Do you wish to buy one?" ) );
 
-        if ( Dialog::NO == Dialog::SpriteInfo( GetName(), header, sprite, Dialog::YES | Dialog::NO ) )
+        const fheroes2::ArtifactDialogElement artifactUI( Artifact::MAGIC_BOOK );
+        if ( fheroes2::showMessage( fheroes2::Text( GetName(), fheroes2::FontType::normalYellow() ), fheroes2::Text( header, fheroes2::FontType::normalWhite() ),
+                                    Dialog::YES | Dialog::NO, { &artifactUI } )
+             == Dialog::NO ) {
             return false;
+        }
     }
 
     if ( SpellBookActivate() ) {
@@ -1176,12 +1166,12 @@ bool Heroes::BuySpellBook( const Castle * castle, int shrine )
 }
 
 /* return true is move enable */
-bool Heroes::isMoveEnabled( void ) const
+bool Heroes::isMoveEnabled() const
 {
-    return Modes( ENABLEMOVE ) && path.isValid() && path.getLastMovePenalty() <= move_point;
+    return Modes( ENABLEMOVE ) && path.isValid() && path.hasAllowedSteps();
 }
 
-bool Heroes::CanMove( void ) const
+bool Heroes::CanMove() const
 {
     const Maps::Tiles & tile = world.GetTiles( GetIndex() );
     return move_point >= ( tile.isRoad() ? Maps::Ground::roadPenalty : Maps::Ground::GetPenalty( tile, GetLevelSkill( Skill::Secondary::PATHFINDING ) ) );
@@ -1191,6 +1181,8 @@ bool Heroes::CanMove( void ) const
 void Heroes::SetMove( bool f )
 {
     if ( f ) {
+        ResetModes( SLEEPER );
+
         SetModes( ENABLEMOVE );
     }
     else {
@@ -1222,7 +1214,7 @@ void Heroes::SetMove( bool f )
     }
 }
 
-bool Heroes::isShipMaster( void ) const
+bool Heroes::isShipMaster() const
 {
     return Modes( SHIPMASTER );
 }
@@ -1232,17 +1224,7 @@ void Heroes::SetShipMaster( bool f )
     f ? SetModes( SHIPMASTER ) : ResetModes( SHIPMASTER );
 }
 
-uint32_t Heroes::lastGroundRegion() const
-{
-    return _lastGroundRegion;
-}
-
-void Heroes::setLastGroundRegion( uint32_t regionID )
-{
-    _lastGroundRegion = regionID;
-}
-
-Skill::SecSkills & Heroes::GetSecondarySkills( void )
+Skill::SecSkills & Heroes::GetSecondarySkills()
 {
     return secondary_skills;
 }
@@ -1252,12 +1234,12 @@ bool Heroes::HasSecondarySkill( int skill ) const
     return Skill::Level::NONE != secondary_skills.GetLevel( skill );
 }
 
-u32 Heroes::GetSecondaryValues( int skill ) const
+uint32_t Heroes::GetSecondaryValues( int skill ) const
 {
     return secondary_skills.GetValues( skill );
 }
 
-bool Heroes::HasMaxSecondarySkill( void ) const
+bool Heroes::HasMaxSecondarySkill() const
 {
     return HEROESMAXSKILL <= secondary_skills.Count();
 }
@@ -1278,12 +1260,10 @@ void Heroes::Scoute( const int tileIndex ) const
     Maps::ClearFog( tileIndex, GetScoute(), GetColor() );
 }
 
-int Heroes::GetScoute( void ) const
+int Heroes::GetScoute() const
 {
-    int acount = HasArtifact( Artifact::TELESCOPE );
-
-    return ( acount ? acount * Game::GetViewDistance( Game::VIEW_TELESCOPE ) : 0 ) + Game::GetViewDistance( Game::VIEW_HEROES )
-           + GetSecondaryValues( Skill::Secondary::SCOUTING );
+    return static_cast<int>( GetBagArtifacts().getTotalArtifactEffectValue( fheroes2::ArtifactBonusType::AREA_REVEAL_DISTANCE )
+                             + GameStatic::getFogDiscoveryDistance( GameStatic::FogDiscoveryType::HEROES ) + GetSecondaryValues( Skill::Secondary::SCOUTING ) );
 }
 
 uint32_t Heroes::UpdateMovementPoints( const uint32_t movePoints, const int skill ) const
@@ -1304,61 +1284,53 @@ uint32_t Heroes::UpdateMovementPoints( const uint32_t movePoints, const int skil
     return movePoints + skillValue * movePoints / 100;
 }
 
-u32 Heroes::GetVisionsDistance( void ) const
+uint32_t Heroes::GetVisionsDistance() const
 {
-    uint32_t crystalBallCount = HasArtifact( Artifact::CRYSTAL_BALL );
-    if ( crystalBallCount < 1 )
-        crystalBallCount = 1;
-    return 8 * crystalBallCount;
+    return 8;
 }
 
-int Heroes::GetDirection( void ) const
+int Heroes::getNumOfTravelDays( int32_t dstIdx ) const
 {
-    return direction;
-}
+    assert( Maps::isValidAbsIndex( dstIdx ) );
 
-void Heroes::setDirection( int directionToSet )
-{
-    if ( directionToSet != Direction::UNKNOWN )
-        direction = directionToSet;
-}
+    const uint32_t maxMovePoints = GetMaxMovePoints();
+    const std::list<Route::Step> routePath = world.getPath( *this, dstIdx );
 
-/* return route range in days */
-int Heroes::GetRangeRouteDays( s32 dst ) const
-{
-    const u32 maxMovePoints = GetMaxMovePoints();
+    if ( routePath.empty() ) {
+        DEBUG_LOG( DBG_GAME, DBG_TRACE, "unreachable point: " << dstIdx )
 
-    uint32_t total = world.getDistance( *this, dst );
-    DEBUG_LOG( DBG_GAME, DBG_TRACE, "path distance: " << total );
-
-    if ( total > 0 ) {
-        // check if last step is diagonal and pre-adjust the total
-        const Route::Step lastStep = world.getPath( *this, dst ).back();
-        if ( Direction::isDiagonal( lastStep.GetDirection() ) ) {
-            total -= lastStep.GetPenalty() / 3;
-        }
-
-        if ( move_point >= total )
-            return 1;
-
-        total -= move_point;
-
-        int moveDays = 2;
-        while ( moveDays < 8 ) {
-            if ( maxMovePoints >= total )
-                return moveDays;
-
-            total -= maxMovePoints;
-            ++moveDays;
-        }
-
-        return 8;
-    }
-    else {
-        DEBUG_LOG( DBG_GAME, DBG_TRACE, "unreachable point: " << dst );
+        return 0;
     }
 
-    return 0;
+    uint32_t movePoints = GetMovePoints();
+    int days = 1;
+
+    for ( const Route::Step & step : routePath ) {
+        const uint32_t stepPenalty = step.GetPenalty();
+
+        if ( movePoints >= stepPenalty ) {
+            // This movement takes place on the same day
+            movePoints -= stepPenalty;
+        }
+        else {
+            // This movement takes place at the beginning of a new day: start with max
+            // movement points, don't carry leftovers from the previous day
+            assert( maxMovePoints >= stepPenalty );
+
+            movePoints = maxMovePoints - stepPenalty;
+            ++days;
+
+            // Stop at 8 days
+            if ( days >= 8 ) {
+                break;
+            }
+        }
+    }
+
+    // Return no more than 8 days
+    assert( days <= 8 );
+
+    return days;
 }
 
 void Heroes::LevelUp( bool skipsecondary, bool autoselect )
@@ -1368,7 +1340,7 @@ void Heroes::LevelUp( bool skipsecondary, bool autoselect )
     // level up primary skill
     const int primarySkill = Skill::Primary::LevelUp( _race, GetLevel(), seeds.seedPrimarySkill );
 
-    DEBUG_LOG( DBG_GAME, DBG_INFO, "for " << GetName() << ", up " << Skill::Primary::String( primarySkill ) );
+    DEBUG_LOG( DBG_GAME, DBG_INFO, "for " << GetName() << ", up " << Skill::Primary::String( primarySkill ) )
 
     if ( !skipsecondary )
         LevelUpSecondarySkill( seeds, primarySkill, ( autoselect || isControlAI() ) );
@@ -1382,7 +1354,16 @@ void Heroes::LevelUpSecondarySkill( const HeroSeedsForLevelUp & seeds, int prima
     Skill::Secondary sec2;
 
     secondary_skills.FindSkillsForLevelUp( _race, seeds.seedSecondaySkill1, seeds.seedSecondaySkill2, sec1, sec2 );
-    DEBUG_LOG( DBG_GAME, DBG_INFO, GetName() << " select " << Skill::Secondary::String( sec1.Skill() ) << " or " << Skill::Secondary::String( sec2.Skill() ) );
+
+    if ( sec1.isValid() && sec2.isValid() ) {
+        DEBUG_LOG( DBG_GAME, DBG_INFO, GetName() << " select " << Skill::Secondary::String( sec1.Skill() ) << " or " << Skill::Secondary::String( sec2.Skill() ) )
+    }
+    else if ( sec1.isValid() ) {
+        DEBUG_LOG( DBG_GAME, DBG_INFO, GetName() << " select " << Skill::Secondary::String( sec1.Skill() ) )
+    }
+    else if ( sec2.isValid() ) {
+        DEBUG_LOG( DBG_GAME, DBG_INFO, GetName() << " select " << Skill::Secondary::String( sec2.Skill() ) )
+    }
 
     Skill::Secondary selected;
 
@@ -1395,16 +1376,17 @@ void Heroes::LevelUpSecondarySkill( const HeroSeedsForLevelUp & seeds, int prima
         }
     }
     else {
-        AGG::PlaySound( M82::NWHEROLV );
-        int result = Dialog::LevelUpSelectSkill( name, Skill::Primary::String( primary ), sec1, sec2, *this );
+        AudioManager::PlaySound( M82::NWHEROLV );
+        const int result = Dialog::LevelUpSelectSkill( name, primary, sec1, sec2, *this );
 
-        if ( Skill::Secondary::UNKNOWN != result )
-            selected = result == sec2.Skill() ? sec2 : sec1;
+        if ( Skill::Secondary::UNKNOWN != result ) {
+            selected = ( result == sec2.Skill() ) ? sec2 : sec1;
+        }
     }
 
     // level up sec. skill
     if ( selected.isValid() ) {
-        DEBUG_LOG( DBG_GAME, DBG_INFO, GetName() << ", selected: " << Skill::Secondary::String( selected.Skill() ) );
+        DEBUG_LOG( DBG_GAME, DBG_INFO, GetName() << ", selected: " << Skill::Secondary::String( selected.Skill() ) )
         Skill::Secondary * secs = secondary_skills.FindSkill( selected.Skill() );
 
         if ( secs )
@@ -1428,17 +1410,21 @@ void Heroes::ApplyPenaltyMovement( uint32_t penalty )
         move_point = 0;
 }
 
-void Heroes::ResetMovePoints( void )
+bool Heroes::MayStillMove( const bool ignorePath, const bool ignoreSleeper ) const
 {
-    move_point = 0;
-}
-
-bool Heroes::MayStillMove( void ) const
-{
-    if ( Modes( SLEEPER | GUARDIAN ) || isFreeman() )
+    if ( Modes( GUARDIAN ) || isFreeman() ) {
         return false;
+    }
 
-    return path.isValid() ? ( move_point >= path.getLastMovePenalty() ) : CanMove();
+    if ( !ignoreSleeper && Modes( SLEEPER ) ) {
+        return false;
+    }
+
+    if ( path.isValid() && !ignorePath ) {
+        return path.hasAllowedSteps();
+    }
+
+    return CanMove();
 }
 
 bool Heroes::MayCastAdventureSpells() const
@@ -1446,12 +1432,12 @@ bool Heroes::MayCastAdventureSpells() const
     return !Modes( GUARDIAN ) && !isFreeman();
 }
 
-bool Heroes::isValid( void ) const
+bool Heroes::isValid() const
 {
     return hid != UNKNOWN;
 }
 
-bool Heroes::isFreeman( void ) const
+bool Heroes::isFreeman() const
 {
     return isValid() && Color::NONE == GetColor() && !Modes( JAIL );
 }
@@ -1459,46 +1445,43 @@ bool Heroes::isFreeman( void ) const
 void Heroes::SetFreeman( int reason )
 {
     if ( !isFreeman() ) {
-        bool savepoints = false;
-        Kingdom & kingdom = GetKingdom();
-
-        if ( ( Battle::RESULT_RETREAT | Battle::RESULT_SURRENDER ) & reason ) {
-            if ( Settings::Get().ExtHeroRememberPointsForRetreating() )
-                savepoints = true;
-            kingdom.SetLastLostHero( *this );
+        // if not surrendering, reset army
+        if ( ( reason & Battle::RESULT_SURRENDER ) == 0 ) {
+            army.Reset( true );
         }
 
-        // if not surrendering, reset army
-        if ( ( reason & Battle::RESULT_SURRENDER ) == 0 )
-            army.Reset( true );
+        const int heroColor = GetColor();
+        Kingdom & kingdom = GetKingdom();
 
-        if ( GetColor() != Color::NONE )
+        if ( heroColor != Color::NONE ) {
             kingdom.RemoveHeroes( this );
-
+        }
         SetColor( Color::NONE );
+
         world.GetTiles( GetIndex() ).SetHeroes( nullptr );
-        modes = 0;
         SetIndex( -1 );
-        move_point_scale = -1;
+
+        modes = 0;
+
         path.Reset();
+
         SetMove( false );
+
         SetModes( ACTION );
-        if ( savepoints )
-            SetModes( SAVE_MP_POINTS );
+
+        if ( ( Battle::RESULT_RETREAT | Battle::RESULT_SURRENDER ) & reason ) {
+            if ( Settings::Get().ExtHeroRememberMovementPointsWhenRetreating() ) {
+                SetModes( SAVEMP );
+            }
+
+            if ( heroColor != Color::NONE ) {
+                kingdom.appendSurrenderedHero( *this );
+            }
+        }
     }
 }
 
-void Heroes::SetKillerColor( int col )
-{
-    killer_color.SetColor( col );
-}
-
-int Heroes::GetKillerColor( void ) const
-{
-    return killer_color.GetColor();
-}
-
-int Heroes::GetControl( void ) const
+int Heroes::GetControl() const
 {
     return GetKingdom().GetControl();
 }
@@ -1508,30 +1491,33 @@ uint32_t Heroes::GetStartingXp()
     return Rand::Get( 40, 90 );
 }
 
-int Heroes::GetMapsObject( void ) const
+MP2::MapObjectType Heroes::GetMapsObject() const
 {
-    return save_maps_object;
+    return static_cast<MP2::MapObjectType>( save_maps_object );
 }
 
-void Heroes::SetMapsObject( int obj )
+void Heroes::SetMapsObject( const MP2::MapObjectType objectType )
 {
-    save_maps_object = obj != MP2::OBJ_HEROES ? obj : MP2::OBJ_ZERO;
+    save_maps_object = objectType != MP2::OBJ_HEROES ? objectType : MP2::OBJ_ZERO;
 }
 
-void Heroes::ActionPreBattle( void ) {}
+void Heroes::ActionPreBattle()
+{
+    spell_book.resetState();
+}
 
 void Heroes::ActionNewPosition( const bool allowMonsterAttack )
 {
     if ( allowMonsterAttack ) {
         // scan for monsters around
-        const MapsIndexes targets = Maps::GetTilesUnderProtection( GetIndex() );
+        const MapsIndexes targets = Maps::getMonstersProtectingTile( GetIndex() );
 
         if ( !targets.empty() ) {
             SetMove( false );
             GetPath().Hide();
 
             // first fight the monsters on the destination tile (if any)
-            MapsIndexes::const_iterator it = std::find( targets.begin(), targets.end(), GetPath().GetDestinedIndex() );
+            MapsIndexes::const_iterator it = std::find( targets.begin(), targets.end(), GetPath().GetDestinationIndex() );
 
             if ( it != targets.end() ) {
                 Action( *it, true );
@@ -1558,26 +1544,6 @@ void Heroes::ActionNewPosition( const bool allowMonsterAttack )
     ResetModes( VISIONS );
 }
 
-void Heroes::SetCenterPatrol( const fheroes2::Point & pt )
-{
-    patrol_center = pt;
-}
-
-const fheroes2::Point & Heroes::GetCenterPatrol( void ) const
-{
-    return patrol_center;
-}
-
-int Heroes::GetSquarePatrol( void ) const
-{
-    return patrol_square;
-}
-
-void Heroes::MovePointsScaleFixed( void )
-{
-    move_point_scale = move_point * 1000 / GetMaxMovePoints();
-}
-
 // Move hero to a new position. This function applies no action and no penalty
 void Heroes::Move2Dest( const int32_t dstIndex )
 {
@@ -1595,8 +1561,21 @@ const fheroes2::Sprite & Heroes::GetPortrait( int id, int type )
         switch ( type ) {
         case PORT_BIG:
             return fheroes2::AGG::GetICN( ICN::PORTxxxx( id ), 0 );
-        case PORT_MEDIUM:
-            return Heroes::DEBUG_HERO > id ? fheroes2::AGG::GetICN( ICN::PORTMEDI, id + 1 ) : fheroes2::AGG::GetICN( ICN::PORTMEDI, BAX + 1 );
+        case PORT_MEDIUM: {
+            // Original ICN::PORTMEDI sprites are badly rendered. Instead of them we're getting high quality ICN:PORT00xx file and resize it to a smaller image.
+            // TODO: find a better way to store these images, ideally in agg_image.cpp file.
+            static std::map<int, fheroes2::Sprite> mediumSizePortrait;
+            auto iter = mediumSizePortrait.find( id );
+            if ( iter != mediumSizePortrait.end() ) {
+                return iter->second;
+            }
+
+            const fheroes2::Sprite & original = fheroes2::AGG::GetICN( ICN::PORTxxxx( id ), 0 );
+            fheroes2::Sprite output( 50, 47 );
+            fheroes2::Resize( original, output );
+
+            return mediumSizePortrait.try_emplace( id, std::move( output ) ).first->second;
+        }
         case PORT_SMALL:
             return Heroes::DEBUG_HERO > id ? fheroes2::AGG::GetICN( ICN::MINIPORT, id ) : fheroes2::AGG::GetICN( ICN::MINIPORT, BAX );
         default:
@@ -1606,12 +1585,7 @@ const fheroes2::Sprite & Heroes::GetPortrait( int id, int type )
     return fheroes2::AGG::GetICN( -1, 0 );
 }
 
-const fheroes2::Sprite & Heroes::GetPortrait( int type ) const
-{
-    return Heroes::GetPortrait( portrait, type );
-}
-
-void Heroes::PortraitRedraw( s32 px, s32 py, PortraitType type, fheroes2::Image & dstsf ) const
+void Heroes::PortraitRedraw( const int32_t px, const int32_t py, const PortraitType type, fheroes2::Image & dstsf ) const
 {
     const fheroes2::Sprite & port = GetPortrait( portrait, type );
     fheroes2::Point mp;
@@ -1627,26 +1601,22 @@ void Heroes::PortraitRedraw( s32 px, s32 py, PortraitType type, fheroes2::Image 
             mp.x = port.width() - 10;
         }
         else if ( PORT_SMALL == type ) {
+            const fheroes2::Sprite & background = fheroes2::AGG::GetICN( ICN::PORTXTRA, 0 );
             const fheroes2::Sprite & mobility = fheroes2::AGG::GetICN( ICN::MOBILITY, GetMobilityIndexSprite() );
             const fheroes2::Sprite & mana = fheroes2::AGG::GetICN( ICN::MANA, GetManaIndexSprite() );
 
-            const int iconsw = Interface::IconsBar::GetItemWidth();
-            const int iconsh = Interface::IconsBar::GetItemHeight();
             const int barw = 7;
 
-            // background
-            fheroes2::Fill( dstsf, px, py, iconsw, iconsh, 0 );
+            // Draw background.
+            fheroes2::Blit( background, dstsf, px, py );
 
-            // mobility
-            const uint8_t blueColor = fheroes2::GetColorId( 15, 30, 120 );
-            fheroes2::Fill( dstsf, px, py, barw, iconsh, blueColor );
+            // Draw mobility.
             fheroes2::Blit( mobility, dstsf, px, py + mobility.y() );
 
-            // portrait
+            // Draw hero's portrait.
             fheroes2::Blit( port, dstsf, px + barw + 1, py );
 
-            // mana
-            fheroes2::Fill( dstsf, px + barw + port.width() + 2, py, barw, iconsh, blueColor );
+            // Draw mana.
             fheroes2::Blit( mana, dstsf, px + barw + port.width() + 2, py + mana.y() );
 
             mp.x = 35;
@@ -1673,21 +1643,17 @@ void Heroes::PortraitRedraw( s32 px, s32 py, PortraitType type, fheroes2::Image 
     }
 }
 
-std::string Heroes::String( void ) const
+std::string Heroes::String() const
 {
     std::ostringstream os;
 
-    os << "name            : " << name << std::endl
-       << "race            : " << Race::String( _race ) << std::endl
+    os << "name            : " << name << " (" << Race::String( _race ) << ")" << std::endl
        << "color           : " << Color::String( GetColor() ) << std::endl
        << "experience      : " << experience << std::endl
        << "level           : " << GetLevel() << std::endl
-       << "magic point     : " << GetSpellPoints() << std::endl
-       << "position x      : " << GetCenter().x << std::endl
-       << "position y      : " << GetCenter().y << std::endl
-       << "move point      : " << move_point << std::endl
-       << "max magic point : " << GetMaxSpellPoints() << std::endl
-       << "max move point  : " << GetMaxMovePoints() << std::endl
+       << "magic points    : " << GetSpellPoints() << " / " << GetMaxSpellPoints() << std::endl
+       << "position x, y   : " << GetCenter().x << ", " << GetCenter().y << std::endl
+       << "move points     : " << move_point << " / " << GetMaxMovePoints() << std::endl
        << "direction       : " << Direction::String( direction ) << std::endl
        << "index sprite    : " << sprite_index << std::endl
        << "in castle       : " << ( inCastle() ? "true" : "false" ) << std::endl
@@ -1701,7 +1667,7 @@ std::string Heroes::String( void ) const
     if ( !visit_object.empty() ) {
         os << "visit objects   : ";
         for ( std::list<IndexObject>::const_iterator it = visit_object.begin(); it != visit_object.end(); ++it )
-            os << MP2::StringObject( ( *it ).second ) << "(" << ( *it ).first << "), ";
+            os << MP2::StringObject( static_cast<MP2::MapObjectType>( ( *it ).second ) ) << "(" << ( *it ).first << "), ";
         os << std::endl;
     }
 
@@ -1709,7 +1675,8 @@ std::string Heroes::String( void ) const
         os << "skills          : " << secondary_skills.String() << std::endl
            << "artifacts       : " << bag_artifacts.String() << std::endl
            << "spell book      : " << ( HaveSpellBook() ? spell_book.String() : "disabled" ) << std::endl
-           << "army dump       : " << army.String() << std::endl;
+           << "army dump       : " << army.String() << std::endl
+           << "ai role         : " << GetHeroRoleString( *this ) << std::endl;
 
         os << AI::Get().HeroesString( *this );
     }
@@ -1717,19 +1684,9 @@ std::string Heroes::String( void ) const
     return os.str();
 }
 
-int Heroes::GetAttackedMonsterTileIndex() const
-{
-    return _attackedMonsterTileIndex;
-}
-
-void Heroes::SetAttackedMonsterTileIndex( int idx )
-{
-    _attackedMonsterTileIndex = idx;
-}
-
 AllHeroes::AllHeroes()
 {
-    reserve( HEROESMAXCOUNT + 2 );
+    reserve( maxHeroCount + 2 );
 }
 
 AllHeroes::~AllHeroes()
@@ -1737,33 +1694,33 @@ AllHeroes::~AllHeroes()
     AllHeroes::clear();
 }
 
-void AllHeroes::Init( void )
+void AllHeroes::Init()
 {
-    if ( size() )
+    if ( !empty() )
         AllHeroes::clear();
 
     // knight: LORDKILBURN, SIRGALLANTH, ECTOR, GVENNETH, TYRO, AMBROSE, RUBY, MAXIMUS, DIMITRY
-    for ( u32 hid = Heroes::LORDKILBURN; hid <= Heroes::DIMITRY; ++hid )
+    for ( uint32_t hid = Heroes::LORDKILBURN; hid <= Heroes::DIMITRY; ++hid )
         push_back( new Heroes( hid, Race::KNGT ) );
 
     // barbarian: THUNDAX, FINEOUS, JOJOSH, CRAGHACK, JEZEBEL, JACLYN, ERGON, TSABU, ATLAS
-    for ( u32 hid = Heroes::THUNDAX; hid <= Heroes::ATLAS; ++hid )
+    for ( uint32_t hid = Heroes::THUNDAX; hid <= Heroes::ATLAS; ++hid )
         push_back( new Heroes( hid, Race::BARB ) );
 
     // sorceress: ASTRA, NATASHA, TROYAN, VATAWNA, REBECCA, GEM, ARIEL, CARLAWN, LUNA
-    for ( u32 hid = Heroes::ASTRA; hid <= Heroes::LUNA; ++hid )
+    for ( uint32_t hid = Heroes::ASTRA; hid <= Heroes::LUNA; ++hid )
         push_back( new Heroes( hid, Race::SORC ) );
 
     // warlock: ARIE, ALAMAR, VESPER, CRODO, BAROK, KASTORE, AGAR, FALAGAR, WRATHMONT
-    for ( u32 hid = Heroes::ARIE; hid <= Heroes::WRATHMONT; ++hid )
+    for ( uint32_t hid = Heroes::ARIE; hid <= Heroes::WRATHMONT; ++hid )
         push_back( new Heroes( hid, Race::WRLK ) );
 
     // wizard: MYRA, FLINT, DAWN, HALON, MYRINI, WILFREY, SARAKIN, KALINDRA, MANDIGAL
-    for ( u32 hid = Heroes::MYRA; hid <= Heroes::MANDIGAL; ++hid )
+    for ( uint32_t hid = Heroes::MYRA; hid <= Heroes::MANDIGAL; ++hid )
         push_back( new Heroes( hid, Race::WZRD ) );
 
     // necromancer: ZOM, DARLANA, ZAM, RANLOO, CHARITY, RIALDO, ROXANA, SANDRO, CELIA
-    for ( u32 hid = Heroes::ZOM; hid <= Heroes::CELIA; ++hid )
+    for ( uint32_t hid = Heroes::ZOM; hid <= Heroes::CELIA; ++hid )
         push_back( new Heroes( hid, Race::NECR ) );
 
     // from campain
@@ -1780,7 +1737,7 @@ void AllHeroes::Init( void )
         push_back( new Heroes( Heroes::DAINWIN, Race::WRLK, 5 ) );
         push_back( new Heroes( Heroes::MOG, Race::NECR, 5 ) );
         push_back( new Heroes( Heroes::UNCLEIVAN, Race::BARB, 5 ) );
-        push_back( new Heroes( Heroes::JOSEPH, Race::KNGT, 5 ) );
+        push_back( new Heroes( Heroes::JOSEPH, Race::WZRD, 5 ) );
         push_back( new Heroes( Heroes::GALLAVANT, Race::KNGT, 5 ) );
         push_back( new Heroes( Heroes::ELDERIAN, Race::WRLK, 5 ) );
         push_back( new Heroes( Heroes::CEALLACH, Race::KNGT, 5 ) );
@@ -1805,7 +1762,7 @@ void AllHeroes::Init( void )
     push_back( new Heroes( Heroes::UNKNOWN, Race::KNGT ) );
 }
 
-void AllHeroes::clear( void )
+void AllHeroes::clear()
 {
     for ( iterator it = begin(); it != end(); ++it )
         delete *it;
@@ -1846,7 +1803,7 @@ Heroes * AllHeroes::GetGuard( const Castle & castle ) const
     return end() != it ? *it : nullptr;
 }
 
-Heroes * AllHeroes::GetFreeman( int race ) const
+Heroes * AllHeroes::GetFreeman( const int race, const int heroIDToIgnore ) const
 {
     int min = Heroes::UNKNOWN;
     int max = Heroes::UNKNOWN;
@@ -1889,36 +1846,47 @@ Heroes * AllHeroes::GetFreeman( int race ) const
     }
 
     std::vector<int> freeman_heroes;
-    freeman_heroes.reserve( HEROESMAXCOUNT );
+    freeman_heroes.reserve( maxHeroCount );
 
-    // find freeman in race (skip: manual changes)
-    for ( int ii = min; ii <= max; ++ii )
-        if ( at( ii )->isFreeman() && !at( ii )->Modes( Heroes::NOTDEFAULTS ) )
-            freeman_heroes.push_back( ii );
+    // First try to find a free hero of the specified race (skipping custom heroes)
+    for ( int i = min; i <= max; ++i ) {
+        if ( i != heroIDToIgnore && at( i )->isFreeman() && !at( i )->Modes( Heroes::NOTDEFAULTS ) ) {
+            freeman_heroes.push_back( i );
+        }
+    }
 
-    // not found, find any race
-    if ( Race::NONE != race && freeman_heroes.empty() ) {
+    // If no heroes are found, then try to find a free hero of any race
+    if ( race != Race::NONE && freeman_heroes.empty() ) {
         min = Heroes::LORDKILBURN;
         max = Heroes::CELIA;
 
-        for ( int ii = min; ii <= max; ++ii )
-            if ( at( ii )->isFreeman() )
-                freeman_heroes.push_back( ii );
+        for ( int i = min; i <= max; ++i ) {
+            if ( i != heroIDToIgnore && at( i )->isFreeman() ) {
+                freeman_heroes.push_back( i );
+            }
+        }
     }
 
-    // not found, all heroes busy
+    // All the heroes are busy
     if ( freeman_heroes.empty() ) {
-        DEBUG_LOG( DBG_GAME, DBG_WARN, "freeman not found, all heroes busy." );
+        DEBUG_LOG( DBG_GAME, DBG_WARN, "freeman not found, all the heroes are busy." )
         return nullptr;
     }
 
-    return at( Rand::Get( freeman_heroes ) );
-}
+    // Try to avoid freeman heroes who are already available for recruitment in any kingdom
+    std::vector<int> freemanHeroesNotRecruits = freeman_heroes;
 
-Heroes * AllHeroes::GetFreemanSpecial( int heroID ) const
-{
-    assert( at( heroID ) && at( heroID )->isFreeman() );
-    return at( heroID );
+    freemanHeroesNotRecruits.erase( std::remove_if( freemanHeroesNotRecruits.begin(), freemanHeroesNotRecruits.end(),
+                                                    [this]( const int heroID ) { return at( heroID )->Modes( Heroes::RECRUIT ); } ),
+                                    freemanHeroesNotRecruits.end() );
+
+    if ( !freemanHeroesNotRecruits.empty() ) {
+        return at( Rand::Get( freemanHeroesNotRecruits ) );
+    }
+
+    // There are no freeman heroes who are not yet available for recruitment, allow
+    // heroes to be available for recruitment in several kingdoms at the same time
+    return at( Rand::Get( freeman_heroes ) );
 }
 
 void AllHeroes::Scoute( int colors ) const
@@ -1928,15 +1896,10 @@ void AllHeroes::Scoute( int colors ) const
             ( *it )->Scoute( ( *it )->GetIndex() );
 }
 
-Heroes * AllHeroes::FromJail( s32 index ) const
+Heroes * AllHeroes::FromJail( int32_t index ) const
 {
     const_iterator it = std::find_if( begin(), end(), [index]( const Heroes * hero ) { return hero->Modes( Heroes::JAIL ) && index == hero->GetIndex(); } );
     return end() != it ? *it : nullptr;
-}
-
-bool AllHeroes::HaveTwoFreemans( void ) const
-{
-    return 2 <= std::count_if( begin(), end(), []( const Heroes * hero ) { return hero->isFreeman(); } );
 }
 
 HeroSeedsForLevelUp Heroes::GetSeedsForLevelUp() const
@@ -1953,28 +1916,28 @@ HeroSeedsForLevelUp Heroes::GetSeedsForLevelUp() const
      * skill would always be the same once the 1st one is selected.
      * */
 
-    size_t hash = world.GetMapSeed();
-    hashCombine( hash, hid );
-    hashCombine( hash, _race );
-    hashCombine( hash, attack );
-    hashCombine( hash, defense );
-    hashCombine( hash, power );
-    hashCombine( hash, knowledge );
+    uint32_t hash = world.GetMapSeed();
+    fheroes2::hashCombine( hash, hid );
+    fheroes2::hashCombine( hash, _race );
+    fheroes2::hashCombine( hash, attack );
+    fheroes2::hashCombine( hash, defense );
+    fheroes2::hashCombine( hash, power );
+    fheroes2::hashCombine( hash, knowledge );
     for ( int skillId = Skill::Secondary::PATHFINDING; skillId <= Skill::Secondary::ESTATES; ++skillId ) {
-        hashCombine( hash, GetLevelSkill( skillId ) );
+        fheroes2::hashCombine( hash, GetLevelSkill( skillId ) );
     }
 
     HeroSeedsForLevelUp seeds;
-    seeds.seedPrimarySkill = static_cast<uint32_t>( hash );
-    seeds.seedSecondaySkill1 = seeds.seedPrimarySkill + 1;
-    seeds.seedSecondaySkill2 = seeds.seedPrimarySkill + 2;
-    seeds.seedSecondaySkillRandomChoose = seeds.seedPrimarySkill + 3;
+    seeds.seedPrimarySkill = hash;
+    seeds.seedSecondaySkill1 = hash + 1;
+    seeds.seedSecondaySkill2 = hash + 2;
+    seeds.seedSecondaySkillRandomChoose = hash + 3;
     return seeds;
 }
 
 StreamBase & operator<<( StreamBase & msg, const VecHeroes & heroes )
 {
-    msg << static_cast<u32>( heroes.size() );
+    msg << static_cast<uint32_t>( heroes.size() );
 
     for ( AllHeroes::const_iterator it = heroes.begin(); it != heroes.end(); ++it )
         msg << ( *it ? ( *it )->GetID() : Heroes::UNKNOWN );
@@ -1984,13 +1947,13 @@ StreamBase & operator<<( StreamBase & msg, const VecHeroes & heroes )
 
 StreamBase & operator>>( StreamBase & msg, VecHeroes & heroes )
 {
-    u32 size;
+    uint32_t size;
     msg >> size;
 
     heroes.resize( size, nullptr );
 
     for ( AllHeroes::iterator it = heroes.begin(); it != heroes.end(); ++it ) {
-        u32 hid;
+        uint32_t hid;
         msg >> hid;
         *it = ( hid != Heroes::UNKNOWN ? world.GetHeroes( hid ) : nullptr );
     }
@@ -2003,11 +1966,12 @@ StreamBase & operator<<( StreamBase & msg, const Heroes & hero )
     const HeroBase & base = hero;
     const ColorBase & col = hero;
 
+    // HeroBase
     msg << base;
 
-    // heroes
-    msg << hero.name << col << hero.killer_color << hero.experience << hero.move_point_scale << hero.secondary_skills << hero.army << hero.hid << hero.portrait
-        << hero._race << hero.save_maps_object << hero.path << hero.direction << hero.sprite_index;
+    // Heroes
+    msg << hero.name << col << hero.experience << hero.secondary_skills << hero.army << hero.hid << hero.portrait << hero._race << hero.save_maps_object << hero.path
+        << hero.direction << hero.sprite_index;
 
     // TODO: before 0.9.4 Point was int16_t type
     const int16_t patrolX = static_cast<int16_t>( hero.patrol_center.x );
@@ -2023,8 +1987,29 @@ StreamBase & operator>>( StreamBase & msg, Heroes & hero )
     HeroBase & base = hero;
     ColorBase & col = hero;
 
-    msg >> base >> hero.name >> col >> hero.killer_color >> hero.experience >> hero.move_point_scale >> hero.secondary_skills >> hero.army >> hero.hid >> hero.portrait
-        >> hero._race >> hero.save_maps_object >> hero.path >> hero.direction >> hero.sprite_index;
+    // HeroBase
+    msg >> base;
+
+    // Heroes
+    msg >> hero.name >> col;
+
+    static_assert( LAST_SUPPORTED_FORMAT_VERSION < FORMAT_VERSION_PRE_0916_RELEASE, "Remove the check below." );
+    if ( Game::GetLoadVersion() < FORMAT_VERSION_PRE_0916_RELEASE ) {
+        ColorBase dummyColor;
+
+        msg >> dummyColor;
+    }
+
+    msg >> hero.experience;
+
+    static_assert( LAST_SUPPORTED_FORMAT_VERSION < FORMAT_VERSION_0917_RELEASE, "Remove the check below." );
+    if ( Game::GetLoadVersion() < FORMAT_VERSION_0917_RELEASE ) {
+        int32_t dummy;
+
+        msg >> dummy;
+    }
+
+    msg >> hero.secondary_skills >> hero.army >> hero.hid >> hero.portrait >> hero._race >> hero.save_maps_object >> hero.path >> hero.direction >> hero.sprite_index;
 
     // TODO: before 0.9.4 Point was int16_t type
     int16_t patrolX = 0;
@@ -2041,7 +2026,7 @@ StreamBase & operator>>( StreamBase & msg, Heroes & hero )
 
 StreamBase & operator<<( StreamBase & msg, const AllHeroes & heroes )
 {
-    msg << static_cast<u32>( heroes.size() );
+    msg << static_cast<uint32_t>( heroes.size() );
 
     for ( AllHeroes::const_iterator it = heroes.begin(); it != heroes.end(); ++it )
         msg << **it;
@@ -2051,7 +2036,7 @@ StreamBase & operator<<( StreamBase & msg, const AllHeroes & heroes )
 
 StreamBase & operator>>( StreamBase & msg, AllHeroes & heroes )
 {
-    u32 size;
+    uint32_t size;
     msg >> size;
 
     heroes.clear();

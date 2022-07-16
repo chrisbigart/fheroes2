@@ -1,46 +1,53 @@
-name: sonarcloud analyzer
+name: SonarCloud Analyzer
 
 on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+  workflow_call:
+    secrets:
+      SONAR_TOKEN:
+        required: true
 
 jobs:
   sonarcloud:
+    name: SonarCloud Analyzer
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || ( github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository ) }}
+    timeout-minutes: 30
+    if: ${{ github.repository == 'ihhub/fheroes2' && ( github.event_name == 'push' || ( github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository ) ) }}
     env:
       SONAR_SCANNER_VERSION: 4.5.0.2216
     steps:
     - uses: actions/checkout@v2
       with:
         fetch-depth: 0
-    - name: install SDL 2
+    - name: Install dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev libsdl2-mixer-dev libsdl2-image-dev gettext
-    - name: initialize SonarCloud
+        sudo apt-get -y update
+        sudo apt-get -y install libsdl2-dev libsdl2-mixer-dev libsdl2-image-dev gettext
+    - name: Initialize SonarCloud
       run: |
         mkdir -p ~/.sonarcloud
         wget -P ~/.sonarcloud https://sonarcloud.io/static/cpp/build-wrapper-linux-x86.zip
         wget -P ~/.sonarcloud https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-"$SONAR_SCANNER_VERSION"-linux.zip
         unzip ~/.sonarcloud/build-wrapper-linux-x86.zip -d ~/.sonarcloud
         unzip ~/.sonarcloud/sonar-scanner-cli-"$SONAR_SCANNER_VERSION"-linux.zip -d ~/.sonarcloud
-    - name: prepare SonarCloud cfamily cache
-      uses: actions/cache@v2
+    - name: Prepare SonarCloud cfamily cache
+      uses: actions/cache@v3
       with:
         path: ~/.sonar-cfamily-cache
-        key: sonarcloud-${{ hashFiles( 'src/**/*.c', 'src/**/*.cpp', 'src/**/*.h' ) }}
+        key: sonarcloud-cfamily-cache-${{ hashFiles( 'src/**/*.c', 'src/**/*.cpp', 'src/**/*.h' ) }}
         restore-keys: |
-          sonarcloud-
-    - name: compile
+          sonarcloud-cfamily-cache-
+    - name: Generate version information
+      run: |
+        sed -i~ "s/%{version}/$(cat version.txt)/" sonar-project.properties
+    - name: Build
       run: |
         ~/.sonarcloud/build-wrapper-linux-x86/build-wrapper-linux-x86-64 --out-dir bw-output make -j 2
       env:
-        FHEROES2_STRICT_COMPILATION: "ON"
-        WITH_TOOLS: "ON"
-    - name: analyze
+        FHEROES2_STRICT_COMPILATION: ON
+        FHEROES2_WITH_DEBUG: ON
+        FHEROES2_WITH_IMAGE: ON
+        FHEROES2_WITH_TOOLS: ON
+    - name: Analyze
       run: |
         ~/.sonarcloud/sonar-scanner-"$SONAR_SCANNER_VERSION"-linux/bin/sonar-scanner -Dsonar.cfamily.build-wrapper-output=bw-output \
                                                                                      -Dsonar.cfamily.cache.enabled=true \

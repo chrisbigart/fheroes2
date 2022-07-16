@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2021                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2021 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -19,25 +19,21 @@
  ***************************************************************************/
 
 #include "campaign_savedata.h"
-#include "artifact.h"
-#include "game.h"
-#include "heroes.h"
+#include "army.h"
+#include "campaign_data.h"
+#include "save_format_version.h"
 #include "serialize.h"
-#include "settings.h"
-#include "translations.h"
 #include <algorithm>
 #include <cassert>
 
 namespace Campaign
 {
     CampaignSaveData::CampaignSaveData()
-        : _finishedMaps()
-        , _obtainedCampaignAwards()
-        , _currentScenarioID( 0 )
-        , _campaignID( 0 )
+        : _currentScenarioInfoId( -1, -1 )
         , _daysPassed( 0 )
-        , _currentScenarioBonus()
-    {}
+    {
+        // Do nothing.
+    }
 
     CampaignSaveData & Campaign::CampaignSaveData::Get()
     {
@@ -50,26 +46,27 @@ namespace Campaign
         _obtainedCampaignAwards.emplace_back( awardID );
     }
 
+    void CampaignSaveData::removeCampaignAward( const int awardID )
+    {
+        _obtainedCampaignAwards.erase( std::remove( _obtainedCampaignAwards.begin(), _obtainedCampaignAwards.end(), awardID ), _obtainedCampaignAwards.end() );
+    }
+
     void CampaignSaveData::setCurrentScenarioBonus( const ScenarioBonusData & bonus )
     {
         _currentScenarioBonus = bonus;
     }
 
-    void CampaignSaveData::setCurrentScenarioID( const int scenarioID )
+    void CampaignSaveData::setCurrentScenarioInfoId( const ScenarioInfoId & scenarioInfoId )
     {
-        _currentScenarioID = scenarioID;
-    }
-
-    void CampaignSaveData::setCampaignID( const int campaignID )
-    {
-        _campaignID = campaignID;
+        assert( scenarioInfoId.campaignId >= 0 && scenarioInfoId.scenarioId >= 0 );
+        _currentScenarioInfoId = scenarioInfoId;
     }
 
     void CampaignSaveData::addCurrentMapToFinished()
     {
-        const bool isNotDuplicate = std::find( _finishedMaps.begin(), _finishedMaps.end(), _currentScenarioID ) == _finishedMaps.end();
+        const bool isNotDuplicate = std::find( _finishedMaps.begin(), _finishedMaps.end(), _currentScenarioInfoId ) == _finishedMaps.end();
         if ( isNotDuplicate )
-            _finishedMaps.emplace_back( _currentScenarioID );
+            _finishedMaps.emplace_back( _currentScenarioInfoId );
     }
 
     void CampaignSaveData::addDaysPassed( const uint32_t days )
@@ -82,8 +79,7 @@ namespace Campaign
         _finishedMaps.clear();
         _obtainedCampaignAwards.clear();
         _carryOverTroops.clear();
-        _currentScenarioID = 0;
-        _campaignID = 0;
+        _currentScenarioInfoId = { -1, -1 };
         _daysPassed = 0;
     }
 
@@ -96,18 +92,18 @@ namespace Campaign
         }
     }
 
-    int CampaignSaveData::getLastCompletedScenarioID() const
+    const ScenarioInfoId & CampaignSaveData::getLastCompletedScenarioInfoID() const
     {
         assert( !_finishedMaps.empty() );
         return _finishedMaps.back();
     }
 
-    const std::vector<Campaign::CampaignAwardData> CampaignSaveData::getObtainedCampaignAwards() const
+    std::vector<Campaign::CampaignAwardData> CampaignSaveData::getObtainedCampaignAwards() const
     {
         std::vector<Campaign::CampaignAwardData> obtainedAwards;
 
         for ( size_t i = 0; i < _finishedMaps.size(); ++i ) {
-            const std::vector<Campaign::CampaignAwardData> awards = Campaign::CampaignAwardData::getCampaignAwardData( _campaignID, _finishedMaps[i] );
+            const std::vector<Campaign::CampaignAwardData> awards = Campaign::CampaignAwardData::getCampaignAwardData( _finishedMaps[i] );
 
             for ( size_t j = 0; j < awards.size(); ++j ) {
                 if ( std::find( _obtainedCampaignAwards.begin(), _obtainedCampaignAwards.end(), awards[j]._id ) != _obtainedCampaignAwards.end() )
@@ -115,18 +111,71 @@ namespace Campaign
             }
         }
 
+        const std::vector<Campaign::CampaignAwardData> extraAwards = Campaign::CampaignAwardData::getExtraCampaignAwardData( _currentScenarioInfoId.campaignId );
+        for ( const Campaign::CampaignAwardData & award : extraAwards ) {
+            if ( std::find( _obtainedCampaignAwards.begin(), _obtainedCampaignAwards.end(), award._id ) != _obtainedCampaignAwards.end() )
+                obtainedAwards.emplace_back( award );
+        }
+
         return obtainedAwards;
     }
 
-    StreamBase & operator<<( StreamBase & msg, const Campaign::CampaignSaveData & data )
+    StreamBase & operator<<( StreamBase & msg, const CampaignSaveData & data )
     {
-        return msg << data._currentScenarioID << data._currentScenarioBonus << data._finishedMaps << data._campaignID << data._daysPassed << data._obtainedCampaignAwards
-                   << data._carryOverTroops;
+        return msg << data._currentScenarioInfoId.campaignId << data._currentScenarioInfoId.scenarioId << data._currentScenarioBonus << data._finishedMaps
+                   << data._daysPassed << data._obtainedCampaignAwards << data._carryOverTroops;
     }
 
-    StreamBase & operator>>( StreamBase & msg, Campaign::CampaignSaveData & data )
+    StreamBase & operator>>( StreamBase & msg, CampaignSaveData & data )
     {
-        return msg >> data._currentScenarioID >> data._currentScenarioBonus >> data._finishedMaps >> data._campaignID >> data._daysPassed >> data._obtainedCampaignAwards
-               >> data._carryOverTroops;
+        return msg >> data._currentScenarioInfoId.campaignId >> data._currentScenarioInfoId.scenarioId >> data._currentScenarioBonus >> data._finishedMaps
+               >> data._daysPassed >> data._obtainedCampaignAwards >> data._carryOverTroops;
+    }
+
+    void CampaignSaveData::loadOldSaveSata( StreamBase & msg, CampaignSaveData & data )
+    {
+        static_assert( LAST_SUPPORTED_FORMAT_VERSION < FORMAT_VERSION_0912_RELEASE, "Remove this method." );
+
+        msg >> data._currentScenarioInfoId.scenarioId >> data._currentScenarioBonus;
+
+        std::vector<int> finishedMaps;
+        msg >> finishedMaps;
+
+        msg >> data._currentScenarioInfoId.campaignId >> data._daysPassed >> data._obtainedCampaignAwards >> data._carryOverTroops;
+
+        data._finishedMaps.clear();
+        for ( const int mapId : finishedMaps ) {
+            data._finishedMaps.emplace_back( data._currentScenarioInfoId.campaignId, mapId );
+        }
+    }
+
+    ScenarioVictoryCondition getCurrentScenarioVictoryCondition()
+    {
+        const CampaignSaveData & campaignData = CampaignSaveData::Get();
+
+        const std::vector<ScenarioData> & scenarios = CampaignData::getCampaignData( campaignData.getCampaignID() ).getAllScenarios();
+        const int scenarioId = campaignData.getCurrentScenarioID();
+        assert( scenarioId >= 0 && static_cast<size_t>( scenarioId ) < scenarios.size() );
+
+        if ( scenarioId >= 0 && static_cast<size_t>( scenarioId ) < scenarios.size() ) {
+            return scenarios[scenarioId].getVictoryCondition();
+        }
+
+        return ScenarioVictoryCondition::STANDARD;
+    }
+
+    ScenarioLossCondition getCurrentScenarioLossCondition()
+    {
+        const CampaignSaveData & campaignData = CampaignSaveData::Get();
+
+        const std::vector<ScenarioData> & scenarios = CampaignData::getCampaignData( campaignData.getCampaignID() ).getAllScenarios();
+        const int scenarioId = campaignData.getCurrentScenarioID();
+        assert( scenarioId >= 0 && static_cast<size_t>( scenarioId ) < scenarios.size() );
+
+        if ( scenarioId >= 0 && static_cast<size_t>( scenarioId ) < scenarios.size() ) {
+            return scenarios[scenarioId].getLossCondition();
+        }
+
+        return ScenarioLossCondition::STANDARD;
     }
 }

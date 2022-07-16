@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2013 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2013 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,12 +23,11 @@
 
 #include "maps_actions.h"
 #include "dialog.h"
-#include "game.h"
 #include "heroes.h"
 #include "kingdom.h"
-#include "players.h"
-#include "settings.h"
-#include "text.h"
+#include "serialize.h"
+#include "ui_dialog.h"
+#include "ui_text.h"
 #include "world.h"
 
 StreamBase & operator<<( StreamBase & sb, const ActionSimple & st )
@@ -92,7 +92,7 @@ StreamBase & operator>>( StreamBase & sb, ActionMessage & st )
 
 StreamBase & operator<<( StreamBase & sb, const ListActions & st )
 {
-    sb << static_cast<u32>( st.size() );
+    sb << static_cast<uint32_t>( st.size() );
     for ( ListActions::const_iterator it = st.begin(); it != st.end(); ++it ) {
         sb << ( *it )->GetType();
 
@@ -101,27 +101,32 @@ StreamBase & operator<<( StreamBase & sb, const ListActions & st )
             const ActionDefault * ptr = static_cast<const ActionDefault *>( *it );
             if ( ptr )
                 sb << *ptr;
-        } break;
+            break;
+        }
         case ACTION_ACCESS: {
             const ActionAccess * ptr = static_cast<const ActionAccess *>( *it );
             if ( ptr )
                 sb << *ptr;
-        } break;
+            break;
+        }
         case ACTION_MESSAGE: {
             const ActionMessage * ptr = static_cast<const ActionMessage *>( *it );
             if ( ptr )
                 sb << *ptr;
-        } break;
+            break;
+        }
         case ACTION_RESOURCES: {
             const ActionResources * ptr = static_cast<const ActionResources *>( *it );
             if ( ptr )
                 sb << *ptr;
-        } break;
+            break;
+        }
         case ACTION_ARTIFACT: {
             const ActionArtifact * ptr = static_cast<const ActionArtifact *>( *it );
             if ( ptr )
                 sb << *ptr;
-        } break;
+            break;
+        }
         default:
             sb << **it;
             break;
@@ -133,12 +138,12 @@ StreamBase & operator<<( StreamBase & sb, const ListActions & st )
 
 StreamBase & operator>>( StreamBase & sb, ListActions & st )
 {
-    u32 size = 0;
+    uint32_t size = 0;
     sb >> size;
 
     st.clear();
 
-    for ( u32 ii = 0; ii < size; ++ii ) {
+    for ( uint32_t ii = 0; ii < size; ++ii ) {
         int type;
         sb >> type;
 
@@ -147,47 +152,54 @@ StreamBase & operator>>( StreamBase & sb, ListActions & st )
             ActionDefault * ptr = new ActionDefault();
             sb >> *ptr;
             st.push_back( ptr );
-        } break;
+            break;
+        }
         case ACTION_ACCESS: {
             ActionAccess * ptr = new ActionAccess();
             sb >> *ptr;
             st.push_back( ptr );
-        } break;
+            break;
+        }
         case ACTION_MESSAGE: {
             ActionMessage * ptr = new ActionMessage();
             sb >> *ptr;
             st.push_back( ptr );
-        } break;
+            break;
+        }
         case ACTION_RESOURCES: {
             ActionResources * ptr = new ActionResources();
             sb >> *ptr;
             st.push_back( ptr );
-        } break;
+            break;
+        }
         case ACTION_ARTIFACT: {
             ActionArtifact * ptr = new ActionArtifact();
             sb >> *ptr;
             st.push_back( ptr );
-        } break;
+            break;
+        }
 
         default: {
             ActionSimple * ptr = new ActionSimple();
             sb >> *ptr;
             st.push_back( ptr );
-        } break;
+            break;
+        }
         }
     }
 
     return sb;
 }
 
-bool ActionAccess::Action( const ActionAccess * act, s32 index, Heroes & hero )
+bool ActionAccess::Action( const ActionAccess * act, int32_t index, Heroes & hero )
 {
     if ( act ) {
         if ( act->cancelAfterFirstVisit && hero.isVisited( world.GetTiles( index ), Visit::GLOBAL ) )
             return false;
 
-        if ( !act->message.empty() )
-            Dialog::Message( "", act->message, Font::BIG, Dialog::OK );
+        if ( !act->message.empty() ) {
+            fheroes2::showMessage( fheroes2::Text( "", {} ), fheroes2::Text( act->message, fheroes2::FontType::normalWhite() ), Dialog::OK );
+        }
 
         if ( hero.isControlAI() && !act->allowComputer )
             return false;
@@ -205,8 +217,9 @@ bool ActionAccess::Action( const ActionAccess * act, s32 index, Heroes & hero )
 bool ActionDefault::Action( const ActionDefault * act )
 {
     if ( act ) {
-        if ( !act->message.empty() )
-            Dialog::Message( "", act->message, Font::BIG, Dialog::OK );
+        if ( !act->message.empty() ) {
+            fheroes2::showMessage( fheroes2::Text( "", {} ), fheroes2::Text( act->message, fheroes2::FontType::normalWhite() ), Dialog::OK );
+        }
         return act->enabled;
     }
 
@@ -216,8 +229,10 @@ bool ActionDefault::Action( const ActionDefault * act )
 bool ActionArtifact::Action( ActionArtifact * act, Heroes & hero )
 {
     if ( act && act->artifact != Artifact::UNKNOWN ) {
-        if ( !act->message.empty() )
-            Dialog::ArtifactInfo( "", act->message, act->artifact );
+        if ( !act->message.empty() ) {
+            const fheroes2::ArtifactDialogElement artifactUI( act->artifact );
+            fheroes2::showMessage( fheroes2::Text( "", {} ), fheroes2::Text( act->message, fheroes2::FontType::normalWhite() ), Dialog::OK, { &artifactUI } );
+        }
         hero.PickupArtifact( act->artifact );
         act->artifact = Artifact::UNKNOWN;
         return true;
@@ -229,7 +244,7 @@ bool ActionArtifact::Action( ActionArtifact * act, Heroes & hero )
 bool ActionResources::Action( ActionResources * act, const Heroes & hero )
 {
     if ( act && 0 < act->resources.GetValidItems() ) {
-        Dialog::ResourceInfo( "", act->message, act->resources );
+        fheroes2::showResourceMessage( fheroes2::Text( "", {} ), fheroes2::Text( act->message, fheroes2::FontType::normalWhite() ), Dialog::OK, act->resources );
         hero.GetKingdom().AddFundsResource( act->resources );
         act->resources.Reset();
         return true;
@@ -241,8 +256,9 @@ bool ActionResources::Action( ActionResources * act, const Heroes & hero )
 bool ActionMessage::Action( const ActionMessage * act )
 {
     if ( act ) {
-        if ( !act->message.empty() )
-            Dialog::Message( "", act->message, Font::BIG, Dialog::OK );
+        if ( !act->message.empty() ) {
+            fheroes2::showMessage( fheroes2::Text( "", {} ), fheroes2::Text( act->message, fheroes2::FontType::normalWhite() ), Dialog::OK );
+        }
         return true;
     }
 

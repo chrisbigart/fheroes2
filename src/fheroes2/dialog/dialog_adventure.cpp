@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,11 +24,12 @@
 #include "agg_image.h"
 #include "cursor.h"
 #include "dialog.h"
-#include "game.h"
+#include "game_hotkeys.h"
 #include "icn.h"
 #include "localevent.h"
 #include "settings.h"
 #include "text.h"
+#include "translations.h"
 #include "ui_button.h"
 
 int Dialog::AdventureOptions( bool enabledig )
@@ -78,38 +80,38 @@ int Dialog::AdventureOptions( bool enabledig )
         le.MousePressLeft( buttonDig.area() ) ? buttonDig.drawOnPress() : buttonDig.drawOnRelease();
         le.MousePressLeft( buttonCancel.area() ) ? buttonCancel.drawOnPress() : buttonCancel.drawOnRelease();
 
-        if ( le.MouseClickLeft( buttonWorld.area() ) ) {
+        if ( le.MouseClickLeft( buttonWorld.area() ) || Game::HotKeyPressEvent( Game::HotKeyEvent::VIEW_WORLD ) ) {
             result = Dialog::WORLD;
             break;
         }
-        if ( le.MouseClickLeft( buttonPuzzle.area() ) ) {
+        if ( le.MouseClickLeft( buttonPuzzle.area() ) || Game::HotKeyPressEvent( Game::HotKeyEvent::PUZZLE_MAP ) ) {
             result = Dialog::PUZZLE;
             break;
         }
-        if ( le.MouseClickLeft( buttonInfo.area() ) ) {
+        if ( le.MouseClickLeft( buttonInfo.area() ) || Game::HotKeyPressEvent( Game::HotKeyEvent::SCENARIO_INFORMATION ) ) {
             result = Dialog::INFO;
             break;
         }
-        if ( le.MouseClickLeft( buttonDig.area() ) && buttonDig.isEnabled() ) {
+        if ( ( le.MouseClickLeft( buttonDig.area() ) || Game::HotKeyPressEvent( Game::HotKeyEvent::DIG_ARTIFACT ) ) && buttonDig.isEnabled() ) {
             result = Dialog::DIG;
             break;
         }
-        if ( le.MouseClickLeft( buttonCancel.area() ) || Game::HotKeyPressEvent( Game::EVENT_DEFAULT_EXIT ) ) {
+        if ( le.MouseClickLeft( buttonCancel.area() ) || Game::HotKeyCloseWindow() ) {
             result = Dialog::CANCEL;
             break;
         }
 
         // right info
         if ( le.MousePressRight( buttonWorld.area() ) )
-            Dialog::Message( "", _( "View the entire world." ), Font::BIG );
+            Dialog::Message( _( "View World" ), _( "View the entire world." ), Font::BIG );
         if ( le.MousePressRight( buttonPuzzle.area() ) )
-            Dialog::Message( "", _( "View the obelisk puzzle." ), Font::BIG );
+            Dialog::Message( _( "Puzzle" ), _( "View the obelisk puzzle." ), Font::BIG );
         if ( le.MousePressRight( buttonInfo.area() ) )
-            Dialog::Message( "", _( "View information on the scenario you are currently playing." ), Font::BIG );
+            Dialog::Message( _( "Scenario Information" ), _( "View information on the scenario you are currently playing." ), Font::BIG );
         if ( le.MousePressRight( buttonDig.area() ) )
-            Dialog::Message( "", _( "Dig for the Ultimate Artifact." ), Font::BIG );
+            Dialog::Message( _( "Digging" ), _( "Dig for the Ultimate Artifact." ), Font::BIG );
         if ( le.MousePressRight( buttonCancel.area() ) )
-            Dialog::Message( "", _( "Exit this menu without doing anything." ), Font::BIG );
+            Dialog::Message( _( "Cancel" ), _( "Exit this menu without doing anything." ), Font::BIG );
     }
 
     // restore background

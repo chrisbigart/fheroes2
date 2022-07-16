@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2021                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2021 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,11 +21,10 @@
 #include "ai_normal.h"
 #include "battle_arena.h"
 #include "battle_army.h"
-#include "battle_board.h"
-#include "battle_command.h"
 #include "battle_troop.h"
-#include "heroes.h"
+#include "heroes_base.h"
 #include "logging.h"
+#include "speed.h"
 
 using namespace Battle;
 
@@ -42,10 +41,10 @@ namespace AI
         return Board::DistanceFromOriginX( unit.GetHeadIndex(), unit.isReflect() );
     }
 
-    SpellSeletion BattlePlanner::selectBestSpell( Arena & arena, bool retreating ) const
+    SpellSelection BattlePlanner::selectBestSpell( Arena & arena, const Battle::Unit & currentUnit, bool retreating ) const
     {
         // Cast best spell with highest heuristic on target pointer saved
-        SpellSeletion bestSpell;
+        SpellSelection bestSpell;
 
         // Commander must be set before calling this function! Check both debug/release version
         assert( _commander != nullptr );
@@ -54,8 +53,8 @@ namespace AI
         }
 
         const std::vector<Spell> allSpells = _commander->GetSpells();
-        const Units friendly( arena.GetForce( _myColor ), true );
-        const Units enemies( arena.GetForce( _myColor, true ), true );
+        const Units friendly( arena.getForce( _myColor ).getUnits(), true );
+        const Units enemies( arena.getEnemyForce( _myColor ).getUnits(), true );
 
         // Hero should conserve spellpoints if already spent more than half or his army is stronger
         // Threshold is 0.04 when armies are equal (= 20% of single unit)
@@ -71,10 +70,10 @@ namespace AI
             // Diminish spell effectiveness based on spell point cost
             // 1. Divide cost by 3 to make level 1 spells a baseline (1:1)
             // 2. Use square root to make sure relationship isn't linear for high-level spells
-            const double spellPointValue = retreating ? outcome.value : outcome.value / sqrt( spell.SpellPoint( _commander ) / 3.0 );
+            const double spellPointValue = retreating ? outcome.value : outcome.value / sqrt( spell.spellPoints( _commander ) / 3.0 );
             const bool ignoreThreshold = retreating || spell.isResurrect();
 
-            DEBUG_LOG( DBG_BATTLE, DBG_TRACE, spell.GetName() << " value is " << spellPointValue << ", best target is " << outcome.cell );
+            DEBUG_LOG( DBG_BATTLE, DBG_TRACE, spell.GetName() << " value is " << spellPointValue << ", best target is " << outcome.cell )
 
             if ( spellPointValue > bestSpell.value && ( ignoreThreshold || spellPointValue > spellValueThreshold ) ) {
                 bestSpell.spellID = spell.GetID();
@@ -84,17 +83,18 @@ namespace AI
         };
 
         for ( const Spell & spell : allSpells ) {
-            if ( !_commander->HaveSpellPoints( spell ) || !spell.isCombat() || ( !spell.isDamage() && retreating ) )
+            if ( !spell.isCombat() || arena.isDisableCastSpell( spell ) || !_commander->CanCastSpell( spell ) || ( retreating && !spell.isDamage() ) ) {
                 continue;
+            }
 
             if ( spell.isDamage() ) {
-                checkSelectBestSpell( spell, spellDamageValue( spell, arena, friendly, enemies, retreating ) );
+                checkSelectBestSpell( spell, spellDamageValue( spell, arena, currentUnit, friendly, enemies, retreating ) );
             }
             else if ( spell.isEffectDispel() ) {
                 checkSelectBestSpell( spell, spellDispellValue( spell, friendly, enemies ) );
             }
             else if ( spell.isSummon() ) {
-                checkSelectBestSpell( spell, spellSummonValue( spell ) );
+                checkSelectBestSpell( spell, spellSummonValue( spell, arena, _commander->GetColor() ) );
             }
             else if ( spell.isResurrect() ) {
                 checkSelectBestSpell( spell, spellResurrectValue( spell, arena ) );
@@ -107,15 +107,16 @@ namespace AI
             }
         }
 
-        DEBUG_LOG( DBG_BATTLE, DBG_TRACE, "Spell threshold is " << spellValueThreshold << ", unit ratio is " << ( spellValueThreshold * 5 / _myArmyStrength ) );
+        DEBUG_LOG( DBG_BATTLE, DBG_TRACE, "Spell threshold is " << spellValueThreshold << ", unit ratio is " << ( spellValueThreshold * 5 / _myArmyStrength ) )
         if ( bestSpell.spellID != -1 ) {
-            DEBUG_LOG( DBG_BATTLE, DBG_TRACE, "Best spell is " << Spell( bestSpell.spellID ).GetName() << ", value is " << bestSpell.value );
+            DEBUG_LOG( DBG_BATTLE, DBG_TRACE, "Best spell is " << Spell( bestSpell.spellID ).GetName() << ", value is " << bestSpell.value )
         }
 
         return bestSpell;
     }
 
-    SpellcastOutcome BattlePlanner::spellDamageValue( const Spell & spell, Arena & arena, const Units & friendly, const Units & enemies, bool retreating ) const
+    SpellcastOutcome BattlePlanner::spellDamageValue( const Spell & spell, Arena & arena, const Battle::Unit & currentUnit, const Units & friendly, const Units & enemies,
+                                                      bool retreating ) const
     {
         SpellcastOutcome bestOutcome;
         if ( !spell.isDamage() )
@@ -124,8 +125,8 @@ namespace AI
         const int spellPower = _commander->GetPower();
         const uint32_t totalDamage = spell.Damage() * spellPower;
 
-        auto damageHeuristic = [&totalDamage, &spell, &spellPower, &retreating]( const Unit * unit ) {
-            const uint32_t damage = totalDamage * ( 100 - unit->GetMagicResist( spell, spellPower ) ) / 100;
+        auto damageHeuristic = [this, &totalDamage, &spell, &spellPower, &retreating]( const Unit * unit ) {
+            const uint32_t damage = totalDamage * ( 100 - unit->GetMagicResist( spell, spellPower, _commander ) ) / 100;
             // If we're retreating we don't care about partial damage, only actual units killed
             if ( retreating )
                 return unit->GetMonsterStrength() * unit->HowManyWillKilled( damage );
@@ -151,18 +152,30 @@ namespace AI
                 spellHeuristic += damageHeuristic( enemy );
             }
             for ( const Unit * unit : friendly ) {
-                spellHeuristic -= damageHeuristic( unit );
+                const double valueLost = damageHeuristic( unit );
+                // check if we're retreating and will lose current unit
+                if ( retreating && unit->isUID( currentUnit.GetUID() ) && std::fabs( valueLost - unit->GetStrength() ) < 0.001 ) {
+                    // avoid this spell and return early
+                    return bestOutcome;
+                }
+                spellHeuristic -= valueLost;
             }
 
             bestOutcome.updateOutcome( spellHeuristic, -1 );
         }
         else {
             // Area of effect spells like Fireball
-            auto areaOfEffectCheck = [&damageHeuristic, &bestOutcome]( const TargetsInfo & targets, const int32_t index, int myColor ) {
+            auto areaOfEffectCheck = [&damageHeuristic, &bestOutcome, &currentUnit, &retreating]( const TargetsInfo & targets, const int32_t index, int myColor ) {
                 double spellHeuristic = 0;
                 for ( const TargetInfo & target : targets ) {
                     if ( target.defender->GetCurrentColor() == myColor ) {
-                        spellHeuristic -= damageHeuristic( target.defender );
+                        const double valueLost = damageHeuristic( target.defender );
+                        // check if we're retreating and will lose current unit
+                        if ( retreating && target.defender->isUID( currentUnit.GetUID() ) && std::fabs( valueLost - target.defender->GetStrength() ) < 0.001 ) {
+                            // avoid this spell and return without updating the outcome
+                            return;
+                        }
+                        spellHeuristic -= valueLost;
                     }
                     else {
                         spellHeuristic += damageHeuristic( target.defender );
@@ -174,6 +187,10 @@ namespace AI
 
             if ( spell.GetID() == Spell::CHAINLIGHTNING ) {
                 for ( const Unit * enemy : enemies ) {
+                    if ( !enemy->AllowApplySpell( spell, _commander ) ) {
+                        continue;
+                    }
+
                     const int32_t index = enemy->GetHeadIndex();
                     areaOfEffectCheck( arena.GetTargetsForSpells( _commander, spell, index ), index, _myColor );
                 }
@@ -190,16 +207,86 @@ namespace AI
         return bestOutcome;
     }
 
-    uint32_t BattlePlanner::spellDurationMultiplier( const Battle::Unit & target ) const
+    int32_t BattlePlanner::spellDurationMultiplier( const Battle::Unit & target ) const
     {
-        uint32_t duration = static_cast<uint32_t>( _commander->GetPower() );
-        duration += _commander->HasArtifact( Artifact::WIZARD_HAT ) * Artifact( Artifact::WIZARD_HAT ).ExtraValue()
-                    + _commander->HasArtifact( Artifact::ENCHANTED_HOURGLASS ) * Artifact( Artifact::ENCHANTED_HOURGLASS ).ExtraValue();
+        int32_t duration = _commander->GetPower();
+        duration += _commander->GetBagArtifacts().getTotalArtifactEffectValue( fheroes2::ArtifactBonusType::EVERY_COMBAT_SPELL_DURATION );
 
         if ( duration < 2 && target.Modes( TR_MOVED ) )
             return 0;
 
         return 1;
+    }
+
+    // Compute a heuristic for Disrupting Ray spell usage by AI
+    double BattlePlanner::getSpellDisruptingRayRatio( const Battle::Unit & target ) const
+    {
+        const double targetDefense = target.GetDefense();
+
+        if ( targetDefense <= 1 ) { // target is already at minimum defense: not useful to cast Disrupting Ray
+            return 0.0;
+        }
+
+        double ratio = 0.2;
+        if ( targetDefense <= Spell( Spell::DISRUPTINGRAY ).ExtraValue() ) { // disrupting ray can't have full effect
+            const double actualDefenseChange = targetDefense - 1.0;
+            ratio *= actualDefenseChange / Spell( Spell::DISRUPTINGRAY ).ExtraValue();
+        }
+
+        const double targetStrength = target.GetStrength();
+
+        // if current army has much lower strength than target unit, we reduce the ratio to prioritize direct damage spells
+        if ( _myArmyStrength < targetStrength ) {
+            ratio *= _myArmyStrength / targetStrength;
+        }
+
+        return ratio;
+    }
+
+    // Compute a heuristic for Slow spell usage by AI
+    double BattlePlanner::getSpellSlowRatio( const Battle::Unit & target ) const
+    {
+        if ( target.isArchers() || _attackingCastle ) {
+            // Slow is useless against archers or troops defending castle
+            return 0.01;
+        }
+        const int currentSpeed = target.GetSpeed( false, true );
+        const int newSpeed = Speed::GetSlowSpeedFromSpell( currentSpeed );
+        const int lostSpeed = currentSpeed - newSpeed; // usually 2
+        double ratio = 0.15 * lostSpeed;
+
+        if ( currentSpeed < _myArmyAverageSpeed ) { // Slow isn't useful if target is already slower than our army
+            ratio /= 3;
+        }
+        if ( target.Modes( SP_HASTE ) ) {
+            ratio *= 2;
+        }
+        else if ( !target.isFlying() ) {
+            ratio /= ReduceEffectivenessByDistance( target );
+        }
+        return ratio;
+    }
+
+    // Compute a heuristic for Haste spell usage by AI
+    double BattlePlanner::getSpellHasteRatio( const Battle::Unit & target ) const
+    {
+        const int currentSpeed = target.GetSpeed( false, true );
+        const int newSpeed = Speed::GetHasteSpeedFromSpell( currentSpeed );
+        const int gainedSpeed = newSpeed - currentSpeed; // usually 2
+        double ratio = 0.05 * gainedSpeed;
+
+        if ( currentSpeed < _enemyAverageSpeed ) { // Haste is very useful if target is slower than army
+            ratio *= 3;
+        }
+        if ( target.Modes( SP_SLOW ) ) {
+            ratio *= 2;
+        }
+        // Reduce effectiveness if we don't have to move
+        else if ( target.isArchers() || _defensiveTactics ) {
+            ratio /= 2;
+        }
+
+        return ratio;
     }
 
     double BattlePlanner::spellEffectValue( const Spell & spell, const Battle::Unit & target, bool targetIsLast, bool forDispell ) const
@@ -217,7 +304,7 @@ namespace AI
         switch ( spellID ) {
         case Spell::SLOW:
         case Spell::MASSSLOW:
-            ratio = 0.3;
+            ratio = getSpellSlowRatio( target );
             break;
         case Spell::BLIND: {
             if ( targetIsLast )
@@ -248,12 +335,11 @@ namespace AI
             break;
         }
         case Spell::DISRUPTINGRAY:
-            ratio = 0.2;
+            ratio = getSpellDisruptingRayRatio( target );
             break;
         case Spell::HASTE:
         case Spell::MASSHASTE:
-            // Haste isn't effective if target is fast already
-            ratio = target.GetSpeed() < _enemyAverageSpeed ? 0.3 : 0.1;
+            ratio = getSpellHasteRatio( target );
             break;
         case Spell::BLOODLUST:
             ratio = 0.1;
@@ -281,28 +367,7 @@ namespace AI
             return 0.0;
         }
 
-        if ( spellID == Spell::SLOW || spellID == Spell::MASSSLOW ) {
-            if ( target.Modes( SP_HASTE ) ) {
-                ratio *= 2;
-            }
-            else if ( target.isArchers() || _attackingCastle ) {
-                // Slow is useless against archers or troops defending castle
-                ratio = 0.01;
-            }
-            else if ( !target.isFlying() ) {
-                ratio /= ReduceEffectivenessByDistance( target );
-            }
-        }
-        if ( spellID == Spell::HASTE || spellID == Spell::MASSHASTE ) {
-            if ( target.Modes( SP_SLOW ) ) {
-                ratio *= 2;
-            }
-            // Reduce effectiveness if we don't have to move
-            else if ( target.isArchers() || _defensiveTactics ) {
-                ratio /= 2;
-            }
-        }
-        else if ( target.Modes( SP_BLESS ) && ( spellID == Spell::CURSE || spellID == Spell::MASSCURSE ) ) {
+        if ( target.Modes( SP_BLESS ) && ( spellID == Spell::CURSE || spellID == Spell::MASSCURSE ) ) {
             ratio *= 2;
         }
         else if ( target.Modes( SP_CURSE ) && ( spellID == Spell::BLESS || spellID == Spell::MASSBLESS ) ) {
@@ -342,6 +407,9 @@ namespace AI
         }
         else if ( spellID == Spell::BERSERKER && !target.isArchers() ) {
             ratio /= ReduceEffectivenessByDistance( target );
+        }
+        else if ( spellID == Spell::DRAGONSLAYER ) {
+            // TODO: add logic to check if the enemy army contains a dragon.
         }
 
         return target.GetStrength() * ratio * spellDurationMultiplier( target );
@@ -408,21 +476,28 @@ namespace AI
         return bestOutcome;
     }
 
-    SpellcastOutcome BattlePlanner::spellResurrectValue( const Spell & spell, Battle::Arena & arena ) const
+    SpellcastOutcome BattlePlanner::spellResurrectValue( const Spell & spell, const Battle::Arena & arena ) const
     {
         SpellcastOutcome bestOutcome;
-        const uint32_t ankhModifier = _commander->HasArtifact( Artifact::ANKH ) ? 2 : 1;
-        const uint32_t hpRestored = spell.Resurrect() * _commander->GetPower() * ankhModifier;
+
+        uint32_t hpRestored = spell.Resurrect() * _commander->GetPower();
+
+        const std::vector<int32_t> extraSpellEffectivenessPercent
+            = _commander->GetBagArtifacts().getTotalArtifactMultipliedPercent( fheroes2::ArtifactBonusType::RESURRECT_SPELL_EXTRA_EFFECTIVENESS_PERCENT );
+
+        for ( const int32_t value : extraSpellEffectivenessPercent ) {
+            hpRestored = hpRestored * ( 100 + value ) / 100;
+        }
 
         // Get friendly units list including the invalid and dead ones
-        const Force & friendlyForce = arena.GetForce( _myColor );
+        const Force & friendlyForce = arena.getForce( _myColor );
 
         for ( const Unit * unit : friendlyForce ) {
             if ( !unit || !unit->AllowApplySpell( spell, _commander ) )
                 continue;
 
             // For dead units: skip if there's another unit standing on top
-            if ( !unit->isValid() && arena.GetBoard()->GetCell( unit->GetHeadIndex() )->GetUnit() )
+            if ( !unit->isValid() && Board::GetCell( unit->GetHeadIndex() )->GetUnit() )
                 continue;
 
             uint32_t missingHP = unit->GetMissingHitPoints();
@@ -441,13 +516,21 @@ namespace AI
         return bestOutcome;
     }
 
-    SpellcastOutcome BattlePlanner::spellSummonValue( const Spell & spell ) const
+    SpellcastOutcome BattlePlanner::spellSummonValue( const Spell & spell, const Battle::Arena & arena, const int heroColor ) const
     {
         SpellcastOutcome bestOutcome;
         if ( spell.isSummon() ) {
+            if ( arena.GetFreePositionNearHero( heroColor ) < 0 ) {
+                return bestOutcome;
+            }
+
             uint32_t count = spell.ExtraValue() * _commander->GetPower();
-            if ( _commander->HasArtifact( Artifact::BOOK_ELEMENTS ) )
-                count *= 2;
+            const std::vector<int32_t> summonSpellExtraEffectPercent
+                = _commander->GetBagArtifacts().getTotalArtifactMultipliedPercent( fheroes2::ArtifactBonusType::SUMMONING_SPELL_EXTRA_EFFECTIVENESS_PERCENT );
+
+            for ( const int32_t value : summonSpellExtraEffectPercent ) {
+                count = count * ( 100 + value ) / 100;
+            }
 
             const Troop summon( Monster( spell ), count );
             bestOutcome.value = summon.GetStrengthWithBonus( _commander->GetAttack(), _commander->GetDefense() );
@@ -458,5 +541,20 @@ namespace AI
             }
         }
         return bestOutcome;
+    }
+
+    double BattlePlanner::commanderMaximumSpellDamageValue( const HeroBase & commander )
+    {
+        const std::vector<Spell> & spells = commander.GetSpells();
+        const double spellPower = static_cast<double>( commander.GetPower() );
+
+        double bestValue = 0;
+        for ( const Spell & spell : spells ) {
+            if ( spell.isCombat() && spell.isDamage() && commander.GetSpellPoints() >= spell.spellPoints() ) {
+                bestValue = std::max( bestValue, spell.Damage() * spellPower );
+            }
+        }
+
+        return bestValue;
     }
 }

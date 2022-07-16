@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2020                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2020 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -18,15 +18,24 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#include "bin_info.h"
+#include <map>
+
 #include "agg.h"
+#include "battle_animation.h"
 #include "battle_cell.h"
+#include "bin_info.h"
 #include "logging.h"
 #include "monster.h"
+#include "serialize.h"
 
-#include <algorithm>
-#include <cstdlib>
-#include <iostream>
+namespace
+{
+    template <typename T>
+    T getValue( const uint8_t * data, const size_t base, const size_t offset = 0 )
+    {
+        return fheroes2::getLEValue<T>( reinterpret_cast<const char *>( data ), base, offset );
+    }
+}
 
 namespace Bin_Info
 {
@@ -56,7 +65,7 @@ namespace Bin_Info
         return fheroes2::getMonsterData( monsterId ).binFileName;
     }
 
-    MonsterAnimInfo::MonsterAnimInfo( int monsterID, const std::vector<u8> & bytes )
+    MonsterAnimInfo::MonsterAnimInfo( int monsterID, const std::vector<uint8_t> & bytes )
         : moveSpeed( 450 )
         , shootSpeed( 0 )
         , flightSpeed( 0 )
@@ -71,14 +80,17 @@ namespace Bin_Info
 
         const uint8_t * data = bytes.data();
 
-        eyePosition = fheroes2::Point( *( reinterpret_cast<const int16_t *>( data + 1 ) ), *( reinterpret_cast<const int16_t *>( data + 3 ) ) );
+        eyePosition = { getValue<int16_t>( data, 1 ), getValue<int16_t>( data, 3 ) };
 
-        // Frame X offsets for the future use
         for ( size_t moveID = 0; moveID < 7; ++moveID ) {
             std::vector<int> moveOffset;
+
+            moveOffset.reserve( 16 );
+
             for ( int frame = 0; frame < 16; ++frame ) {
-                moveOffset.push_back( static_cast<int>( *reinterpret_cast<const int8_t *>( data + 5 + moveID * 16 + frame ) ) );
+                moveOffset.push_back( static_cast<int>( getValue<int8_t>( data, 5 + moveID * 16, frame ) ) );
             }
+
             frameXOffset.push_back( moveOffset );
         }
 
@@ -87,22 +99,21 @@ namespace Bin_Info
         if ( idleAnimationCount > 5u )
             idleAnimationCount = 5u; // here we need to reset our object
         for ( uint32_t i = 0; i < idleAnimationCount; ++i )
-            idlePriority.push_back( *( reinterpret_cast<const float *>( data + 118 ) + i ) );
+            idlePriority.push_back( getValue<float>( data, 118, i ) );
 
         for ( uint32_t i = 0; i < idleAnimationCount; ++i )
-            unusedIdleDelays.push_back( *( reinterpret_cast<const uint32_t *>( data + 138 ) + i ) );
+            unusedIdleDelays.push_back( getValue<uint32_t>( data, 138, i ) );
 
-        idleAnimationDelay = *( reinterpret_cast<const uint32_t *>( data + 158 ) );
+        idleAnimationDelay = getValue<uint32_t>( data, 158 );
 
         // Monster speed data
-        moveSpeed = *( reinterpret_cast<const uint32_t *>( data + 162 ) );
-        shootSpeed = *( reinterpret_cast<const uint32_t *>( data + 166 ) );
-        flightSpeed = *( reinterpret_cast<const uint32_t *>( data + 170 ) );
+        moveSpeed = getValue<uint32_t>( data, 162 );
+        shootSpeed = getValue<uint32_t>( data, 166 );
+        flightSpeed = getValue<uint32_t>( data, 170 );
 
         // Projectile data
         for ( size_t i = 0; i < 3; ++i ) {
-            projectileOffset.push_back(
-                fheroes2::Point( *( reinterpret_cast<const int16_t *>( data + 174 + ( i * 4 ) ) ), *( reinterpret_cast<const int16_t *>( data + 176 + ( i * 4 ) ) ) ) );
+            projectileOffset.emplace_back( getValue<int16_t>( data, 174 + ( i * 4 ) ), getValue<int16_t>( data, 176 + ( i * 4 ) ) );
         }
 
         // Elves and Grand Elves have incorrect start Y position for lower shooting attack
@@ -115,11 +126,11 @@ namespace Bin_Info
         if ( projectileCount > 12u )
             projectileCount = 12u; // here we need to reset our object
         for ( uint8_t i = 0; i < projectileCount; ++i )
-            projectileAngles.push_back( *( reinterpret_cast<const float *>( data + 187 ) + i ) );
+            projectileAngles.push_back( getValue<float>( data, 187, i ) );
 
         // Positional offsets for sprites & drawing
-        troopCountOffsetLeft = *( reinterpret_cast<const int32_t *>( data + 235 ) );
-        troopCountOffsetRight = *( reinterpret_cast<const int32_t *>( data + 239 ) );
+        troopCountOffsetLeft = getValue<int32_t>( data, 235 );
+        troopCountOffsetRight = getValue<int32_t>( data, 239 );
 
         // Load animation sequences themselves
         for ( int idx = MOVE_START; idx <= SHOOT3_END; ++idx ) {
@@ -230,13 +241,13 @@ namespace Bin_Info
             return mapIterator->second;
         }
         else {
-            const MonsterAnimInfo info( monsterID, AGG::LoadBINFRM( Bin_Info::GetFilename( monsterID ) ) );
+            const MonsterAnimInfo info( monsterID, AGG::getDataFromAggFile( Bin_Info::GetFilename( monsterID ) ) );
             if ( info.isValid() ) {
                 _animMap[monsterID] = info;
                 return info;
             }
             else {
-                DEBUG_LOG( DBG_ENGINE, DBG_WARN, "missing BIN FRM data: " << Bin_Info::GetFilename( monsterID ) << ", index: " << monsterID );
+                DEBUG_LOG( DBG_ENGINE, DBG_WARN, "missing BIN FRM data: " << Bin_Info::GetFilename( monsterID ) << ", index: " << monsterID )
             }
         }
         return MonsterAnimInfo();

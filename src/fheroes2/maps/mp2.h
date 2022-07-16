@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,177 +23,203 @@
 #ifndef H2MP2_H
 #define H2MP2_H
 
-#include "gamedefs.h"
-
-#define MP2OFFSETDATA 428
-#define SIZEOFMP2TILE 20
-#define SIZEOFMP2ADDON 15
-#define SIZEOFMP2CASTLE 0x46
-#define SIZEOFMP2HEROES 0x4c
-
-#define SIZEOFMP2SIGN 0x0a
-#define SIZEOFMP2RUMOR 0x09
-#define SIZEOFMP2EVENT 0x32
-#define SIZEOFMP2RIDDLE 0x8a
+#include <cstddef>
+#include <cstdint>
 
 namespace MP2
 {
-    // origin mp2 tile
-    struct mp2tile_t
+    enum MP2Info
     {
-        u16 tileIndex; // tile (ocean, grass, snow, swamp, lava, desert, dirt, wasteland, beach)
-        u8 objectName1; // level 1.0
-        u8 indexName1; // index level 1.0 or 0xFF
-        u8 quantity1; // Bitfield, first 3 bits are flags, rest is used as quantity
-        u8 quantity2; // Used as a part of quantity, field size is actually 13 bits. Has most significant bits
-        u8 objectName2; // level 2.0
-        u8 indexName2; // index level 2.0 or 0xFF
-        u8 flags; // Bitfield: 1st bit is passability, last two is tile shape: 0 none, 1 vertical, 2 horizontal, 3 any
-        u8 mapObject; // zero or object
-        u16 indexAddon; // zero or index addons_t
-        u32 editorObjectLink; // Map editor variable: object link
-        u32 editorObjectOverlay; // Map editor variable: overlay link
+        MP2OFFSETDATA = 428,
+        SIZEOFMP2TILE = 20,
+        SIZEOFMP2ADDON = 15,
+        SIZEOFMP2CASTLE = 70,
+        SIZEOFMP2HEROES = 76,
+        SIZEOFMP2SIGN = 10,
+        SIZEOFMP2RUMOR = 9,
+        SIZEOFMP2EVENT = 50,
+        SIZEOFMP2RIDDLE = 138
     };
 
-    // origin mp2 addons tile
+    // Tile structure from the original map format.
+    struct mp2tile_t
+    {
+        uint16_t surfaceType; // Tile index representing a type of surface: ocean, grass, snow, swamp, lava, desert, dirt, wasteland, beach.
+
+        uint8_t objectName1; // Ground (bottom) level object type (first 2 bits) and object tile set (6 bits). Tile set refers to ICN ID.
+        uint8_t level1IcnImageIndex; // ICN image index (image index for corresponding ICN Id) for ground (bottom) object. 255 means it's an empty object.
+        uint8_t quantity1; // Bitfield, first 3 bits are flags, rest is used as quantity
+        uint8_t quantity2; // Used as a part of quantity, field size is actually 13 bits. Has most significant bits
+        uint8_t objectName2; // Top level object type (first 2 bits) and object tile set (6 bits). Tile set refers to ICN ID.
+        uint8_t level2IcnImageIndex; // ICN image index (image index for corresponding ICN Id) for top level object. 255 means it's an empty object.
+
+        // First 2 bits responsible for tile shape (0 - 3). Subsequent 3 bits are still unknown. Possible values are 1 and 5. They are set only for tiles with transition
+        // between land and sea. They can be related to passabilities.
+        uint8_t flags;
+
+        uint8_t mapObjectType; // Object type. Please refer to MapObjectType enumeration.
+
+        uint16_t nextAddonIndex; // Next add-on index. Zero value means it's the last addon chunk.
+
+        // Ground (bottom) level object UID. An object can allocate more than 1 tile. Each tile could have multiple objects pieces.
+        // UID is used to find all pieces/addons which belong to the same object.
+        // In Editor first object will have UID as 0. Then second object placed on the map will have UID 0 + number of pieces / tiles per previous object and etc.
+        uint32_t level1ObjectUID;
+
+        // Top level object UID. An object can allocate more than 1 tile. Each tile could have multiple objects pieces.
+        // UID is used to find all pieces/addons which belong to the same object.
+        // In Editor first object will have UID as 0. Then second object placed on the map will have UID 0 + number of pieces / tiles per previous object and etc.
+        uint32_t level2ObjectUID;
+    };
+
+    // Addon structure from the original map format.
     struct mp2addon_t
     {
-        u16 indexAddon; // zero or next addons_t
-        u8 objectNameN1; // level 1.N. Last bit indicates if object is animated. Second-last controls overlay
-        u8 indexNameN1; // level 1.N or 0xFF
-        u8 quantityN; // Bitfield containing metadata
-        u8 objectNameN2; // level 2.N
-        u8 indexNameN2; // level 1.N or 0xFF
-        u32 editorObjectLink; // Map editor variable: object link
-        u32 editorObjectOverlay; // Map editor variable: overlay link
+        uint16_t nextAddonIndex; // Next add-on index. Zero value means it's the last addon chunk.
+
+        uint8_t objectNameN1; // level 1.N. Last bit indicates if object is animated. Second-last controls overlay
+        uint8_t indexNameN1; // level 1.N or 0xFF
+        uint8_t quantityN; // Bitfield containing metadata
+        uint8_t objectNameN2; // level 2.N
+        uint8_t indexNameN2; // level 1.N or 0xFF
+
+        // Ground (bottom) level object UID. An object can allocate more than 1 tile. Each tile could have multiple objects pieces.
+        // UID is used to find all pieces/addons which belong to the same object.
+        // In Editor first object will have UID as 0. Then second object placed on the map will have UID 0 + number of pieces / tiles per previous object and etc.
+        uint32_t level1ObjectUID;
+
+        // Top level object UID. An object can allocate more than 1 tile. Each tile could have multiple objects pieces.
+        // UID is used to find all pieces/addons which belong to the same object.
+        // In Editor first object will have UID as 0. Then second object placed on the map will have UID 0 + number of pieces / tiles per previous object and etc.
+        uint32_t level2ObjectUID;
     };
 
     // origin mp2 castle
     // 0x0046 - size
     struct mp2castle_t
     {
-        u8 color; // 00 blue, 01 green, 02 red, 03 yellow, 04 orange, 05 purpl, ff unknown
+        uint8_t color; // 00 blue, 01 green, 02 red, 03 yellow, 04 orange, 05 purpl, ff unknown
         bool customBuilding;
-        u16 building;
+        uint16_t building;
         /*
-        0000 0000 0000 0010	Thieve's Guild
-        0000 0000 0000 0100	Tavern
-        0000 0000 0000 1000	Shipyard
-        0000 0000 0001 0000	Well
-        0000 0000 1000 0000	Statue
-        0000 0001 0000 0000	Left Turret
-        0000 0010 0000 0000	Right Turret
-        0000 0100 0000 0000	Marketplace
-        0000 1000 0000 0000	Farm, Garbage He, Crystal Gar, Waterfall, Orchard, Skull Pile
-        0001 0000 0000 0000	Moat
-        0010 0000 0000 0000	Fortification, Coliseum, Rainbow, Dungeon, Library, Storm
+        0000 0000 0000 0010 Thieve's Guild
+        0000 0000 0000 0100 Tavern
+        0000 0000 0000 1000 Shipyard
+        0000 0000 0001 0000 Well
+        0000 0000 1000 0000 Statue
+        0000 0001 0000 0000 Left Turret
+        0000 0010 0000 0000 Right Turret
+        0000 0100 0000 0000 Marketplace
+        0000 1000 0000 0000 Farm, Garbage He, Crystal Gar, Waterfall, Orchard, Skull Pile
+        0001 0000 0000 0000 Moat
+        0010 0000 0000 0000 Fortification, Coliseum, Rainbow, Dungeon, Library, Storm
         */
-        u16 dwelling;
+        uint16_t dwelling;
         /*
-        0000 0000 0000 1000	dweling1
-        0000 0000 0001 0000	dweling2
-        0000 0000 0010 0000	dweling3
-        0000 0000 0100 0000	dweling4
-        0000 0000 1000 0000	dweling5
-        0000 0001 0000 0000	dweling6
-        0000 0010 0000 0000	upgDweling2
-        0000 0100 0000 0000	upgDweling3
-        0000 1000 0000 0000	upgDweling4
-        0001 0000 0000 0000	upgDweling5
-        0010 0000 0000 0000	upgDweling6
+        0000 0000 0000 1000 dweling1
+        0000 0000 0001 0000 dweling2
+        0000 0000 0010 0000 dweling3
+        0000 0000 0100 0000 dweling4
+        0000 0000 1000 0000 dweling5
+        0000 0001 0000 0000 dweling6
+        0000 0010 0000 0000 upgDweling2
+        0000 0100 0000 0000 upgDweling3
+        0000 1000 0000 0000 upgDweling4
+        0001 0000 0000 0000 upgDweling5
+        0010 0000 0000 0000 upgDweling6
         */
-        u8 magicTower;
+        uint8_t magicTower;
         bool customTroops;
-        u8 monster1;
-        u8 monster2;
-        u8 monster3;
-        u8 monster4;
-        u8 monster5;
-        u16 count1;
-        u16 count2;
-        u16 count3;
-        u16 count4;
-        u16 count5;
+        uint8_t monster1;
+        uint8_t monster2;
+        uint8_t monster3;
+        uint8_t monster4;
+        uint8_t monster5;
+        uint16_t count1;
+        uint16_t count2;
+        uint16_t count3;
+        uint16_t count4;
+        uint16_t count5;
         bool capitan;
         bool customCastleName;
         char castleName[13]; // name + '\0'
-        u8 type; // 00 knight, 01 barb, 02 sorc, 03 warl, 04 wiz, 05 necr, 06 rnd
+        uint8_t type; // 00 knight, 01 barb, 02 sorc, 03 warl, 04 wiz, 05 necr, 06 rnd
         bool castle;
-        u8 allowCastle; // 00 TRUE, 01 FALSE
-        u8 unknown[29];
+        uint8_t allowCastle; // 00 TRUE, 01 FALSE
+        uint8_t unknown[29];
     };
 
     // origin mp2 heroes
     // 0x004c - size
     struct mp2heroes_t
     {
-        u8 unknown;
+        uint8_t unknown;
         bool customTroops;
-        u8 monster1; // 0xff none
-        u8 monster2; // 0xff none
-        u8 monster3; // 0xff none
-        u8 monster4; // 0xff none
-        u8 monster5; // 0xff none
-        u16 countMonter1;
-        u16 countMonter2;
-        u16 countMonter3;
-        u16 countMonter4;
-        u16 countMonter5;
-        u8 customPortrate;
-        u8 portrate;
-        u8 artifact1; // 0xff none
-        u8 artifact2; // 0xff none
-        u8 artifact3; // 0xff none
-        u8 unknown2; // 0
-        u32 exerience;
+        uint8_t monster1; // 0xff none
+        uint8_t monster2; // 0xff none
+        uint8_t monster3; // 0xff none
+        uint8_t monster4; // 0xff none
+        uint8_t monster5; // 0xff none
+        uint16_t countMonter1;
+        uint16_t countMonter2;
+        uint16_t countMonter3;
+        uint16_t countMonter4;
+        uint16_t countMonter5;
+        uint8_t customPortrate;
+        uint8_t portrate;
+        uint8_t artifact1; // 0xff none
+        uint8_t artifact2; // 0xff none
+        uint8_t artifact3; // 0xff none
+        uint8_t unknown2; // 0
+        uint32_t exerience;
         bool customSkill;
-        u8 skill1; // 0xff none
-        u8 skill2; // pathfinding, archery, logistic, scouting,
-        u8 skill3; // diplomacy, navigation, leadership, wisdom,
-        u8 skill4; // mysticism, luck, ballistics, eagle, necromance, estate
-        u8 skill5;
-        u8 skill6;
-        u8 skill7;
-        u8 skill8;
-        u8 skillLevel1;
-        u8 skillLevel2;
-        u8 skillLevel3;
-        u8 skillLevel4;
-        u8 skillLevel5;
-        u8 skillLevel6;
-        u8 skillLevel7;
-        u8 skillLevel8;
-        u8 unknown3; // 0
-        u8 customName;
+        uint8_t skill1; // 0xff none
+        uint8_t skill2; // pathfinding, archery, logistic, scouting,
+        uint8_t skill3; // diplomacy, navigation, leadership, wisdom,
+        uint8_t skill4; // mysticism, luck, ballistics, eagle, necromance, estate
+        uint8_t skill5;
+        uint8_t skill6;
+        uint8_t skill7;
+        uint8_t skill8;
+        uint8_t skillLevel1;
+        uint8_t skillLevel2;
+        uint8_t skillLevel3;
+        uint8_t skillLevel4;
+        uint8_t skillLevel5;
+        uint8_t skillLevel6;
+        uint8_t skillLevel7;
+        uint8_t skillLevel8;
+        uint8_t unknown3; // 0
+        uint8_t customName;
         char name[13]; // name + '\0'
         bool patrol;
-        u8 countSquare; // for patrol
-        u8 unknown4[15]; // 0
+        uint8_t countSquare; // for patrol
+        uint8_t unknown4[15]; // 0
     };
 
     // origin mp2 sign or bottle
     struct mp2info_t
     {
-        u8 id; // 0x01
-        u8 zero[8]; // 8 byte 0x00
+        uint8_t id; // 0x01
+        uint8_t zero[8]; // 8 byte 0x00
         char text; // message  + '/0'
     };
 
     // origin mp2 event for coord
     struct mp2eventcoord_t
     {
-        u8 id; // 0x01
-        u32 wood;
-        u32 mercury;
-        u32 ore;
-        u32 sulfur;
-        u32 crystal;
-        u32 gems;
-        u32 golds;
-        u16 artifact; // 0xffff - none
+        uint8_t id; // 0x01
+        uint32_t wood;
+        uint32_t mercury;
+        uint32_t ore;
+        uint32_t sulfur;
+        uint32_t crystal;
+        uint32_t gems;
+        uint32_t golds;
+        uint16_t artifact; // 0xffff - none
         bool computer; // allow events for computer
         bool cancel; // cancel event after first visit
-        u8 zero[10]; // 10 byte 0x00
+        uint8_t zero[10]; // 10 byte 0x00
         bool blue;
         bool green;
         bool red;
@@ -205,19 +232,19 @@ namespace MP2
     // origin mp2 event for day
     struct mp2eventday_t
     {
-        u8 id; // 0x00
-        u32 wood;
-        u32 mercury;
-        u32 ore;
-        u32 sulfur;
-        u32 crystal;
-        u32 gems;
-        u32 golds;
-        u16 artifact; // always 0xffff - none
-        u16 computer; // allow events for computer
-        u16 first; // day of first occurent
-        u16 subsequent; // subsequent occurrences
-        u8 zero[6]; // 6 byte 0x00 and end 0x01
+        uint8_t id; // 0x00
+        uint32_t wood;
+        uint32_t mercury;
+        uint32_t ore;
+        uint32_t sulfur;
+        uint32_t crystal;
+        uint32_t gems;
+        uint32_t golds;
+        uint16_t artifact; // always 0xffff - none
+        uint16_t computer; // allow events for computer
+        uint16_t first; // day of first occurent
+        uint16_t subsequent; // subsequent occurrences
+        uint8_t zero[6]; // 6 byte 0x00 and end 0x01
         bool blue;
         bool green;
         bool red;
@@ -230,24 +257,24 @@ namespace MP2
     // origin mp2 rumor
     struct mp2rumor_t
     {
-        u8 id; // 0x00
-        u8 zero[7]; // 7 byte 0x00
+        uint8_t id; // 0x00
+        uint8_t zero[7]; // 7 byte 0x00
         char text; // message + '/0'
     };
 
     // origin mp2 riddle sphinx
     struct mp2riddle_t
     {
-        u8 id; // 0x00
-        u32 wood;
-        u32 mercury;
-        u32 ore;
-        u32 sulfur;
-        u32 crystal;
-        u32 gems;
-        u32 golds;
-        u16 artifact; // 0xffff - none
-        u8 count; // count answers (1, 8)
+        uint8_t id; // 0x00
+        uint32_t wood;
+        uint32_t mercury;
+        uint32_t ore;
+        uint32_t sulfur;
+        uint32_t crystal;
+        uint32_t gems;
+        uint32_t golds;
+        uint16_t artifact; // 0xffff - none
+        uint8_t count; // count answers (1, 8)
         char answer1[13];
         char answer2[13];
         char answer3[13];
@@ -261,7 +288,7 @@ namespace MP2
 
     ///////////////////////////////////////////////////////////////////////////////
     // First bit indicates if you can interact with object
-    enum
+    enum MapObjectType : uint8_t
     {
         OBJ_ZERO = 0x00,
         OBJN_ALCHEMYLAB = 0x01,
@@ -496,7 +523,7 @@ namespace MP2
         OBJ_MAGELLANMAPS = 0xD9,
         OBJ_FLOTSAM = 0xDA,
         OBJ_DERELICTSHIP = 0xDB,
-        OBJ_SHIPWRECKSURVIROR = 0xDC,
+        OBJ_SHIPWRECKSURVIVOR = 0xDC,
         OBJ_BOTTLE = 0xDD,
         OBJ_MAGICWELL = 0xDE,
         OBJ_MAGICGARDEN = 0xDF,
@@ -536,33 +563,44 @@ namespace MP2
         OBJ_WATERALTAR = 0xFF
     };
 
-    int GetICNObject( int tileset );
-    const char * StringObject( int object );
+    // Return Icn ID related to this tileset value.
+    int GetICNObject( const uint8_t tileset );
+
+    const char * StringObject( const MapObjectType objectType, const int count = 1 );
 
     bool isHiddenForPuzzle( uint8_t tileset, uint8_t index );
-    bool isActionObject( int obj, bool water );
-    bool isGroundObject( int obj );
-    bool isWaterObject( int obj );
-    bool isQuantityObject( int obj );
-    bool isCaptureObject( int obj );
-    bool isPickupObject( int obj );
-    bool isArtifactObject( int obj );
-    bool isHeroUpgradeObject( int obj );
-    bool isMonsterDwelling( int obj );
-    bool isRemoveObject( int obj );
-    bool isMoveObject( int obj );
-    bool isAbandonedMine( int obj );
-    bool isProtectedObject( int obj );
 
-    bool isNeedStayFront( int obj );
-    bool isClearGroundObject( int obj );
+    // The method check whether the object is an action object depending on its location. For example, castle can't be located on water.
+    bool isActionObject( const MapObjectType objectType, const bool locatesOnWater );
 
-    bool isDayLife( int obj );
-    bool isWeekLife( int obj );
-    bool isMonthLife( int obj );
-    bool isBattleLife( int obj );
+    // The method checks if the object is an action independent form its location.
+    bool isActionObject( const MapObjectType objectType );
 
-    int GetObjectDirect( int obj );
+    // Returns proper object type if the object is an action object. Otherwise it returns the object type itself.
+    MapObjectType getBaseActionObjectType( const MapObjectType objectType );
+
+    bool isWaterActionObject( const MapObjectType objectType );
+
+    bool isQuantityObject( const MapObjectType objectType );
+    bool isCaptureObject( const MapObjectType objectType );
+    bool isPickupObject( const MapObjectType objectType );
+    bool isArtifactObject( const MapObjectType objectType );
+    bool isHeroUpgradeObject( const MapObjectType objectType );
+    bool isMonsterDwelling( const MapObjectType objectType );
+    bool isAbandonedMine( const MapObjectType objectType );
+    bool isProtectedObject( const MapObjectType objectType );
+    // Returns true if this object can be safely visited by AI for fog discovery purposes.
+    bool isSafeForFogDiscoveryObject( const MapObjectType objectType );
+
+    bool isNeedStayFront( const MapObjectType objectType );
+
+    bool isDayLife( const MapObjectType objectType );
+    bool isWeekLife( const MapObjectType objectType );
+    bool isMonthLife( const MapObjectType objectType );
+    bool isBattleLife( const MapObjectType objectType );
+
+    // Make sure that you pass a valid action object.
+    int getActionObjectDirection( const MapObjectType objectType );
 }
 
 #endif

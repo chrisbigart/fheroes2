@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,15 +23,19 @@
 #ifndef H2CAPTAIN_H
 #define H2CAPTAIN_H
 
-#include "gamedefs.h"
 #include "heroes_base.h"
 
 class Castle;
 
-class Captain : public HeroBase
+class Captain final : public HeroBase
 {
 public:
     explicit Captain( Castle & );
+    Captain( const Captain & ) = delete;
+
+    ~Captain() override = default;
+
+    Captain & operator=( const Captain & ) = delete;
 
     bool isValid() const override;
     int GetAttack() const override;
@@ -69,7 +74,7 @@ public:
     void ActionPreBattle() override;
     void ActionAfterBattle() override;
 
-    void PortraitRedraw( s32 px, s32 py, PortraitType type, fheroes2::Image & dstsf ) const override;
+    void PortraitRedraw( const int32_t px, const int32_t py, const PortraitType type, fheroes2::Image & dstsf ) const override;
     fheroes2::Sprite GetPortrait( const PortraitType type ) const;
 
 private:

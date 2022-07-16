@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2022                                                    *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,7 +23,7 @@
 
 #include <iostream>
 
-#include "audio_music.h"
+#include "audio.h"
 #include "tools.h"
 
 #if defined( _MSC_VER )
@@ -36,9 +37,9 @@ int main( int argc, char ** argv )
         return EXIT_SUCCESS;
     }
 
-    std::vector<u8> buf = LoadFileToMem( argv[1] );
+    std::vector<uint8_t> buf = LoadFileToMem( argv[1] );
 
-    if ( buf.size() ) {
+    if ( !buf.empty() ) {
         buf = Music::Xmi2Mid( buf );
 
         if ( buf.empty() )

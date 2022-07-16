@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -25,16 +26,18 @@
 #include "dialog.h"
 #include "difficulty.h"
 #include "game.h"
+#include "game_hotkeys.h"
 #include "game_over.h"
 #include "icn.h"
 #include "localevent.h"
 #include "maps.h"
 #include "player_info.h"
 #include "settings.h"
-#include "text.h"
+#include "translations.h"
 #include "ui_button.h"
+#include "ui_text.h"
 
-void Dialog::GameInfo( void )
+void Dialog::GameInfo()
 {
     fheroes2::Display & display = fheroes2::Display::instance();
     Settings & conf = Settings::Get();
@@ -44,70 +47,74 @@ void Dialog::GameInfo( void )
 
     const fheroes2::Sprite & box = fheroes2::AGG::GetICN( ICN::SCENIBKG, 0 );
 
-    fheroes2::Point pt( ( display.width() - box.width() ) / 2, ( display.height() - box.height() ) / 2 );
+    // This is a shadow offset from the original ICN::SCENIBKG image.
+    const fheroes2::Point shadowOffset( -16, 4 );
+
+    fheroes2::Point pt( ( display.width() - box.width() + shadowOffset.x ) / 2, ( ( display.height() - box.height() + shadowOffset.y ) / 2 ) );
     fheroes2::ImageRestorer back( display, pt.x, pt.y, box.width(), box.height() );
     fheroes2::Blit( box, display, pt.x, pt.y );
 
-    TextBox text;
+    fheroes2::Text text;
 
-    text.Set( conf.MapsName(), Font::BIG, 350 );
-    text.Blit( pt.x + 52, pt.y + 30 );
+    text.set( conf.MapsName(), fheroes2::FontType::normalWhite() );
+    text.draw( pt.x + 52, pt.y + 32, 350, display );
 
-    text.Set( _( "Map\nDifficulty" ), Font::SMALL, 80 );
-    text.Blit( pt.x + 50, pt.y + 54 );
+    text.set( _( "Map\nDifficulty" ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 50, pt.y + 56, 80, display );
 
-    text.Set( _( "Game\nDifficulty" ), Font::SMALL, 80 );
-    text.Blit( pt.x + 140, pt.y + 54 );
+    text.set( _( "Game\nDifficulty" ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 140, pt.y + 56, 80, display );
 
-    text.Set( _( "Rating" ), Font::SMALL, 80 );
-    text.Blit( pt.x + 230, pt.y + 61 );
+    text.set( _( "Rating" ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 230, pt.y + 78 - text.height( 80 ), 80, display );
 
-    text.Set( _( "Map Size" ), Font::SMALL, 80 );
-    text.Blit( pt.x + 322, pt.y + 61 );
+    text.set( _( "Map Size" ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 322, pt.y + 78 - text.height( 80 ), 80, display );
 
-    text.Set( Difficulty::String( conf.MapsDifficulty() ), Font::SMALL, 80 );
-    text.Blit( pt.x + 50, pt.y + 80 );
+    text.set( Difficulty::String( conf.MapsDifficulty() ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 50, pt.y + 84, 80, display );
 
-    text.Set( Difficulty::String( Game::getDifficulty() ), Font::SMALL, 80 );
-    text.Blit( pt.x + 140, pt.y + 80 );
+    text.set( Difficulty::String( Game::getDifficulty() ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 140, pt.y + 84, 80, display );
 
-    text.Set( std::to_string( Game::GetRating() ) + " %", Font::SMALL, 80 );
-    text.Blit( pt.x + 230, pt.y + 80 );
+    text.set( std::to_string( Game::GetRating() ) + " %", fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 230, pt.y + 84, 80, display );
 
-    text.Set( Maps::SizeString( conf.MapsSize().width ), Font::SMALL, 80 );
-    text.Blit( pt.x + 322, pt.y + 80 );
+    text.set( Maps::SizeString( conf.MapsSize().width ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 322, pt.y + 84, 80, display );
 
-    text.Set( conf.MapsDescription(), Font::SMALL, 350 );
-    text.Blit( pt.x + 52, pt.y + 105 );
+    text.set( conf.MapsDescription(), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 52, pt.y + 107, 350, display );
 
-    text.Set( _( "Opponents" ), Font::SMALL, 350 );
-    text.Blit( pt.x + 52, pt.y + 150 );
+    text.set( _( "Opponents" ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 52, pt.y + 152, 350, display );
 
-    text.Set( _( "Class" ), Font::SMALL, 350 );
-    text.Blit( pt.x + 52, pt.y + 225 );
+    text.set( _( "Class" ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 52, pt.y + 227, 350, display );
 
     Interface::PlayersInfo playersInfo( true, true, false );
 
     playersInfo.UpdateInfo( conf.GetPlayers(), fheroes2::Point( pt.x + 40, pt.y + 165 ), fheroes2::Point( pt.x + 40, pt.y + 240 ) );
     playersInfo.RedrawInfo( true );
 
-    text.Set( _( "Victory\nConditions" ), Font::SMALL, 80 );
-    text.Blit( pt.x + 40, pt.y + 345 );
+    text.set( _( "Victory\nConditions" ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 40, pt.y + 347, 80, display );
 
-    text.Set( GameOver::GetActualDescription( conf.ConditionWins() ), Font::SMALL, 272 );
-    text.Blit( pt.x + 130, pt.y + 348 );
+    text.set( GameOver::GetActualDescription( conf.ConditionWins() ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 130, pt.y + 350, 272, display );
 
-    text.Set( _( "Loss\nConditions" ), Font::SMALL, 80 );
-    text.Blit( pt.x + 40, pt.y + 390 );
+    text.set( _( "Loss\nConditions" ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 40, pt.y + 392, 80, display );
 
-    text.Set( GameOver::GetActualDescription( conf.ConditionLoss() ), Font::SMALL, 272 );
-    text.Blit( pt.x + 130, pt.y + 396 );
+    text.set( GameOver::GetActualDescription( conf.ConditionLoss() ), fheroes2::FontType::smallWhite() );
+    text.draw( pt.x + 130, pt.y + 398, 272, display );
 
-    text.Set( "score: " + std::to_string( Game::GetGameOverScores() ), Font::YELLOW_SMALL, 80 );
-    text.Blit( pt.x + 415 - text.w(), pt.y + 434 );
+    text.set( _( "Score: " ) + std::to_string( Game::GetGameOverScores() ), fheroes2::FontType::smallYellow() );
+    text.draw( pt.x + 385 - text.width(), pt.y + 436, 80, display );
 
     fheroes2::Button buttonOk( pt.x + 178, pt.y + 426, ICN::REQUESTS, 1, 2 );
-    fheroes2::Button buttonCfg( pt.x + 50, pt.y + 426, ICN::BTNCONFIG, 0, 1 );
+    fheroes2::ButtonSprite buttonCfg
+        = fheroes2::makeButtonWithShadow( pt.x + 50, pt.y + 426, fheroes2::AGG::GetICN( ICN::BTNCONFIG, 0 ), fheroes2::AGG::GetICN( ICN::BTNCONFIG, 1 ), display );
 
     buttonOk.draw();
     buttonCfg.draw();
@@ -121,12 +128,12 @@ void Dialog::GameInfo( void )
         le.MousePressLeft( buttonOk.area() ) ? buttonOk.drawOnPress() : buttonOk.drawOnRelease();
         le.MousePressLeft( buttonCfg.area() ) ? buttonCfg.drawOnPress() : buttonCfg.drawOnRelease();
 
+        if ( le.MouseClickLeft( buttonOk.area() ) || Game::HotKeyCloseWindow() )
+            break;
+
         if ( le.MouseClickLeft( buttonCfg.area() ) ) {
             Dialog::ExtSettings( true );
             display.render();
         }
-
-        if ( le.MouseClickLeft( buttonOk.area() ) || HotKeyCloseWindow )
-            break;
     }
 }

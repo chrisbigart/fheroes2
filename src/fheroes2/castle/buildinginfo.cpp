@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -20,22 +21,25 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#include "buildinginfo.h"
-#include "agg.h"
+#include <cassert>
+
 #include "agg_image.h"
+#include "army_troop.h"
+#include "audio_manager.h"
+#include "buildinginfo.h"
 #include "cursor.h"
 #include "dialog.h"
-#include "game.h"
+#include "game_hotkeys.h"
 #include "icn.h"
-#include "kingdom.h"
-#include "logging.h"
 #include "m82.h"
 #include "monster.h"
 #include "pal.h"
 #include "profit.h"
 #include "race.h"
+#include "settings.h"
 #include "statusbar.h"
-#include "world.h"
+#include "tools.h"
+#include "translations.h"
 
 namespace
 {
@@ -43,133 +47,135 @@ namespace
     {
         switch ( race ) {
         case Race::KNGT:
-            return fheroes2::Point( 36, 10 );
+            return { 36, 10 };
         case Race::BARB:
-            return fheroes2::Point( 35, 9 );
+            return { 35, 9 };
         case Race::SORC:
-            return fheroes2::Point( 36, 10 );
+            return { 36, 10 };
         case Race::WRLK:
-            return fheroes2::Point( 34, 10 );
+            return { 34, 10 };
         case Race::WZRD:
-            return fheroes2::Point( 35, 9 );
+            return { 35, 9 };
         case Race::NECR:
-            return fheroes2::Point( 35, 10 );
+            return { 35, 10 };
         default:
-            return fheroes2::Point();
+            // Did you add a new race?
+            assert( 0 );
+            return {};
         }
     }
 }
 
 struct buildstats_t
 {
-    u32 id2;
-    u8 race;
+    uint32_t id2;
+    uint8_t race;
     cost_t cost;
 };
 
 buildstats_t _builds[] = {
     // id                             gold wood mercury ore sulfur crystal gems
-    {BUILD_THIEVESGUILD, Race::ALL, {750, 5, 0, 0, 0, 0, 0}},
-    {BUILD_TAVERN, Race::ALL, {500, 5, 0, 0, 0, 0, 0}},
-    {BUILD_SHIPYARD, Race::ALL, {2000, 20, 0, 0, 0, 0, 0}},
-    {BUILD_WELL, Race::ALL, {500, 0, 0, 0, 0, 0, 0}},
-    {BUILD_STATUE, Race::ALL, {1250, 0, 0, 5, 0, 0, 0}},
-    {BUILD_LEFTTURRET, Race::ALL, {1500, 0, 0, 5, 0, 0, 0}},
-    {BUILD_RIGHTTURRET, Race::ALL, {1500, 0, 0, 5, 0, 0, 0}},
-    {BUILD_MARKETPLACE, Race::ALL, {500, 5, 0, 0, 0, 0, 0}},
-    {BUILD_MOAT, Race::ALL, {750, 0, 0, 0, 0, 0, 0}},
-    {BUILD_CASTLE, Race::ALL, {5000, 20, 0, 20, 0, 0, 0}},
-    {BUILD_CAPTAIN, Race::ALL, {500, 0, 0, 0, 0, 0, 0}},
-    {BUILD_MAGEGUILD1, Race::ALL, {2000, 5, 0, 5, 0, 0, 0}},
-    {BUILD_MAGEGUILD2, Race::ALL, {1000, 5, 4, 5, 4, 4, 4}},
-    {BUILD_MAGEGUILD3, Race::ALL, {1000, 5, 6, 5, 6, 6, 6}},
-    {BUILD_MAGEGUILD4, Race::ALL, {1000, 5, 8, 5, 8, 8, 8}},
-    {BUILD_MAGEGUILD5, Race::ALL, {1000, 5, 10, 5, 10, 10, 10}},
+    { BUILD_THIEVESGUILD, Race::ALL, { 750, 5, 0, 0, 0, 0, 0 } },
+    { BUILD_TAVERN, Race::ALL, { 500, 5, 0, 0, 0, 0, 0 } },
+    { BUILD_SHIPYARD, Race::ALL, { 2000, 20, 0, 0, 0, 0, 0 } },
+    { BUILD_WELL, Race::ALL, { 500, 0, 0, 0, 0, 0, 0 } },
+    { BUILD_STATUE, Race::ALL, { 1250, 0, 0, 5, 0, 0, 0 } },
+    { BUILD_LEFTTURRET, Race::ALL, { 1500, 0, 0, 5, 0, 0, 0 } },
+    { BUILD_RIGHTTURRET, Race::ALL, { 1500, 0, 0, 5, 0, 0, 0 } },
+    { BUILD_MARKETPLACE, Race::ALL, { 500, 5, 0, 0, 0, 0, 0 } },
+    { BUILD_MOAT, Race::ALL, { 750, 0, 0, 0, 0, 0, 0 } },
+    { BUILD_CASTLE, Race::ALL, { 5000, 20, 0, 20, 0, 0, 0 } },
+    { BUILD_CAPTAIN, Race::ALL, { 500, 0, 0, 0, 0, 0, 0 } },
+    { BUILD_MAGEGUILD1, Race::ALL, { 2000, 5, 0, 5, 0, 0, 0 } },
+    { BUILD_MAGEGUILD2, Race::ALL, { 1000, 5, 4, 5, 4, 4, 4 } },
+    { BUILD_MAGEGUILD3, Race::ALL, { 1000, 5, 6, 5, 6, 6, 6 } },
+    { BUILD_MAGEGUILD4, Race::ALL, { 1000, 5, 8, 5, 8, 8, 8 } },
+    { BUILD_MAGEGUILD5, Race::ALL, { 1000, 5, 10, 5, 10, 10, 10 } },
 
-    {BUILD_WEL2, Race::KNGT, {1000, 0, 0, 0, 0, 0, 0}},
-    {BUILD_WEL2, Race::BARB, {1000, 0, 0, 0, 0, 0, 0}},
-    {BUILD_WEL2, Race::SORC, {1000, 0, 0, 0, 0, 0, 0}},
-    {BUILD_WEL2, Race::WRLK, {1000, 0, 0, 0, 0, 0, 0}},
-    {BUILD_WEL2, Race::WZRD, {1000, 0, 0, 0, 0, 0, 0}},
-    {BUILD_WEL2, Race::NECR, {1000, 0, 0, 0, 0, 0, 0}},
+    { BUILD_WEL2, Race::KNGT, { 1000, 0, 0, 0, 0, 0, 0 } },
+    { BUILD_WEL2, Race::BARB, { 1000, 0, 0, 0, 0, 0, 0 } },
+    { BUILD_WEL2, Race::SORC, { 1000, 0, 0, 0, 0, 0, 0 } },
+    { BUILD_WEL2, Race::WRLK, { 1000, 0, 0, 0, 0, 0, 0 } },
+    { BUILD_WEL2, Race::WZRD, { 1000, 0, 0, 0, 0, 0, 0 } },
+    { BUILD_WEL2, Race::NECR, { 1000, 0, 0, 0, 0, 0, 0 } },
 
-    {BUILD_SPEC, Race::KNGT, {1500, 5, 0, 15, 0, 0, 0}},
-    {BUILD_SPEC, Race::BARB, {2000, 10, 0, 10, 0, 0, 0}},
-    {BUILD_SPEC, Race::SORC, {1500, 0, 0, 0, 0, 10, 0}},
-    {BUILD_SPEC, Race::WRLK, {3000, 5, 0, 10, 0, 0, 0}},
-    {BUILD_SPEC, Race::WZRD, {1500, 5, 5, 5, 5, 5, 5}},
-    {BUILD_SPEC, Race::NECR, {1000, 0, 10, 0, 10, 0, 0}},
+    { BUILD_SPEC, Race::KNGT, { 1500, 5, 0, 15, 0, 0, 0 } },
+    { BUILD_SPEC, Race::BARB, { 2000, 10, 0, 10, 0, 0, 0 } },
+    { BUILD_SPEC, Race::SORC, { 1500, 0, 0, 0, 0, 10, 0 } },
+    { BUILD_SPEC, Race::WRLK, { 3000, 5, 0, 10, 0, 0, 0 } },
+    { BUILD_SPEC, Race::WZRD, { 1500, 5, 5, 5, 5, 5, 5 } },
+    { BUILD_SPEC, Race::NECR, { 1000, 0, 10, 0, 10, 0, 0 } },
 
-    {BUILD_SHRINE, Race::NECR, {4000, 10, 0, 0, 0, 10, 0}},
+    { BUILD_SHRINE, Race::NECR, { 4000, 10, 0, 0, 0, 10, 0 } },
 
-    {DWELLING_MONSTER1, Race::KNGT, {200, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER2, Race::KNGT, {1000, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_UPGRADE2, Race::KNGT, {1500, 5, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER3, Race::KNGT, {1000, 0, 0, 5, 0, 0, 0}},
-    {DWELLING_UPGRADE3, Race::KNGT, {1500, 0, 0, 5, 0, 0, 0}},
-    {DWELLING_MONSTER4, Race::KNGT, {2000, 10, 0, 10, 0, 0, 0}},
-    {DWELLING_UPGRADE4, Race::KNGT, {2000, 5, 0, 5, 0, 0, 0}},
-    {DWELLING_MONSTER5, Race::KNGT, {3000, 20, 0, 0, 0, 0, 0}},
-    {DWELLING_UPGRADE5, Race::KNGT, {3000, 10, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER6, Race::KNGT, {5000, 20, 0, 0, 0, 20, 0}},
-    {DWELLING_UPGRADE6, Race::KNGT, {5000, 10, 0, 0, 0, 10, 0}},
+    { DWELLING_MONSTER1, Race::KNGT, { 200, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER2, Race::KNGT, { 1000, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_UPGRADE2, Race::KNGT, { 1500, 5, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER3, Race::KNGT, { 1000, 0, 0, 5, 0, 0, 0 } },
+    { DWELLING_UPGRADE3, Race::KNGT, { 1500, 0, 0, 5, 0, 0, 0 } },
+    { DWELLING_MONSTER4, Race::KNGT, { 2000, 10, 0, 10, 0, 0, 0 } },
+    { DWELLING_UPGRADE4, Race::KNGT, { 2000, 5, 0, 5, 0, 0, 0 } },
+    { DWELLING_MONSTER5, Race::KNGT, { 3000, 20, 0, 0, 0, 0, 0 } },
+    { DWELLING_UPGRADE5, Race::KNGT, { 3000, 10, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER6, Race::KNGT, { 5000, 20, 0, 0, 0, 20, 0 } },
+    { DWELLING_UPGRADE6, Race::KNGT, { 5000, 10, 0, 0, 0, 10, 0 } },
 
-    {DWELLING_MONSTER1, Race::BARB, {300, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER2, Race::BARB, {800, 5, 0, 0, 0, 0, 0}},
-    {DWELLING_UPGRADE2, Race::BARB, {1200, 5, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER3, Race::BARB, {1000, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER4, Race::BARB, {2000, 10, 0, 10, 0, 0, 0}},
-    {DWELLING_UPGRADE4, Race::BARB, {3000, 5, 0, 5, 0, 0, 0}},
-    {DWELLING_MONSTER5, Race::BARB, {4000, 0, 0, 20, 0, 0, 0}},
-    {DWELLING_UPGRADE5, Race::BARB, {2000, 0, 0, 10, 0, 0, 0}},
-    {DWELLING_MONSTER6, Race::BARB, {6000, 0, 0, 20, 0, 20, 0}},
+    { DWELLING_MONSTER1, Race::BARB, { 300, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER2, Race::BARB, { 800, 5, 0, 0, 0, 0, 0 } },
+    { DWELLING_UPGRADE2, Race::BARB, { 1200, 5, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER3, Race::BARB, { 1000, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER4, Race::BARB, { 2000, 10, 0, 10, 0, 0, 0 } },
+    { DWELLING_UPGRADE4, Race::BARB, { 3000, 5, 0, 5, 0, 0, 0 } },
+    { DWELLING_MONSTER5, Race::BARB, { 4000, 0, 0, 20, 0, 0, 0 } },
+    { DWELLING_UPGRADE5, Race::BARB, { 2000, 0, 0, 10, 0, 0, 0 } },
+    { DWELLING_MONSTER6, Race::BARB, { 6000, 0, 0, 20, 0, 20, 0 } },
 
-    {DWELLING_MONSTER1, Race::SORC, {500, 5, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER2, Race::SORC, {1000, 5, 0, 0, 0, 0, 0}},
-    {DWELLING_UPGRADE2, Race::SORC, {1500, 5, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER3, Race::SORC, {1500, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_UPGRADE3, Race::SORC, {1500, 5, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER4, Race::SORC, {1500, 0, 0, 10, 0, 0, 0}},
-    {DWELLING_UPGRADE4, Race::SORC, {1500, 0, 5, 0, 0, 0, 0}},
-    {DWELLING_MONSTER5, Race::SORC, {3000, 10, 0, 0, 0, 0, 10}},
-    {DWELLING_MONSTER6, Race::SORC, {10000, 0, 20, 30, 0, 0, 0}},
+    { DWELLING_MONSTER1, Race::SORC, { 500, 5, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER2, Race::SORC, { 1000, 5, 0, 0, 0, 0, 0 } },
+    { DWELLING_UPGRADE2, Race::SORC, { 1500, 5, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER3, Race::SORC, { 1500, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_UPGRADE3, Race::SORC, { 1500, 5, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER4, Race::SORC, { 2500, 0, 0, 10, 0, 0, 0 } },
+    { DWELLING_UPGRADE4, Race::SORC, { 1500, 0, 5, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER5, Race::SORC, { 3000, 10, 0, 0, 0, 0, 10 } },
+    { DWELLING_MONSTER6, Race::SORC, { 10000, 0, 20, 30, 0, 0, 0 } },
 
-    {DWELLING_MONSTER1, Race::WRLK, {500, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER2, Race::WRLK, {1000, 0, 0, 10, 0, 0, 0}},
-    {DWELLING_MONSTER3, Race::WRLK, {2000, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER4, Race::WRLK, {3000, 0, 0, 0, 0, 0, 10}},
-    {DWELLING_UPGRADE4, Race::WRLK, {2000, 0, 0, 0, 0, 0, 5}},
-    {DWELLING_MONSTER5, Race::WRLK, {4000, 0, 0, 0, 10, 0, 0}},
-    {DWELLING_MONSTER6, Race::WRLK, {15000, 0, 0, 30, 20, 0, 0}},
-    {DWELLING_UPGRADE6, Race::WRLK, {5000, 0, 0, 5, 10, 0, 0}},
-    {DWELLING_UPGRADE7, Race::WRLK, {5000, 0, 0, 5, 10, 0, 0}},
+    { DWELLING_MONSTER1, Race::WRLK, { 500, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER2, Race::WRLK, { 1000, 0, 0, 10, 0, 0, 0 } },
+    { DWELLING_MONSTER3, Race::WRLK, { 2000, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER4, Race::WRLK, { 3000, 0, 0, 0, 0, 0, 10 } },
+    { DWELLING_UPGRADE4, Race::WRLK, { 2000, 0, 0, 0, 0, 0, 5 } },
+    { DWELLING_MONSTER5, Race::WRLK, { 4000, 0, 0, 0, 10, 0, 0 } },
+    { DWELLING_MONSTER6, Race::WRLK, { 15000, 0, 0, 30, 20, 0, 0 } },
+    { DWELLING_UPGRADE6, Race::WRLK, { 5000, 0, 0, 5, 10, 0, 0 } },
+    { DWELLING_UPGRADE7, Race::WRLK, { 5000, 0, 0, 5, 10, 0, 0 } },
 
-    {DWELLING_MONSTER1, Race::WZRD, {400, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER2, Race::WZRD, {800, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER3, Race::WZRD, {1500, 5, 0, 5, 0, 0, 0}},
-    {DWELLING_UPGRADE3, Race::WZRD, {1500, 0, 5, 0, 0, 0, 0}},
-    {DWELLING_MONSTER4, Race::WZRD, {3000, 5, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER5, Race::WZRD, {3500, 5, 5, 5, 5, 5, 5}},
-    {DWELLING_UPGRADE5, Race::WZRD, {4000, 5, 0, 5, 0, 0, 0}},
-    {DWELLING_MONSTER6, Race::WZRD, {12500, 5, 0, 5, 0, 0, 20}},
-    {DWELLING_UPGRADE6, Race::WZRD, {12500, 5, 0, 5, 0, 0, 20}},
+    { DWELLING_MONSTER1, Race::WZRD, { 400, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER2, Race::WZRD, { 800, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER3, Race::WZRD, { 1500, 5, 0, 5, 0, 0, 0 } },
+    { DWELLING_UPGRADE3, Race::WZRD, { 1500, 0, 5, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER4, Race::WZRD, { 3000, 5, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER5, Race::WZRD, { 3500, 5, 5, 5, 5, 5, 5 } },
+    { DWELLING_UPGRADE5, Race::WZRD, { 4000, 5, 0, 5, 0, 0, 0 } },
+    { DWELLING_MONSTER6, Race::WZRD, { 12500, 5, 0, 5, 0, 0, 20 } },
+    { DWELLING_UPGRADE6, Race::WZRD, { 12500, 5, 0, 5, 0, 0, 20 } },
 
-    {DWELLING_MONSTER1, Race::NECR, {400, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER2, Race::NECR, {1000, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_UPGRADE2, Race::NECR, {1000, 0, 0, 0, 0, 0, 0}},
-    {DWELLING_MONSTER3, Race::NECR, {1500, 0, 0, 10, 0, 0, 0}},
-    {DWELLING_UPGRADE3, Race::NECR, {1500, 0, 0, 5, 0, 0, 0}},
-    {DWELLING_MONSTER4, Race::NECR, {3000, 10, 0, 0, 0, 0, 0}},
-    {DWELLING_UPGRADE4, Race::NECR, {4000, 5, 0, 0, 0, 10, 10}},
-    {DWELLING_MONSTER5, Race::NECR, {4000, 10, 0, 0, 10, 0, 0}},
-    {DWELLING_UPGRADE5, Race::NECR, {3000, 0, 0, 5, 0, 5, 0}},
-    {DWELLING_MONSTER6, Race::NECR, {10000, 10, 5, 10, 5, 5, 5}},
+    { DWELLING_MONSTER1, Race::NECR, { 400, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER2, Race::NECR, { 1000, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_UPGRADE2, Race::NECR, { 1000, 0, 0, 0, 0, 0, 0 } },
+    { DWELLING_MONSTER3, Race::NECR, { 1500, 0, 0, 10, 0, 0, 0 } },
+    { DWELLING_UPGRADE3, Race::NECR, { 1500, 0, 0, 5, 0, 0, 0 } },
+    { DWELLING_MONSTER4, Race::NECR, { 3000, 10, 0, 0, 0, 0, 0 } },
+    { DWELLING_UPGRADE4, Race::NECR, { 4000, 5, 0, 0, 0, 10, 10 } },
+    { DWELLING_MONSTER5, Race::NECR, { 4000, 10, 0, 0, 10, 0, 0 } },
+    { DWELLING_UPGRADE5, Race::NECR, { 3000, 0, 0, 5, 0, 5, 0 } },
+    { DWELLING_MONSTER6, Race::NECR, { 10000, 10, 5, 10, 5, 5, 5 } },
 
     // end
-    {BUILD_NOTHING, Race::NONE, {0, 0, 0, 0, 0, 0, 0}},
+    { BUILD_NOTHING, Race::NONE, { 0, 0, 0, 0, 0, 0, 0 } },
 };
 
-payment_t BuildingInfo::GetCost( u32 build, int race )
+payment_t BuildingInfo::GetCost( uint32_t build, int race )
 {
     payment_t payment;
     const buildstats_t * ptr = &_builds[0];
@@ -190,7 +196,7 @@ payment_t BuildingInfo::GetCost( u32 build, int race )
     return payment;
 }
 
-int GetIndexBuildingSprite( u32 build )
+int GetIndexBuildingSprite( uint32_t build )
 {
     switch ( build ) {
     case DWELLING_MONSTER1:
@@ -257,10 +263,10 @@ int GetIndexBuildingSprite( u32 build )
     return 0;
 }
 
-BuildingInfo::BuildingInfo( const Castle & c, building_t b )
+BuildingInfo::BuildingInfo( const Castle & c, const building_t b )
     : castle( c )
     , building( b )
-    , area( 0, 0, 135, 57 )
+    , area( 0, 0, 135, 70 )
     , bcond( ALLOW_BUILD )
 {
     if ( IsDwelling() )
@@ -279,7 +285,7 @@ BuildingInfo::BuildingInfo( const Castle & c, building_t b )
     else if ( IsDwelling() ) {
         description = _( "The %{building} produces %{monster}." );
         StringReplace( description, "%{building}", Castle::GetStringBuilding( building, castle.GetRace() ) );
-        StringReplace( description, "%{monster}", StringLower( Monster( castle.GetRace(), building ).GetMultiName() ) );
+        StringReplace( description, "%{monster}", Translation::StringLower( Monster( castle.GetRace(), building ).GetMultiName() ) );
     }
     else
         description = Castle::GetDescriptionBuilding( building, castle.GetRace() );
@@ -313,23 +319,13 @@ BuildingInfo::BuildingInfo( const Castle & c, building_t b )
     }
 }
 
-u32 BuildingInfo::operator()( void ) const
-{
-    return building;
-}
-
-void BuildingInfo::SetPos( s32 x, s32 y )
+void BuildingInfo::SetPos( int32_t x, int32_t y )
 {
     area.x = x;
     area.y = y;
 }
 
-const fheroes2::Rect & BuildingInfo::GetArea( void ) const
-{
-    return area;
-}
-
-bool BuildingInfo::IsDwelling( void ) const
+bool BuildingInfo::IsDwelling() const
 {
     switch ( building ) {
     case DWELLING_MONSTER1:
@@ -351,7 +347,7 @@ bool BuildingInfo::IsDwelling( void ) const
     return false;
 }
 
-void BuildingInfo::RedrawCaptain( void ) const
+void BuildingInfo::RedrawCaptain() const
 {
     fheroes2::Display & display = fheroes2::Display::instance();
     if ( bcond == ALREADY_BUILT ) {
@@ -383,7 +379,7 @@ void BuildingInfo::RedrawCaptain( void ) const
     }
 }
 
-void BuildingInfo::Redraw( void ) const
+void BuildingInfo::Redraw() const
 {
     if ( BUILD_CAPTAIN == building ) {
         RedrawCaptain();
@@ -404,7 +400,8 @@ void BuildingInfo::Redraw( void ) const
 
         // build image
         if ( BUILD_NOTHING == building ) {
-            fheroes2::Blit( fheroes2::AGG::GetICN( ICN::CASLXTRA, 0 ), display, area.x, area.y );
+            const bool isEvilInterface = Settings::Get().ExtGameEvilInterface();
+            fheroes2::Blit( fheroes2::AGG::GetICN( isEvilInterface ? ICN::CASLXTRA_EVIL : ICN::CASLXTRA, 0 ), display, area.x, area.y );
             return;
         }
 
@@ -444,7 +441,7 @@ void BuildingInfo::Redraw( void ) const
     }
 }
 
-const char * BuildingInfo::GetName( void ) const
+const char * BuildingInfo::GetName() const
 {
     return Castle::GetStringBuilding( building, castle.GetRace() );
 }
@@ -492,17 +489,17 @@ bool BuildingInfo::DialogBuyBuilding( bool buttons ) const
 
     // prepare requirement build string
     std::string str;
-    const u32 requirement = castle.GetBuildingRequirement( building );
+    const uint32_t requirement = castle.GetBuildingRequirement( building );
     const std::string sep = "\n";
 
-    for ( u32 itr = 0x00000001; itr; itr <<= 1 )
+    for ( uint32_t itr = 0x00000001; itr; itr <<= 1 )
         if ( requirement & itr ) {
             str.append( Castle::GetStringBuilding( itr, castle.GetRace() ) );
             str.append( sep );
         }
 
     // replace end sep
-    if ( str.size() )
+    if ( !str.empty() )
         str.replace( str.size() - sep.size(), sep.size(), "" );
 
     const bool isRequired = !str.empty();
@@ -539,7 +536,7 @@ bool BuildingInfo::DialogBuyBuilding( bool buttons ) const
 
     Text text( GetName(), Font::SMALL );
     dst_pt.x = box_rt.x + ( box_rt.width - text.w() ) / 2;
-    dst_pt.y += 57;
+    dst_pt.y += 58;
     text.Blit( dst_pt.x, dst_pt.y );
 
     dst_pt.x = box_rt.x;
@@ -579,10 +576,10 @@ bool BuildingInfo::DialogBuyBuilding( bool buttons ) const
         le.MousePressLeft( button1.area() ) ? button1.drawOnPress() : button1.drawOnRelease();
         le.MousePressLeft( button2.area() ) ? button2.drawOnPress() : button2.drawOnRelease();
 
-        if ( button1.isEnabled() && ( Game::HotKeyPressEvent( Game::EVENT_DEFAULT_READY ) || le.MouseClickLeft( button1.area() ) ) )
+        if ( button1.isEnabled() && ( Game::HotKeyPressEvent( Game::HotKeyEvent::DEFAULT_OKAY ) || le.MouseClickLeft( button1.area() ) ) )
             return true;
 
-        if ( Game::HotKeyPressEvent( Game::EVENT_DEFAULT_EXIT ) || le.MouseClickLeft( button2.area() ) )
+        if ( Game::HotKeyPressEvent( Game::HotKeyEvent::DEFAULT_CANCEL ) || le.MouseClickLeft( button2.area() ) )
             break;
     }
 
@@ -593,10 +590,10 @@ const char * GetBuildConditionDescription( int bcond )
 {
     switch ( bcond ) {
     case NOT_TODAY:
-        return _( "Cannot build. Already built here this turn." );
+        return _( "Cannot build. You have already built here today." );
 
     case NEED_CASTLE:
-        return _( "For this action it is necessary first to build a castle." );
+        return _( "For this action it is necessary to build a castle first." );
 
     default:
         break;
@@ -605,7 +602,7 @@ const char * GetBuildConditionDescription( int bcond )
     return nullptr;
 }
 
-std::string BuildingInfo::GetConditionDescription( void ) const
+std::string BuildingInfo::GetConditionDescription() const
 {
     std::string res;
 
@@ -620,7 +617,7 @@ std::string BuildingInfo::GetConditionDescription( void ) const
             StringReplace( res, "%{name}", Castle::GetStringBuilding( BUILD_SHIPYARD, castle.GetRace() ) );
         }
         else {
-            res = "disable build.";
+            res = _( "disable build." );
         }
         break;
 
@@ -673,7 +670,7 @@ void BuildingInfo::SetStatusMessage( StatusBar & bar ) const
     }
 }
 
-DwellingItem::DwellingItem( const Castle & castle, u32 dw )
+DwellingItem::DwellingItem( const Castle & castle, uint32_t dw )
 {
     type = castle.GetActualDwelling( dw );
     mons = Monster( castle.GetRace(), type );
@@ -685,7 +682,7 @@ DwellingsBar::DwellingsBar( Castle & cstl, const fheroes2::Size & sz )
 {
     backsf.reset();
 
-    for ( u32 dw = DWELLING_MONSTER1; dw <= DWELLING_MONSTER6; dw <<= 1 )
+    for ( uint32_t dw = DWELLING_MONSTER1; dw <= DWELLING_MONSTER6; dw <<= 1 )
         content.emplace_back( castle, dw );
 
     SetContent( content );
@@ -709,7 +706,7 @@ void DwellingsBar::RedrawItem( DwellingItem & dwl, const fheroes2::Rect & pos, f
         Text text( std::to_string( castle.getMonstersInDwelling( dwl.type ) ), Font::SMALL );
         text.Blit( pos.x + pos.width - text.w() - 3, pos.y + pos.height - text.h() - 1 );
 
-        u32 grown = dwl.mons.GetGrown();
+        uint32_t grown = dwl.mons.GetGrown();
         if ( castle.isBuild( BUILD_WELL ) )
             grown += Castle::GetGrownWell();
         if ( castle.isBuild( BUILD_WEL2 ) && DWELLING_MONSTER1 == dwl.type )
@@ -726,7 +723,7 @@ void DwellingsBar::RedrawItem( DwellingItem & dwl, const fheroes2::Rect & pos, f
 bool DwellingsBar::ActionBarLeftMouseSingleClick( DwellingItem & dwl )
 {
     if ( castle.isBuild( dwl.type ) ) {
-        castle.RecruitMonster( Dialog::RecruitMonster( dwl.mons, castle.getMonstersInDwelling( dwl.type ), true ) );
+        castle.RecruitMonster( Dialog::RecruitMonster( dwl.mons, castle.getMonstersInDwelling( dwl.type ), true, 0 ) );
     }
     else if ( !castle.isBuild( BUILD_CASTLE ) )
         Dialog::Message( "", GetBuildConditionDescription( NEED_CASTLE ), Font::BIG, Dialog::OK );
@@ -734,7 +731,7 @@ bool DwellingsBar::ActionBarLeftMouseSingleClick( DwellingItem & dwl )
         BuildingInfo dwelling( castle, static_cast<building_t>( dwl.type ) );
 
         if ( dwelling.DialogBuyBuilding( true ) ) {
-            AGG::PlaySound( M82::BUILDTWN );
+            AudioManager::PlaySound( M82::BUILDTWN );
             castle.BuyBuilding( dwl.type );
         }
     }

@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,30 +24,33 @@
 #ifndef H2OBJXLOC_H
 #define H2OBJXLOC_H
 
-#include "gamedefs.h"
+#include <cstdint>
 
 namespace ObjXlc1
 {
-    int GetPassable( u32 index );
-    bool isAction( u32 index );
-    bool isShadow( u32 index );
-    int GetActionObject( u32 index );
+    int GetPassable( const uint8_t index );
+    bool isAction( uint32_t index );
+    bool isShadow( const uint8_t index );
+    int GetActionObject( uint32_t index );
 }
 
 namespace ObjXlc2
 {
-    int GetPassable( u32 index );
-    bool isAction( u32 index );
-    bool isShadow( u32 index );
-    int GetActionObject( u32 index );
+    int GetPassable( const uint8_t index );
+    bool isAction( uint32_t index );
+    bool isShadow( const uint8_t index );
+    int GetActionObject( uint32_t index );
+
+    // Returns true if the index belongs to Reefs type of the object.
+    bool isReefs( const uint8_t index );
 }
 
 namespace ObjXlc3
 {
-    int GetPassable( u32 index );
-    bool isAction( u32 index );
-    bool isShadow( u32 index );
-    int GetActionObject( u32 index );
+    int GetPassable( const uint8_t index );
+    bool isAction( uint32_t index );
+    bool isShadow( const uint8_t index );
+    int GetActionObject( uint32_t index );
 }
 
 #endif

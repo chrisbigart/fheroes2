@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2012 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2012 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,9 +23,8 @@
 
 #include <algorithm>
 
-#include "agg.h"
+#include "audio_manager.h"
 #include "castle.h"
-#include "cursor.h"
 #include "game.h"
 #include "game_interface.h"
 #include "heroes.h"
@@ -45,20 +45,19 @@ void Interface::Basic::SetFocus( Heroes * hero )
             focus.GetHeroes()->ShowPath( false );
         }
 
-        hero->RescanPath();
         hero->ShowPath( true );
         focus.Set( hero );
 
-        GetButtonsArea().Redraw();
+        Redraw( REDRAW_BUTTONS );
 
         iconsPanel.Select( hero );
         gameArea.SetCenter( hero->GetCenter() );
         statusWindow.SetState( StatusType::STATUS_ARMY );
 
-        const int heroIndexPos = hero->GetIndex();
-        if ( !Game::ChangeMusicDisabled() && heroIndexPos >= 0 ) {
+        const int heroIndex = hero->GetIndex();
+        if ( Game::UpdateSoundsOnFocusUpdate() && heroIndex >= 0 ) {
             Game::EnvironmentSoundMixer();
-            AGG::PlayMusic( MUS::FromGround( world.GetTiles( heroIndexPos ).GetGround() ), true, true );
+            AudioManager::PlayMusicAsync( MUS::FromGround( world.GetTiles( heroIndex ).GetGround() ), Music::PlaybackMode::RESUME_AND_PLAY_INFINITE );
         }
     }
 }
@@ -77,14 +76,16 @@ void Interface::Basic::SetFocus( Castle * castle )
 
         focus.Set( castle );
 
-        GetButtonsArea().Redraw();
+        Redraw( REDRAW_BUTTONS );
 
         iconsPanel.Select( castle );
         gameArea.SetCenter( castle->GetCenter() );
         statusWindow.SetState( StatusType::STATUS_FUNDS );
 
-        Game::EnvironmentSoundMixer();
-        AGG::PlayMusic( MUS::FromGround( world.GetTiles( castle->GetIndex() ).GetGround() ), true, true );
+        if ( Game::UpdateSoundsOnFocusUpdate() ) {
+            Game::EnvironmentSoundMixer();
+            AudioManager::PlayMusicAsync( MUS::FromGround( world.GetTiles( castle->GetIndex() ).GetGround() ), Music::PlaybackMode::RESUME_AND_PLAY_INFINITE );
+        }
     }
 }
 
@@ -96,7 +97,7 @@ void Interface::Basic::ResetFocus( int priority )
         Focus & focus = player->GetFocus();
         Kingdom & myKingdom = world.GetKingdom( player->GetColor() );
 
-        iconsPanel.ResetIcons();
+        iconsPanel.ResetIcons( ICON_ANY );
 
         switch ( priority ) {
         case GameFocus::FIRSTHERO: {
@@ -108,14 +109,15 @@ void Interface::Basic::ResetFocus( int priority )
                 SetFocus( *it );
             else
                 ResetFocus( GameFocus::CASTLE );
-        } break;
+            break;
+        }
 
         case GameFocus::HEROES:
             if ( focus.GetHeroes() && focus.GetHeroes()->GetColor() == player->GetColor() )
                 SetFocus( focus.GetHeroes() );
-            else if ( myKingdom.GetHeroes().size() )
+            else if ( !myKingdom.GetHeroes().empty() )
                 SetFocus( myKingdom.GetHeroes().front() );
-            else if ( myKingdom.GetCastles().size() ) {
+            else if ( !myKingdom.GetCastles().empty() ) {
                 iconsPanel.SetRedraw( ICON_HEROES );
                 SetFocus( myKingdom.GetCastles().front() );
             }
@@ -126,9 +128,9 @@ void Interface::Basic::ResetFocus( int priority )
         case GameFocus::CASTLE:
             if ( focus.GetCastle() && focus.GetCastle()->GetColor() == player->GetColor() )
                 SetFocus( focus.GetCastle() );
-            else if ( myKingdom.GetCastles().size() )
+            else if ( !myKingdom.GetCastles().empty() )
                 SetFocus( myKingdom.GetCastles().front() );
-            else if ( myKingdom.GetHeroes().size() ) {
+            else if ( !myKingdom.GetHeroes().empty() ) {
                 iconsPanel.SetRedraw( ICON_CASTLES );
                 SetFocus( myKingdom.GetHeroes().front() );
             }
@@ -143,7 +145,7 @@ void Interface::Basic::ResetFocus( int priority )
     }
 }
 
-int Interface::GetFocusType( void )
+int Interface::GetFocusType()
 {
     Player * player = Settings::Get().GetPlayers().GetCurrent();
 
@@ -159,37 +161,21 @@ int Interface::GetFocusType( void )
     return GameFocus::UNSEL;
 }
 
-Castle * Interface::GetFocusCastle( void )
+Castle * Interface::GetFocusCastle()
 {
     Player * player = Settings::Get().GetPlayers().GetCurrent();
 
     return player ? player->GetFocus().GetCastle() : nullptr;
 }
 
-Heroes * Interface::GetFocusHeroes( void )
+Heroes * Interface::GetFocusHeroes()
 {
     Player * player = Settings::Get().GetPlayers().GetCurrent();
 
     return player ? player->GetFocus().GetHeroes() : nullptr;
 }
 
-fheroes2::Point Interface::GetFocusCenter( void )
-{
-    Player * player = Settings::Get().GetPlayers().GetCurrent();
-
-    if ( player ) {
-        Focus & focus = player->GetFocus();
-
-        if ( focus.GetHeroes() )
-            return focus.GetHeroes()->GetCenter();
-        else if ( focus.GetCastle() )
-            return focus.GetCastle()->GetCenter();
-    }
-
-    return fheroes2::Point( world.w() / 2, world.h() / 2 );
-}
-
-void Interface::Basic::RedrawFocus( void )
+void Interface::Basic::RedrawFocus()
 {
     int type = GetFocusType();
 

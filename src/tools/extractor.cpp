@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2022                                                    *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -20,8 +21,6 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#include <cctype>
-#include <fstream>
 #include <iostream>
 #include <vector>
 
@@ -37,9 +36,9 @@
 
 struct aggfat_t
 {
-    u32 crc;
-    u32 offset;
-    u32 size;
+    uint32_t crc;
+    uint32_t offset;
+    uint32_t size;
 };
 
 int main( int argc, char ** argv )
@@ -50,7 +49,8 @@ int main( int argc, char ** argv )
         return EXIT_SUCCESS;
     }
 
-    StreamFile sf1, sf2;
+    StreamFile sf1;
+    StreamFile sf2;
 
     if ( !sf1.open( argv[1], "rb" ) ) {
         std::cout << "error open file: " << argv[1] << std::endl;
@@ -59,7 +59,7 @@ int main( int argc, char ** argv )
 
     System::MakeDirectory( argv[2] );
 
-    const u32 size = sf1.size();
+    const size_t size = sf1.size();
     int total = 0;
     int count_items = sf1.getLE16();
 
@@ -81,9 +81,9 @@ int main( int argc, char ** argv )
         const aggfat_t & fat = ( *it ).second;
         const std::string & fn = System::ConcatePath( argv[2], ( *it ).first );
         sf1.seek( fat.offset );
-        std::vector<u8> buf = sf1.getRaw( fat.size );
+        std::vector<uint8_t> buf = sf1.getRaw( fat.size );
 
-        if ( buf.size() && sf2.open( fn, "wb" ) ) {
+        if ( !buf.empty() && sf2.open( fn, "wb" ) ) {
             sf2.putRaw( reinterpret_cast<char *>( &buf[0] ), buf.size() );
             sf2.close();
 

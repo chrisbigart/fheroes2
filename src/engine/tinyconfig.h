@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2010 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of SDL++ Engine:                                                 *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2010 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,9 +24,7 @@
 #ifndef TINYCONFIG_H
 #define TINYCONFIG_H
 
-#include <list>
 #include <map>
-#include <ostream>
 #include <string>
 
 class TinyConfig : protected std::multimap<std::string, std::string>
@@ -33,20 +32,12 @@ class TinyConfig : protected std::multimap<std::string, std::string>
 public:
     TinyConfig( char sep = '=', char com = ';' );
 
-    bool Load( const std::string & );
-    bool Save( const std::string & ) const;
-    void Clear( void );
+    bool Load( const std::string & cfile );
 
-    void AddEntry( const std::string &, const std::string &, bool uniq = true );
-    void AddEntry( const std::string &, int, bool uniq = true );
+    bool Exists( const std::string & key ) const;
 
-    bool Exists( const std::string & ) const;
-
-    int IntParams( const std::string & ) const;
-    std::string StrParams( const std::string & ) const;
-
-    std::list<std::string> ListStr( const std::string & ) const;
-    std::list<int> ListInt( const std::string & ) const;
+    int IntParams( const std::string & key ) const;
+    std::string StrParams( const std::string & key ) const;
 
 protected:
     char separator;

@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2020                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2020 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -19,8 +19,10 @@
  ***************************************************************************/
 
 #include "ui_scrollbar.h"
+#include "pal.h"
 
 #include <cassert>
+#include <cmath>
 
 namespace fheroes2
 {
@@ -28,11 +30,13 @@ namespace fheroes2
         : _minIndex( 0 )
         , _maxIndex( 0 )
         , _currentIndex( 0 )
-    {}
+    {
+        // Do nothing.
+    }
 
     void Scrollbar::setImage( const Image & image )
     {
-        fheroes2::Copy( image, *this );
+        Copy( image, *this );
     }
 
     void Scrollbar::setArea( const Rect & area )
@@ -75,10 +79,10 @@ namespace fheroes2
         }
     }
 
-    void Scrollbar::moveToIndex( const int indexId )
+    bool Scrollbar::moveToIndex( const int indexId )
     {
         if ( _maxIndex == _minIndex )
-            return;
+            return false;
 
         if ( indexId < _minIndex )
             _currentIndex = _minIndex;
@@ -90,12 +94,24 @@ namespace fheroes2
         const int roiWidth = _area.width - width();
         const int roiHeight = _area.height - height();
 
+        Point newPosition;
+
         if ( _isVertical() ) {
-            setPosition( _area.x + roiWidth / 2, _area.y + ( _currentIndex - _minIndex ) * roiHeight / ( _maxIndex - _minIndex ) );
+            newPosition.x = _area.x + roiWidth / 2;
+            newPosition.y = _area.y + ( _currentIndex - _minIndex ) * roiHeight / ( _maxIndex - _minIndex );
         }
         else {
-            setPosition( _area.x + ( _currentIndex - _minIndex ) * roiWidth / ( _maxIndex - _minIndex ), _area.y + roiHeight / 2 );
+            newPosition.x = _area.x + ( _currentIndex - _minIndex ) * roiWidth / ( _maxIndex - _minIndex );
+            newPosition.y = _area.y + roiHeight / 2;
         }
+
+        if ( newPosition.x != x() || newPosition.y != y() ) {
+            // Update only on the change.
+            setPosition( newPosition.x, newPosition.y );
+            return true;
+        }
+
+        return false;
     }
 
     void Scrollbar::moveToPos( const Point & position )
@@ -107,36 +123,147 @@ namespace fheroes2
         const int roiHeight = _area.height - height();
 
         if ( _isVertical() ) {
-            int32_t posY = position.y;
-            const int32_t maxYPos = _area.y + roiHeight;
+            const int32_t scrollbarImageMiddle = height() / 2;
+            const int32_t minYPos = _area.y + scrollbarImageMiddle;
+            const int32_t maxYPos = _area.y + roiHeight + height() - scrollbarImageMiddle - 1;
 
-            if ( posY < _area.y )
-                posY = _area.y;
+            int32_t posY = position.y;
+            if ( posY < minYPos )
+                posY = minYPos;
             else if ( posY > maxYPos )
                 posY = maxYPos;
 
-            _currentIndex = ( posY - _area.y ) * ( _maxIndex - _minIndex ) / roiHeight;
+            const double tempPos = static_cast<double>( posY - minYPos ) * ( _maxIndex - _minIndex ) / roiHeight;
+            _currentIndex = static_cast<int>( std::lround( tempPos ) ) + _minIndex;
 
-            const int32_t posX = _area.x + roiWidth / 2;
-            setPosition( posX, posY );
+            setPosition( _area.x + roiWidth / 2, posY - scrollbarImageMiddle );
         }
         else {
-            int32_t posX = position.x;
-            const int32_t maxXPos = _area.x + roiWidth;
+            const int32_t scrollbarImageMiddle = width() / 2;
+            const int32_t minXPos = _area.x + scrollbarImageMiddle;
+            const int32_t maxXPos = _area.x + roiWidth + width() - scrollbarImageMiddle - 1;
 
-            if ( posX < _area.x )
-                posX = _area.x;
+            int32_t posX = position.x;
+            if ( posX < minXPos )
+                posX = minXPos;
             else if ( posX > maxXPos )
                 posX = maxXPos;
 
-            _currentIndex = ( posX - _area.x ) * ( _maxIndex - _minIndex ) / roiWidth;
-            const int32_t posY = _area.y + roiHeight / 2;
-            setPosition( posX, posY );
+            const double tempPos = static_cast<double>( posX - minXPos ) * ( _maxIndex - _minIndex ) / roiWidth;
+            _currentIndex = static_cast<int>( std::lround( tempPos ) ) + _minIndex;
+
+            setPosition( posX - scrollbarImageMiddle, _area.y + roiHeight / 2 );
         }
     }
 
-    bool Scrollbar::_isVertical() const
+    Image generateScrollbarSlider( const Image & originalSlider, const bool horizonalSlider, const int32_t sliderAreaLength, const int32_t elementCountPerView,
+                                   const int32_t totalElementCount, const Rect & startSliderArea, const Rect & middleSliderArea )
     {
-        return _area.width < _area.height;
+        if ( originalSlider.empty() ) {
+            // Why do you pass an empty image?
+            assert( 0 );
+            return originalSlider;
+        }
+
+        assert( sliderAreaLength > 0 && elementCountPerView > 0 );
+
+        if ( horizonalSlider ) {
+            if ( middleSliderArea.width < 1 ) {
+                // Middle area cannot be empty!
+                assert( 0 );
+                return originalSlider;
+            }
+
+            if ( sliderAreaLength < originalSlider.width() ) {
+                // The slider is bigger than the area!
+                assert( 0 );
+                return originalSlider;
+            }
+        }
+        else {
+            if ( middleSliderArea.height < 1 ) {
+                // Middle area cannot be empty!
+                assert( 0 );
+                return originalSlider;
+            }
+
+            if ( sliderAreaLength < originalSlider.height() ) {
+                // The slider is bigger than the area!
+                assert( 0 );
+                return originalSlider;
+            }
+        }
+
+        const int32_t currentSliderLength = horizonalSlider ? originalSlider.width() : originalSlider.height();
+
+        if ( sliderAreaLength * elementCountPerView < currentSliderLength * totalElementCount ) {
+            // Slider is too big.
+            return originalSlider;
+        }
+
+        const int32_t step = horizonalSlider ? middleSliderArea.width : middleSliderArea.height;
+        const int32_t middleLength = ( sliderAreaLength * elementCountPerView / std::max( elementCountPerView,  totalElementCount ) ) - currentSliderLength;
+
+        int32_t width = originalSlider.width();
+        int32_t height = originalSlider.height();
+        if ( horizonalSlider ) {
+            width += middleLength;
+        }
+        else {
+            height += middleLength;
+        }
+
+        Image output( width, height );
+        output.reset();
+
+        Copy( originalSlider, startSliderArea.x, startSliderArea.y, output, startSliderArea.x, startSliderArea.y, startSliderArea.width, startSliderArea.height );
+
+        int32_t offset = 0;
+        if ( horizonalSlider ) {
+            offset = startSliderArea.x + startSliderArea.width;
+        }
+        else {
+            offset = startSliderArea.y + startSliderArea.height;
+        }
+
+        const int32_t middleChunkCount = middleLength / step;
+        for ( int32_t i = 0; i < middleChunkCount; ++i ) {
+            if ( horizonalSlider ) {
+                Copy( originalSlider, middleSliderArea.x, middleSliderArea.y, output, offset, startSliderArea.y, middleSliderArea.width, middleSliderArea.height );
+
+                offset += middleSliderArea.width;
+            }
+            else {
+                Copy( originalSlider, middleSliderArea.x, middleSliderArea.y, output, startSliderArea.x, offset, middleSliderArea.width, middleSliderArea.height );
+
+                offset += middleSliderArea.height;
+            }
+        }
+
+        // Draw leftovers.
+        const int32_t leftover = middleLength - middleChunkCount * step;
+        if ( leftover > 0 ) {
+            if ( horizonalSlider ) {
+                Copy( originalSlider, middleSliderArea.x, middleSliderArea.y, output, offset, startSliderArea.y, leftover, middleSliderArea.height );
+
+                offset += leftover;
+            }
+            else {
+                Copy( originalSlider, middleSliderArea.x, middleSliderArea.y, output, startSliderArea.x, offset, middleSliderArea.width, leftover );
+
+                offset += leftover;
+            }
+        }
+
+        if ( horizonalSlider ) {
+            Copy( originalSlider, startSliderArea.x + startSliderArea.width, startSliderArea.y, output, offset, startSliderArea.y,
+                  originalSlider.width() - startSliderArea.width, startSliderArea.height );
+        }
+        else {
+            Copy( originalSlider, startSliderArea.x, startSliderArea.y + startSliderArea.height, output, startSliderArea.x, offset,
+                  startSliderArea.width, originalSlider.height() - startSliderArea.height );
+        }
+
+        return output;
     }
 }

@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -20,15 +21,15 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
+#include <cassert>
 #include <string>
-#include <vector>
 
 #include "agg_image.h"
 #include "buildinginfo.h"
 #include "castle.h"
 #include "cursor.h"
 #include "dialog.h"
-#include "game.h"
+#include "game_hotkeys.h"
 #include "heroes.h"
 #include "icn.h"
 #include "kingdom.h"
@@ -37,7 +38,11 @@
 #include "settings.h"
 #include "statusbar.h"
 #include "text.h"
+#include "tools.h"
+#include "translations.h"
 #include "ui_button.h"
+#include "ui_castle.h"
+#include "ui_kingdom.h"
 #include "world.h"
 
 int Castle::DialogBuyHero( const Heroes * hero ) const
@@ -57,9 +62,9 @@ int Castle::DialogBuyHero( const Heroes * hero ) const
 
     TextBox recruitHeroText( _( "Recruit Hero" ), Font::YELLOW_BIG, BOXAREA_WIDTH );
 
-    u32 count = hero->GetCountArtifacts();
-    if ( hero->HasArtifact( Artifact::MAGIC_BOOK ) )
-        count--;
+    uint32_t count = hero->GetCountArtifacts();
+    if ( hero->hasArtifact( Artifact::MAGIC_BOOK ) )
+        --count;
 
     std::string str = _( "%{name} is a level %{value} %{race} " );
 
@@ -77,7 +82,7 @@ int Castle::DialogBuyHero( const Heroes * hero ) const
 
     TextBox heroDescriptionText( str, Font::BIG, BOXAREA_WIDTH );
 
-    Resource::BoxSprite rbs( PaymentConditions::RecruitHero( hero->GetLevel() ), BOXAREA_WIDTH );
+    Resource::BoxSprite rbs( PaymentConditions::RecruitHero(), BOXAREA_WIDTH );
 
     Dialog::FrameBox box( recruitHeroText.h() + spacer + portrait_frame.height() + spacer + heroDescriptionText.h() + spacer + rbs.GetArea().height, true );
     const fheroes2::Rect & box_rt = box.GetArea();
@@ -108,7 +113,7 @@ int Castle::DialogBuyHero( const Heroes * hero ) const
     dst_pt.y = box_rt.y + box_rt.height - fheroes2::AGG::GetICN( system, 1 ).height();
     fheroes2::Button button1( dst_pt.x, dst_pt.y, system, 1, 2 );
 
-    if ( !AllowBuyHero( *hero ) ) {
+    if ( !AllowBuyHero() ) {
         button1.disable();
     }
 
@@ -126,10 +131,10 @@ int Castle::DialogBuyHero( const Heroes * hero ) const
         le.MousePressLeft( button1.area() ) ? button1.drawOnPress() : button1.drawOnRelease();
         le.MousePressLeft( button2.area() ) ? button2.drawOnPress() : button2.drawOnRelease();
 
-        if ( button1.isEnabled() && ( le.MouseClickLeft( button1.area() ) || Game::HotKeyPressEvent( Game::EVENT_DEFAULT_READY ) ) )
+        if ( button1.isEnabled() && ( le.MouseClickLeft( button1.area() ) || Game::HotKeyPressEvent( Game::HotKeyEvent::DEFAULT_OKAY ) ) )
             return Dialog::OK;
 
-        if ( le.MouseClickLeft( button2.area() ) || Game::HotKeyPressEvent( Game::EVENT_DEFAULT_EXIT ) )
+        if ( le.MouseClickLeft( button2.area() ) || Game::HotKeyPressEvent( Game::HotKeyEvent::DEFAULT_CANCEL ) )
             break;
     }
 
@@ -142,13 +147,20 @@ int Castle::DialogBuyCastle( bool buttons ) const
     return info.DialogBuyBuilding( buttons ) ? Dialog::OK : Dialog::CANCEL;
 }
 
-u32 Castle::OpenTown( void )
+Castle::ConstructionDialogResult Castle::openConstructionDialog( uint32_t & dwellingTobuild )
 {
-    fheroes2::Display & display = fheroes2::Display::instance();
+    if ( !isBuild( BUILD_CASTLE ) ) {
+        // It is not possible to open this dialog without a built castle!
+        assert( 0 );
+        return ConstructionDialogResult::DoNothing;
+    }
+
+    dwellingTobuild = BUILD_NOTHING;
 
     // setup cursor
     const CursorRestorer cursorRestorer( true, Cursor::POINTER );
 
+    fheroes2::Display & display = fheroes2::Display::instance();
     const fheroes2::ImageRestorer restorer( display, ( display.width() - fheroes2::Display::DEFAULT_WIDTH ) / 2,
                                             ( display.height() - fheroes2::Display::DEFAULT_HEIGHT ) / 2, fheroes2::Display::DEFAULT_WIDTH,
                                             fheroes2::Display::DEFAULT_HEIGHT );
@@ -156,7 +168,9 @@ u32 Castle::OpenTown( void )
     const fheroes2::Point cur_pt( restorer.x(), restorer.y() );
     fheroes2::Point dst_pt( cur_pt );
 
-    fheroes2::Blit( fheroes2::AGG::GetICN( ICN::CASLWIND, 0 ), display, dst_pt.x, dst_pt.y );
+    const bool isEvilInterface = Settings::Get().ExtGameEvilInterface();
+
+    fheroes2::Blit( fheroes2::AGG::GetICN( isEvilInterface ? ICN::CASLWIND_EVIL : ICN::CASLWIND, 0 ), display, dst_pt.x, dst_pt.y );
 
     // hide captain options
     if ( !( building & BUILD_CAPTAIN ) ) {
@@ -166,19 +180,19 @@ u32 Castle::OpenTown( void )
         dst_pt.x += cur_pt.x;
         dst_pt.y += cur_pt.y;
 
-        fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STONEBAK, 0 ), rect.x, rect.y, display, dst_pt.x, dst_pt.y, rect.width, rect.height );
+        const fheroes2::Sprite & backgroundImage = fheroes2::AGG::GetICN( isEvilInterface ? ICN::STONEBAK_EVIL : ICN::STONEBAK, 0 );
+        fheroes2::Blit( backgroundImage, rect.x, rect.y, display, dst_pt.x, dst_pt.y, rect.width, rect.height );
     }
 
     // draw castle sprite
-    dst_pt.x = cur_pt.x + 460;
+    dst_pt.x = cur_pt.x + 459;
     dst_pt.y = cur_pt.y + 5;
     DrawImageCastle( dst_pt );
 
     // castle name
     Text text( GetName(), Font::SMALL );
-    text.Blit( cur_pt.x + 536 - text.w() / 2, cur_pt.y + 1 );
+    text.Blit( cur_pt.x + 538 - text.w() / 2, cur_pt.y + 1 );
 
-    //
     BuildingInfo dwelling1( *this, DWELLING_MONSTER1 );
     dwelling1.SetPos( cur_pt.x + 5, cur_pt.y + 2 );
     dwelling1.Redraw();
@@ -301,7 +315,7 @@ u32 Castle::OpenTown( void )
     fheroes2::MovableSprite cursorFormat( fheroes2::AGG::GetICN( ICN::HSICONS, 11 ) );
 
     if ( isBuild( BUILD_CAPTAIN ) ) {
-        text.Set( _( "Attack Skill" ) + std::string( " " ), Font::SMALL );
+        text.Set( Skill::Primary::String( Skill::Primary::ATTACK ) + std::string( " " ), Font::SMALL );
         dst_pt.x = cur_pt.x + 535;
         dst_pt.y = cur_pt.y + 168;
         text.Blit( dst_pt );
@@ -310,7 +324,7 @@ u32 Castle::OpenTown( void )
         dst_pt.x += 90;
         text.Blit( dst_pt );
 
-        text.Set( _( "Defense Skill" ) + std::string( " " ) );
+        text.Set( Skill::Primary::String( Skill::Primary::DEFENSE ) + std::string( " " ) );
         dst_pt.x = cur_pt.x + 535;
         dst_pt.y += 12;
         text.Blit( dst_pt );
@@ -319,7 +333,7 @@ u32 Castle::OpenTown( void )
         dst_pt.x += 90;
         text.Blit( dst_pt );
 
-        text.Set( _( "Spell Power" ) + std::string( " " ) );
+        text.Set( Skill::Primary::String( Skill::Primary::POWER ) + std::string( " " ) );
         dst_pt.x = cur_pt.x + 535;
         dst_pt.y += 12;
         text.Blit( dst_pt );
@@ -328,7 +342,7 @@ u32 Castle::OpenTown( void )
         dst_pt.x += 90;
         text.Blit( dst_pt );
 
-        text.Set( _( "Knowledge" ) + std::string( " " ) );
+        text.Set( Skill::Primary::String( Skill::Primary::KNOWLEDGE ) + std::string( " " ) );
         dst_pt.x = cur_pt.x + 535;
         dst_pt.y += 12;
         text.Blit( dst_pt );
@@ -349,13 +363,12 @@ u32 Castle::OpenTown( void )
     Kingdom & kingdom = GetKingdom();
 
     Heroes * hero1 = kingdom.GetRecruits().GetHero1();
+    Heroes * hero2 = kingdom.GetRecruits().GetHero2();
 
-    Heroes * lastLostHero = kingdom.GetLastLostHero();
-    Heroes * hero2 = lastLostHero && lastLostHero != hero1 ? lastLostHero : kingdom.GetRecruits().GetHero2();
-
-    std::string not_allow1_msg, not_allow2_msg;
-    const bool allow_buy_hero1 = hero1 ? AllowBuyHero( *hero1, &not_allow1_msg ) : false;
-    const bool allow_buy_hero2 = hero2 ? AllowBuyHero( *hero2, &not_allow2_msg ) : false;
+    std::string not_allow1_msg;
+    std::string not_allow2_msg;
+    const bool allow_buy_hero1 = hero1 ? AllowBuyHero( &not_allow1_msg ) : false;
+    const bool allow_buy_hero2 = hero2 ? AllowBuyHero( &not_allow2_msg ) : false;
 
     // first hero
     dst_pt.x = cur_pt.x + 443;
@@ -395,89 +408,163 @@ u32 Castle::OpenTown( void )
         fheroes2::Blit( spriteDeny, display, dst_pt.x + 102 - 4 + 1 - spriteDeny.width(), dst_pt.y + 93 - 2 - spriteDeny.height() );
     }
 
-    // bottom bar
-    dst_pt.x = cur_pt.x;
-    dst_pt.y = cur_pt.y + 461;
-    const fheroes2::Sprite & bar = fheroes2::AGG::GetICN( ICN::CASLBAR, 0 );
-    fheroes2::Blit( bar, display, dst_pt.x, dst_pt.y );
+    const int32_t statusBarOffsetY = 480 - 19;
+
+    fheroes2::Button buttonPrevCastle( cur_pt.x, cur_pt.y + statusBarOffsetY, ICN::SMALLBAR, 1, 2 );
+    fheroes2::TimedEventValidator timedButtonPrevCastle( [&buttonPrevCastle]() { return buttonPrevCastle.isPressed(); } );
+    buttonPrevCastle.subscribe( &timedButtonPrevCastle );
+
+    // bottom small bar
+    const fheroes2::Sprite & bar = fheroes2::AGG::GetICN( ICN::SMALLBAR, 0 );
+    fheroes2::Blit( bar, display, cur_pt.x + buttonPrevCastle.area().width, cur_pt.y + statusBarOffsetY );
 
     StatusBar statusBar;
-    statusBar.SetCenter( dst_pt.x + bar.width() / 2, dst_pt.y + 12 );
+    statusBar.SetFont( Font::BIG );
+    statusBar.SetCenter( cur_pt.x + buttonPrevCastle.area().width + bar.width() / 2, cur_pt.y + statusBarOffsetY + 12 );
+
+    // button next castle
+    fheroes2::Button buttonNextCastle( cur_pt.x + buttonPrevCastle.area().width + bar.width(), cur_pt.y + statusBarOffsetY, ICN::SMALLBAR, 3, 4 );
+    fheroes2::TimedEventValidator timedButtonNextCastle( [&buttonNextCastle]() { return buttonNextCastle.isPressed(); } );
+    buttonNextCastle.subscribe( &timedButtonNextCastle );
 
     // button exit
     dst_pt.x = cur_pt.x + 553;
     dst_pt.y = cur_pt.y + 428;
     fheroes2::Button buttonExit( dst_pt.x, dst_pt.y, ICN::TREASURY, 1, 2 );
+
+    if ( GetKingdom().GetCastles().size() < 2 ) {
+        buttonPrevCastle.disable();
+        buttonNextCastle.disable();
+    }
+
+    buttonPrevCastle.draw();
+    buttonNextCastle.draw();
     buttonExit.draw();
 
     // redraw resource panel
-    const fheroes2::Rect & rectResource = RedrawResourcePanel( cur_pt );
+    const fheroes2::Rect & rectResource = fheroes2::drawResourcePanel( GetKingdom().GetFunds(), display, cur_pt );
     const fheroes2::Rect resActiveArea( rectResource.x, rectResource.y, rectResource.width, buttonExit.area().y - rectResource.y - 3 );
 
     display.render();
 
     LocalEvent & le = LocalEvent::Get();
 
-    // message loop
     while ( le.HandleEvents() ) {
         le.MousePressLeft( buttonExit.area() ) ? buttonExit.drawOnPress() : buttonExit.drawOnRelease();
 
-        if ( le.MouseClickLeft( buttonExit.area() ) || HotKeyCloseWindow )
+        if ( buttonPrevCastle.isEnabled() ) {
+            le.MousePressLeft( buttonPrevCastle.area() ) ? buttonPrevCastle.drawOnPress() : buttonPrevCastle.drawOnRelease();
+        }
+        if ( buttonNextCastle.isEnabled() ) {
+            le.MousePressLeft( buttonNextCastle.area() ) ? buttonNextCastle.drawOnPress() : buttonNextCastle.drawOnRelease();
+        }
+
+        if ( le.MouseClickLeft( buttonExit.area() ) || Game::HotKeyCloseWindow() )
             break;
+
+        if ( buttonPrevCastle.isEnabled()
+             && ( le.MouseClickLeft( buttonPrevCastle.area() ) || HotKeyPressEvent( Game::HotKeyEvent::MOVE_LEFT ) || timedButtonPrevCastle.isDelayPassed() ) ) {
+            return ConstructionDialogResult::PrevConstructionWindow;
+        }
+        if ( buttonNextCastle.isEnabled()
+             && ( le.MouseClickLeft( buttonNextCastle.area() ) || HotKeyPressEvent( Game::HotKeyEvent::MOVE_RIGHT ) || timedButtonNextCastle.isDelayPassed() ) ) {
+            return ConstructionDialogResult::NextConstructionWindow;
+        }
 
         if ( le.MouseClickLeft( resActiveArea ) ) {
             fheroes2::ButtonRestorer exitRestorer( buttonExit );
-            Dialog::ResourceInfo( _( "Income" ), "", world.GetKingdom( GetColor() ).GetIncome( INCOME_ALL ), Dialog::OK );
+            fheroes2::showKingdomIncome( world.GetKingdom( GetColor() ), Dialog::OK );
         }
         else if ( le.MousePressRight( resActiveArea ) ) {
-            Dialog::ResourceInfo( _( "Income" ), "", world.GetKingdom( GetColor() ).GetIncome( INCOME_ALL ), 0 );
+            fheroes2::showKingdomIncome( world.GetKingdom( GetColor() ), 0 );
+        }
+        else if ( le.MousePressRight( buttonExit.area() ) ) {
+            Dialog::Message( _( "Exit" ), _( "Exit this menu." ), Font::BIG );
         }
 
         // click left
-        if ( le.MouseCursor( dwelling1.GetArea() ) && dwelling1.QueueEventProcessing( buttonExit ) )
-            return dwelling1();
-        else if ( le.MouseCursor( dwelling2.GetArea() ) && dwelling2.QueueEventProcessing( buttonExit ) )
-            return dwelling2();
-        else if ( le.MouseCursor( dwelling3.GetArea() ) && dwelling3.QueueEventProcessing( buttonExit ) )
-            return dwelling3();
-        else if ( le.MouseCursor( dwelling4.GetArea() ) && dwelling4.QueueEventProcessing( buttonExit ) )
-            return dwelling4();
-        else if ( le.MouseCursor( dwelling5.GetArea() ) && dwelling5.QueueEventProcessing( buttonExit ) )
-            return dwelling5();
-        else if ( le.MouseCursor( dwelling6.GetArea() ) && dwelling6.QueueEventProcessing( buttonExit ) )
-            return dwelling6();
-        else if ( le.MouseCursor( buildingMageGuild.GetArea() ) && buildingMageGuild.QueueEventProcessing( buttonExit ) )
-            return buildingMageGuild();
-        else if ( !isSkipTavernInteraction && le.MouseCursor( buildingTavern.GetArea() ) && buildingTavern.QueueEventProcessing( buttonExit ) )
-            return ( Race::NECR == race ? BUILD_SHRINE : BUILD_TAVERN );
-        else if ( le.MouseCursor( buildingThievesGuild.GetArea() ) && buildingThievesGuild.QueueEventProcessing( buttonExit ) )
-            return BUILD_THIEVESGUILD;
-        else if ( le.MouseCursor( buildingShipyard.GetArea() ) && buildingShipyard.QueueEventProcessing( buttonExit ) )
-            return BUILD_SHIPYARD;
-        else if ( le.MouseCursor( buildingStatue.GetArea() ) && buildingStatue.QueueEventProcessing( buttonExit ) )
-            return BUILD_STATUE;
-        else if ( le.MouseCursor( buildingMarketplace.GetArea() ) && buildingMarketplace.QueueEventProcessing( buttonExit ) )
-            return BUILD_MARKETPLACE;
-        else if ( le.MouseCursor( buildingWell.GetArea() ) && buildingWell.QueueEventProcessing( buttonExit ) )
-            return BUILD_WELL;
-        else if ( le.MouseCursor( buildingWel2.GetArea() ) && buildingWel2.QueueEventProcessing( buttonExit ) )
-            return BUILD_WEL2;
-        else if ( le.MouseCursor( buildingSpec.GetArea() ) && buildingSpec.QueueEventProcessing( buttonExit ) )
-            return BUILD_SPEC;
-        else if ( le.MouseCursor( buildingLTurret.GetArea() ) && buildingLTurret.QueueEventProcessing( buttonExit ) )
-            return BUILD_LEFTTURRET;
-        else if ( le.MouseCursor( buildingRTurret.GetArea() ) && buildingRTurret.QueueEventProcessing( buttonExit ) )
-            return BUILD_RIGHTTURRET;
-        else if ( le.MouseCursor( buildingMoat.GetArea() ) && buildingMoat.QueueEventProcessing( buttonExit ) )
-            return BUILD_MOAT;
-        else if ( le.MouseCursor( buildingCaptain.GetArea() ) && buildingCaptain.QueueEventProcessing( buttonExit ) )
-            return BUILD_CAPTAIN;
+        if ( le.MouseCursor( dwelling1.GetArea() ) && dwelling1.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = dwelling1.getBuilding();
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( dwelling2.GetArea() ) && dwelling2.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = dwelling2.getBuilding();
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( dwelling3.GetArea() ) && dwelling3.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = dwelling3.getBuilding();
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( dwelling4.GetArea() ) && dwelling4.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = dwelling4.getBuilding();
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( dwelling5.GetArea() ) && dwelling5.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = dwelling5.getBuilding();
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( dwelling6.GetArea() ) && dwelling6.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = dwelling6.getBuilding();
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingMageGuild.GetArea() ) && buildingMageGuild.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = buildingMageGuild.getBuilding();
+            return ConstructionDialogResult::Build;
+        }
+        if ( !isSkipTavernInteraction && le.MouseCursor( buildingTavern.GetArea() ) && buildingTavern.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = ( Race::NECR == race ? BUILD_SHRINE : BUILD_TAVERN );
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingThievesGuild.GetArea() ) && buildingThievesGuild.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = BUILD_THIEVESGUILD;
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingShipyard.GetArea() ) && buildingShipyard.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = BUILD_SHIPYARD;
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingStatue.GetArea() ) && buildingStatue.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = BUILD_STATUE;
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingMarketplace.GetArea() ) && buildingMarketplace.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = BUILD_MARKETPLACE;
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingWell.GetArea() ) && buildingWell.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = BUILD_WELL;
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingWel2.GetArea() ) && buildingWel2.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = BUILD_WEL2;
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingSpec.GetArea() ) && buildingSpec.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = BUILD_SPEC;
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingLTurret.GetArea() ) && buildingLTurret.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = BUILD_LEFTTURRET;
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingRTurret.GetArea() ) && buildingRTurret.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = BUILD_RIGHTTURRET;
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingMoat.GetArea() ) && buildingMoat.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = BUILD_MOAT;
+            return ConstructionDialogResult::Build;
+        }
+        if ( le.MouseCursor( buildingCaptain.GetArea() ) && buildingCaptain.QueueEventProcessing( buttonExit ) ) {
+            dwellingTobuild = BUILD_CAPTAIN;
+            return ConstructionDialogResult::Build;
+        }
         else if ( hero1 && le.MouseClickLeft( rectHero1 ) ) {
             fheroes2::ButtonRestorer exitRestorer( buttonExit );
             if ( Dialog::OK == DialogBuyHero( hero1 ) ) {
                 RecruitHero( hero1 );
 
-                return BUILD_NOTHING;
+                return ConstructionDialogResult::RecruitHero;
             }
         }
         else if ( hero2 && le.MouseClickLeft( rectHero2 ) ) {
@@ -485,7 +572,7 @@ u32 Castle::OpenTown( void )
             if ( Dialog::OK == DialogBuyHero( hero2 ) ) {
                 RecruitHero( hero2 );
 
-                return BUILD_NOTHING;
+                return ConstructionDialogResult::RecruitHero;
             }
         }
         else if ( isBuild( BUILD_CAPTAIN ) ) {
@@ -504,17 +591,25 @@ u32 Castle::OpenTown( void )
         const bool isCaptainBuilt = isBuild( BUILD_CAPTAIN );
 
         // Right click
-        if ( le.MousePressRight( rectSpreadArmyFormat ) && isCaptainBuilt )
+        if ( isCaptainBuilt && le.MousePressRight( rectSpreadArmyFormat ) )
             Dialog::Message( _( "Spread Formation" ), descriptionSpreadArmyFormat, Font::BIG );
-        else if ( le.MousePressRight( rectGroupedArmyFormat ) && isCaptainBuilt )
+        else if ( isCaptainBuilt && le.MousePressRight( rectGroupedArmyFormat ) )
             Dialog::Message( _( "Grouped Formation" ), descriptionGroupedArmyFormat, Font::BIG );
         else if ( hero1 && le.MousePressRight( rectHero1 ) ) {
-            hero1->OpenDialog( true );
+            LocalEvent::GetClean();
+            hero1->OpenDialog( true, false, false, false );
             display.render();
         }
         else if ( hero2 && le.MousePressRight( rectHero2 ) ) {
-            hero2->OpenDialog( true );
+            LocalEvent::GetClean();
+            hero2->OpenDialog( true, false, false, false );
             display.render();
+        }
+        else if ( le.MousePressRight( buttonNextCastle.area() ) ) {
+            Dialog::Message( _( "Show next town" ), _( "Click to show next town." ), Font::BIG );
+        }
+        else if ( le.MousePressRight( buttonPrevCastle.area() ) ) {
+            Dialog::Message( _( "Show previous town" ), _( "Click to show previous town." ), Font::BIG );
         }
 
         // status info
@@ -584,10 +679,16 @@ u32 Castle::OpenTown( void )
             statusBar.ShowMessage( _( "Exit Castle Options" ) );
         else if ( le.MouseCursor( resActiveArea ) )
             statusBar.ShowMessage( _( "Show Income" ) );
-        else
-            // clear all
+        else if ( buttonPrevCastle.isEnabled() && le.MouseCursor( buttonPrevCastle.area() ) ) {
+            statusBar.ShowMessage( _( "Show previous town" ) );
+        }
+        else if ( buttonNextCastle.isEnabled() && le.MouseCursor( buttonNextCastle.area() ) ) {
+            statusBar.ShowMessage( _( "Show next town" ) );
+        }
+        else {
             statusBar.ShowMessage( _( "Castle Options" ) );
+        }
     }
 
-    return BUILD_NOTHING;
+    return ConstructionDialogResult::DoNothing;
 }

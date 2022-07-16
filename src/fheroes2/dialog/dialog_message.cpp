@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,13 +23,44 @@
 
 #include "cursor.h"
 #include "dialog.h"
+#include "game_hotkeys.h"
 #include "localevent.h"
+#include "logging.h"
 #include "text.h"
 
 #include "ui_button.h"
 
+namespace
+{
+    void outputInTextSupportMode( const std::string & header, const std::string & message, const int buttonTypes )
+    {
+        START_TEXT_SUPPORT_MODE
+
+        if ( !header.empty() ) {
+            COUT( header )
+            COUT( '\n' )
+        }
+        COUT( message )
+
+        if ( buttonTypes & Dialog::YES ) {
+            COUT( "Press " << Game::getHotKeyNameByEventId( Game::HotKeyEvent::DEFAULT_OKAY ) << " to choose YES." )
+        }
+        if ( buttonTypes & Dialog::NO ) {
+            COUT( "Press " << Game::getHotKeyNameByEventId( Game::HotKeyEvent::DEFAULT_CANCEL ) << " to choose NO." )
+        }
+        if ( buttonTypes & Dialog::OK ) {
+            COUT( "Press " << Game::getHotKeyNameByEventId( Game::HotKeyEvent::DEFAULT_OKAY ) << " to choose OK." )
+        }
+        if ( buttonTypes & Dialog::CANCEL ) {
+            COUT( "Press " << Game::getHotKeyNameByEventId( Game::HotKeyEvent::DEFAULT_CANCEL ) << " to choose CANCEL." )
+        }
+    }
+}
+
 int Dialog::Message( const std::string & header, const std::string & message, int ft, int buttons )
 {
+    outputInTextSupportMode( header, message, buttons );
+
     fheroes2::Display & display = fheroes2::Display::instance();
 
     // setup cursor
@@ -37,13 +69,14 @@ int Dialog::Message( const std::string & header, const std::string & message, in
     TextBox textbox1( header, Font::YELLOW_BIG, BOXAREA_WIDTH );
     TextBox textbox2( message, ft, BOXAREA_WIDTH );
 
-    FrameBox box( 10 + ( header.size() ? textbox1.h() + 10 : 0 ) + textbox2.h(), buttons != 0 );
+    const int32_t headerHeight = !header.empty() ? textbox1.h() + 10 : 0;
+    FrameBox box( 10 + headerHeight + textbox2.h(), buttons != 0 );
     const fheroes2::Rect & pos = box.GetArea();
 
-    if ( header.size() )
+    if ( !header.empty() )
         textbox1.Blit( pos.x, pos.y + 10 );
-    if ( message.size() )
-        textbox2.Blit( pos.x, pos.y + 10 + ( header.size() ? textbox1.h() + 10 : 0 ) );
+    if ( !message.empty() )
+        textbox2.Blit( pos.x, pos.y + 10 + headerHeight );
 
     LocalEvent & le = LocalEvent::Get();
 

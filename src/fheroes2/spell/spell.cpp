@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,29 +23,22 @@
 
 #include "spell.h"
 #include "artifact.h"
-#include "game.h"
-#include "game_static.h"
 #include "heroes_base.h"
-#include "logging.h"
+#include "monster.h"
 #include "race.h"
 #include "rand.h"
 #include "resource.h"
+#include "serialize.h"
 #include "translations.h"
-
-enum
-{
-    SP_DISABLE = 0x01
-};
 
 struct spellstats_t
 {
     const char * name;
-    u8 sp;
-    u16 mp;
-    u8 sprite;
-    u8 extra;
-    u8 bits;
-    cost_t cost;
+    uint8_t spellPoints; // The number of spell points consumed/required by this spell
+    uint16_t movePoints; // The number of movement points consumed by this spell
+    uint16_t minMovePoints; // The minimum number of movement points required to cast this spell
+    uint32_t imageId;
+    uint8_t extraValue;
     const char * description;
 };
 
@@ -52,193 +46,197 @@ struct spellstats_t
 // so we made some tricks in AGG source file. All modified sprite IDs start from 60
 
 spellstats_t spells[] = {
-    //  name                      sp   mp  spr value  bits cost     description
-    { "Unknown", 0, 0, 0, 0, 0, COST_NONE, "Unknown spell." },
-    { _( "Fireball" ), 9, 0, 8, 10, 0, COST_NONE, _( "Causes a giant fireball to strike the selected area, damaging all nearby creatures." ) },
-    { _( "Fireblast" ), 15, 0, 9, 10, 0, COST_NONE,
-      _( "An improved version of fireball, fireblast affects two hexes around the center point of the spell, rather than one." ) },
-    { _( "Lightning Bolt" ), 7, 0, 4, 25, 0, COST_NONE, _( "Causes a bolt of electrical energy to strike the selected creature." ) },
-    { _( "Chain Lightning" ), 15, 0, 5, 40, 0, COST_NONE,
-      _( "Causes a bolt of electrical energy to strike a selected creature, then strike the nearest creature with half damage, then strike the NEXT nearest creature with half again damage, and so on, until it becomes too weak to be harmful.  Warning:  This spell can hit your own creatures!" ) },
-    { _( "Teleport" ), 9, 0, 10, 0, 0, COST_NONE, _( "Teleports the creature you select to any open position on the battlefield." ) },
-    { _( "Cure" ), 6, 0, 6, 5, 0, COST_NONE, _( "Removes all negative spells cast upon one of your units, and restores up to %{count} HP per level of spell power." ) },
-    { _( "Mass Cure" ), 15, 0, 60, 5, 0, COST_NONE,
-      _( "Removes all negative spells cast upon your forces, and restores up to %{count} HP per level of spell power, per creature." ) },
-    { _( "Resurrect" ), 12, 0, 13, 50, 0, COST_NONE, _( "Resurrects creatures from a damaged or dead unit until end of combat." ) },
-    { _( "Resurrect True" ), 15, 0, 12, 50, 0, COST_NONE, _( "Resurrects creatures from a damaged or dead unit permanently." ) },
-    { _( "Haste" ), 3, 0, 14, 0, 0, COST_NONE, _( "Increases the speed of any creature by %{count}." ) },
-    { _( "Mass Haste" ), 10, 0, 61, 0, 0, COST_NONE, _( "Increases the speed of all of your creatures by %{count}." ) },
-    { _( "spell|Slow" ), 3, 0, 1, 0, 0, COST_NONE, _( "Slows target to half movement rate." ) },
-    { _( "Mass Slow" ), 15, 0, 62, 0, 0, COST_NONE, _( "Slows all enemies to half movement rate." ) },
-    //
-    { _( "spell|Blind" ), 6, 0, 21, 0, 0, COST_NONE, _( "Clouds the affected creatures' eyes, preventing them from moving." ) },
-    { _( "Bless" ), 3, 0, 7, 0, 0, COST_NONE, _( "Causes the selected creatures to inflict maximum damage." ) },
-    { _( "Mass Bless" ), 12, 0, 63, 0, 0, COST_NONE, _( "Causes all of your units to inflict maximum damage." ) },
-    { _( "Stoneskin" ), 3, 0, 31, 3, 0, COST_NONE, _( "Magically increases the defense skill of the selected creatures." ) },
-    { _( "Steelskin" ), 6, 0, 30, 5, 0, COST_NONE, _( "Increases the defense skill of the targeted creatures.  This is an improved version of Stoneskin." ) },
-    { _( "Curse" ), 3, 0, 3, 0, 0, COST_NONE, _( "Causes the selected creatures to inflict minimum damage." ) },
-    { _( "Mass Curse" ), 12, 0, 64, 0, 0, COST_NONE, _( "Causes all enemy troops to inflict minimum damage." ) },
-    { _( "Holy Word" ), 9, 0, 22, 10, 0, COST_NONE, _( "Damages all undead in the battle." ) },
-    { _( "Holy Shout" ), 12, 0, 23, 20, 0, COST_NONE, _( "Damages all undead in the battle.  This is an improved version of Holy Word." ) },
-    { _( "Anti-Magic" ), 7, 0, 17, 0, 0, COST_NONE, _( "Prevents harmful magic against the selected creatures." ) },
-    { _( "Dispel Magic" ), 5, 0, 18, 0, 0, COST_NONE, _( "Removes all magic spells from a single target." ) },
-    { _( "Mass Dispel" ), 12, 0, 18, 0, 0, COST_NONE, _( "Removes all magic spells from all creatures." ) },
-    { _( "Magic Arrow" ), 3, 0, 38, 10, 0, COST_NONE, _( "Causes a magic arrow to strike the selected target." ) },
-    { _( "Berserker" ), 12, 0, 19, 0, 0, COST_NONE, _( "Causes a creature to attack its nearest neighbor." ) },
-    { _( "Armageddon" ), 20, 0, 16, 50, 0, COST_NONE, _( "Holy terror strikes the battlefield, causing severe damage to all creatures." ) },
-    { _( "Elemental Storm" ), 15, 0, 11, 25, 0, COST_NONE, _( "Magical elements pour down on the battlefield, damaging all creatures." ) },
-    { _( "Meteor Shower" ), 15, 0, 24, 25, 0, COST_NONE, _( "A rain of rocks strikes an area of the battlefield, damaging all nearby creatures." ) },
-    { _( "Paralyze" ), 9, 0, 20, 0, 0, COST_NONE, _( "The targeted creatures are paralyzed, unable to move or retaliate." ) },
-    { _( "Hypnotize" ), 15, 0, 37, 25, 0, COST_NONE,
-      _( "Brings a single enemy unit under your control if its hits are less than %{count} times the caster's spell power." ) },
-    { _( "Cold Ray" ), 6, 0, 36, 20, 0, COST_NONE, _( "Drains body heat from a single enemy unit." ) },
-    { _( "Cold Ring" ), 9, 0, 35, 10, 0, COST_NONE, _( "Drains body heat from all units surrounding the center point, but not including the center point." ) },
-    { _( "Disrupting Ray" ), 7, 0, 34, 3, 0, COST_NONE, _( "Reduces the defense rating of an enemy unit by three." ) },
-    { _( "Death Ripple" ), 6, 0, 28, 5, 0, COST_NONE, _( "Damages all living (non-undead) units in the battle." ) },
-    { _( "Death Wave" ), 10, 0, 29, 10, 0, COST_NONE, _( "Damages all living (non-undead) units in the battle.  This spell is an improved version of Death Ripple." ) },
-    { _( "Dragon Slayer" ), 6, 0, 32, 5, 0, COST_NONE, _( "Greatly increases a unit's attack skill vs. Dragons." ) },
-    { _( "Blood Lust" ), 3, 0, 27, 3, 0, COST_NONE, _( "Increases a unit's attack skill." ) },
-    { _( "Animate Dead" ), 10, 0, 25, 50, 0, COST_NONE, _( "Resurrects creatures from a damaged or dead undead unit permanently." ) },
-    { _( "Mirror Image" ), 25, 0, 26, 0, 0, COST_NONE,
-      _( "Creates an illusionary unit that duplicates one of your existing units.  This illusionary unit does the same damages as the original, but will vanish if it takes any damage." ) },
-    { _( "Shield" ), 3, 0, 15, 2, 0, COST_NONE, _( "Halves damage received from ranged attacks for a single unit." ) },
-    { _( "Mass Shield" ), 7, 0, 65, 0, 0, COST_NONE, _( "Halves damage received from ranged attacks for all of your units." ) },
-    { _( "Summon Earth Elemental" ), 30, 0, 56, 3, 0, COST_NONE, _( "Summons Earth Elementals to fight for your army." ) },
-    { _( "Summon Air Elemental" ), 30, 0, 57, 3, 0, COST_NONE, _( "Summons Air Elementals to fight for your army." ) },
-    { _( "Summon Fire Elemental" ), 30, 0, 58, 3, 0, COST_NONE, _( "Summons Fire Elementals to fight for your army." ) },
-    { _( "Summon Water Elemental" ), 30, 0, 59, 3, 0, COST_NONE, _( "Summons Water Elementals to fight for your army." ) },
-    { _( "Earthquake" ), 15, 0, 33, 0, 0, COST_NONE, _( "Damages castle walls." ) },
-    { _( "View Mines" ), 1, 0, 39, 0, 0, COST_NONE, _( "Causes all mines across the land to become visible." ) },
-    { _( "View Resources" ), 1, 0, 40, 0, 0, COST_NONE, _( "Causes all resources across the land to become visible." ) },
-    { _( "View Artifacts" ), 2, 0, 41, 0, 0, COST_NONE, _( "Causes all artifacts across the land to become visible." ) },
-    { _( "View Towns" ), 2, 0, 42, 0, 0, COST_NONE, _( "Causes all towns and castles across the land to become visible." ) },
-    { _( "View Heroes" ), 2, 0, 43, 0, 0, COST_NONE, _( "Causes all Heroes across the land to become visible." ) },
-    { _( "View All" ), 3, 0, 44, 0, 0, COST_NONE, _( "Causes the entire land to become visible." ) },
-    { _( "Identify Hero" ), 3, 0, 45, 0, 0, COST_NONE, _( "Allows the caster to view detailed information on enemy Heroes." ) },
-    { _( "Summon Boat" ), 5, 0, 46, 0, 0, COST_NONE,
-      _( "Summons the nearest unoccupied, friendly boat to an adjacent shore location.  A friendly boat is one which you just built or were the most recent player to occupy." ) },
-    { _( "Dimension Door" ), 10, 0, 47, 0, 0, COST_NONE, _( "Allows the caster to magically transport to a nearby location." ) },
-    { _( "Town Gate" ), 10, 0, 48, 0, 0, COST_NONE, _( "Returns the caster to any town or castle currently owned." ) },
-    { _( "Town Portal" ), 20, 0, 49, 0, 0, COST_NONE, _( "Returns the hero to the town or castle of choice, provided it is controlled by you." ) },
-    { _( "Visions" ), 6, 0, 50, 3, 0, COST_NONE, _( "Visions predicts the likely outcome of an encounter with a neutral army camp." ) },
-    { _( "Haunt" ), 8, 0, 51, 4, 0, COST_NONE, _( "Haunts a mine you control with Ghosts.  This mine stops producing resources.  (If I can't keep it, nobody will!)" ) },
-    { _( "Set Earth Guardian" ), 15, 0, 52, 4, 0, COST_NONE, _( "Sets Earth Elementals to guard a mine against enemy armies." ) },
-    { _( "Set Air Guardian" ), 15, 0, 53, 4, 0, COST_NONE, _( "Sets Air Elementals to guard a mine against enemy armies." ) },
-    { _( "Set Fire Guardian" ), 15, 0, 54, 4, 0, COST_NONE, _( "Sets Fire Elementals to guard a mine against enemy armies." ) },
-    { _( "Set Water Guardian" ), 15, 0, 55, 4, 0, COST_NONE, _( "Sets Water Elementals to guard a mine against enemy armies." ) },
-    { "Random", 0, 0, 0, 0, 0, COST_NONE, "Random" },
-    { "Random 1", 0, 0, 0, 0, 0, COST_NONE, "Random 1" },
-    { "Random 2", 0, 0, 0, 0, 0, COST_NONE, "Random 2" },
-    { "Random 3", 0, 0, 0, 0, 0, COST_NONE, "Random 3" },
-    { "Random 4", 0, 0, 0, 0, 0, COST_NONE, "Random 4" },
-    { "Random 5", 0, 0, 0, 0, 0, COST_NONE, "Random 5" },
-    { "Stone", 0, 0, 0, 0, 0, COST_NONE, "Stone spell from Medusa." },
+    //  name | spell points | movement points | min movement points | image id | extra value | description
+    { "Unknown", 0, 0, 0, 0, 0, "Unknown spell." },
+    { gettext_noop( "Fireball" ), 9, 0, 0, 8, 10, gettext_noop( "Causes a giant fireball to strike the selected area, damaging all nearby creatures." ) },
+    { gettext_noop( "Fireblast" ), 15, 0, 0, 9, 10,
+      gettext_noop( "An improved version of fireball, fireblast affects two hexes around the center point of the spell, rather than one." ) },
+    { gettext_noop( "Lightning Bolt" ), 7, 0, 0, 4, 25, gettext_noop( "Causes a bolt of electrical energy to strike the selected creature." ) },
+    { gettext_noop( "Chain Lightning" ), 15, 0, 0, 5, 40,
+      gettext_noop(
+          "Causes a bolt of electrical energy to strike a selected creature, then strike the nearest creature with half damage, then strike the NEXT nearest creature with half again damage, and so on, until it becomes too weak to be harmful.  Warning:  This spell can hit your own creatures!" ) },
+    { gettext_noop( "Teleport" ), 9, 0, 0, 10, 0, gettext_noop( "Teleports the creature you select to any open position on the battlefield." ) },
+    { gettext_noop( "Cure" ), 6, 0, 0, 6, 5,
+      gettext_noop( "Removes all negative spells cast upon one of your units, and restores up to %{count} HP per level of spell power." ) },
+    { gettext_noop( "Mass Cure" ), 15, 0, 0, 60, 5,
+      gettext_noop( "Removes all negative spells cast upon your forces, and restores up to %{count} HP per level of spell power, per creature." ) },
+    { gettext_noop( "Resurrect" ), 12, 0, 0, 13, 50, gettext_noop( "Resurrects creatures from a damaged or dead unit until end of combat." ) },
+    { gettext_noop( "Resurrect True" ), 15, 0, 0, 12, 50, gettext_noop( "Resurrects creatures from a damaged or dead unit permanently." ) },
+    { gettext_noop( "Haste" ), 3, 0, 0, 14, 2, gettext_noop( "Increases the speed of any creature by %{count}." ) },
+    { gettext_noop( "Mass Haste" ), 10, 0, 0, 61, 2, gettext_noop( "Increases the speed of all of your creatures by %{count}." ) },
+    { gettext_noop( "spell|Slow" ), 3, 0, 0, 1, 0, gettext_noop( "Slows target to half movement rate." ) },
+    { gettext_noop( "Mass Slow" ), 15, 0, 0, 62, 0, gettext_noop( "Slows all enemies to half movement rate." ) },
+    { gettext_noop( "spell|Blind" ), 6, 0, 0, 21, 0, gettext_noop( "Clouds the affected creatures' eyes, preventing them from moving." ) },
+    { gettext_noop( "Bless" ), 3, 0, 0, 7, 0, gettext_noop( "Causes the selected creatures to inflict maximum damage." ) },
+    { gettext_noop( "Mass Bless" ), 12, 0, 0, 63, 0, gettext_noop( "Causes all of your units to inflict maximum damage." ) },
+    { gettext_noop( "Stoneskin" ), 3, 0, 0, 31, 3, gettext_noop( "Magically increases the defense skill of the selected creatures." ) },
+    { gettext_noop( "Steelskin" ), 6, 0, 0, 30, 5, gettext_noop( "Increases the defense skill of the targeted creatures.  This is an improved version of Stoneskin." ) },
+    { gettext_noop( "Curse" ), 3, 0, 0, 3, 0, gettext_noop( "Causes the selected creatures to inflict minimum damage." ) },
+    { gettext_noop( "Mass Curse" ), 12, 0, 0, 64, 0, gettext_noop( "Causes all enemy troops to inflict minimum damage." ) },
+    { gettext_noop( "Holy Word" ), 9, 0, 0, 22, 10, gettext_noop( "Damages all undead in the battle." ) },
+    { gettext_noop( "Holy Shout" ), 12, 0, 0, 23, 20, gettext_noop( "Damages all undead in the battle.  This is an improved version of Holy Word." ) },
+    { gettext_noop( "Anti-Magic" ), 7, 0, 0, 17, 0, gettext_noop( "Prevents harmful magic against the selected creatures." ) },
+    { gettext_noop( "Dispel Magic" ), 5, 0, 0, 18, 0, gettext_noop( "Removes all magic spells from a single target." ) },
+    { gettext_noop( "Mass Dispel" ), 12, 0, 0, 18, 0, gettext_noop( "Removes all magic spells from all creatures." ) },
+    { gettext_noop( "Magic Arrow" ), 3, 0, 0, 38, 10, gettext_noop( "Causes a magic arrow to strike the selected target." ) },
+    { gettext_noop( "Berserker" ), 12, 0, 0, 19, 0, gettext_noop( "Causes a creature to attack its nearest neighbor." ) },
+    { gettext_noop( "Armageddon" ), 20, 0, 0, 16, 50, gettext_noop( "Holy terror strikes the battlefield, causing severe damage to all creatures." ) },
+    { gettext_noop( "Elemental Storm" ), 15, 0, 0, 11, 25, gettext_noop( "Magical elements pour down on the battlefield, damaging all creatures." ) },
+    { gettext_noop( "Meteor Shower" ), 15, 0, 0, 24, 25, gettext_noop( "A rain of rocks strikes an area of the battlefield, damaging all nearby creatures." ) },
+    { gettext_noop( "Paralyze" ), 9, 0, 0, 20, 0, gettext_noop( "The targeted creatures are paralyzed, unable to move or retaliate." ) },
+    { gettext_noop( "Hypnotize" ), 15, 0, 0, 37, 25,
+      gettext_noop( "Brings a single enemy unit under your control if its hits are less than %{count} times the caster's spell power." ) },
+    { gettext_noop( "Cold Ray" ), 6, 0, 0, 36, 20, gettext_noop( "Drains body heat from a single enemy unit." ) },
+    { gettext_noop( "Cold Ring" ), 9, 0, 0, 35, 10, gettext_noop( "Drains body heat from all units surrounding the center point, but not including the center point." ) },
+    { gettext_noop( "Disrupting Ray" ), 7, 0, 0, 34, 3, gettext_noop( "Reduces the defense rating of an enemy unit by three." ) },
+    { gettext_noop( "Death Ripple" ), 6, 0, 0, 29, 5, gettext_noop( "Damages all living (non-undead) units in the battle." ) },
+    { gettext_noop( "Death Wave" ), 10, 0, 0, 28, 10,
+      gettext_noop( "Damages all living (non-undead) units in the battle.  This spell is an improved version of Death Ripple." ) },
+    { gettext_noop( "Dragon Slayer" ), 6, 0, 0, 32, 5, gettext_noop( "Greatly increases a unit's attack skill vs. Dragons." ) },
+    { gettext_noop( "Blood Lust" ), 3, 0, 0, 27, 3, gettext_noop( "Increases a unit's attack skill." ) },
+    { gettext_noop( "Animate Dead" ), 10, 0, 0, 25, 50, gettext_noop( "Resurrects creatures from a damaged or dead undead unit permanently." ) },
+    { gettext_noop( "Mirror Image" ), 25, 0, 0, 26, 0,
+      gettext_noop(
+          "Creates an illusionary unit that duplicates one of your existing units.  This illusionary unit does the same damages as the original, but will vanish if it takes any damage." ) },
+    { gettext_noop( "Shield" ), 3, 0, 0, 15, 2, gettext_noop( "Halves damage received from ranged attacks for a single unit." ) },
+    { gettext_noop( "Mass Shield" ), 7, 0, 0, 65, 0, gettext_noop( "Halves damage received from ranged attacks for all of your units." ) },
+    { gettext_noop( "Summon Earth Elemental" ), 30, 0, 0, 56, 3, gettext_noop( "Summons Earth Elementals to fight for your army." ) },
+    { gettext_noop( "Summon Air Elemental" ), 30, 0, 0, 57, 3, gettext_noop( "Summons Air Elementals to fight for your army." ) },
+    { gettext_noop( "Summon Fire Elemental" ), 30, 0, 0, 58, 3, gettext_noop( "Summons Fire Elementals to fight for your army." ) },
+    { gettext_noop( "Summon Water Elemental" ), 30, 0, 0, 59, 3, gettext_noop( "Summons Water Elementals to fight for your army." ) },
+    { gettext_noop( "Earthquake" ), 15, 0, 0, 33, 0, gettext_noop( "Damages castle walls." ) },
+    { gettext_noop( "View Mines" ), 1, 0, 0, 39, 0, gettext_noop( "Causes all mines across the land to become visible." ) },
+    { gettext_noop( "View Resources" ), 1, 0, 0, 40, 0, gettext_noop( "Causes all resources across the land to become visible." ) },
+    { gettext_noop( "View Artifacts" ), 2, 0, 0, 41, 0, gettext_noop( "Causes all artifacts across the land to become visible." ) },
+    { gettext_noop( "View Towns" ), 2, 0, 0, 42, 0, gettext_noop( "Causes all towns and castles across the land to become visible." ) },
+    { gettext_noop( "View Heroes" ), 2, 0, 0, 43, 0, gettext_noop( "Causes all Heroes across the land to become visible." ) },
+    { gettext_noop( "View All" ), 3, 0, 0, 44, 0, gettext_noop( "Causes the entire land to become visible." ) },
+    { gettext_noop( "Identify Hero" ), 3, 0, 0, 45, 0, gettext_noop( "Allows the caster to view detailed information on enemy Heroes." ) },
+    { gettext_noop( "Summon Boat" ), 5, 0, 0, 46, 0,
+      gettext_noop(
+          "Summons the nearest unoccupied, friendly boat to an adjacent shore location.  A friendly boat is one which you just built or were the most recent player to occupy." ) },
+    { gettext_noop( "Dimension Door" ), 10, 225, 69, 47, 0, gettext_noop( "Allows the caster to magically transport to a nearby location." ) },
+    { gettext_noop( "Town Gate" ), 10, 225, 69, 48, 0, gettext_noop( "Returns the caster to any town or castle currently owned." ) },
+    { gettext_noop( "Town Portal" ), 20, 225, 69, 49, 0, gettext_noop( "Returns the hero to the town or castle of choice, provided it is controlled by you." ) },
+    { gettext_noop( "Visions" ), 6, 0, 0, 50, 3, gettext_noop( "Visions predicts the likely outcome of an encounter with a neutral army camp." ) },
+    { gettext_noop( "Haunt" ), 8, 0, 0, 51, 4,
+      gettext_noop( "Haunts a mine you control with Ghosts.  This mine stops producing resources.  (If I can't keep it, nobody will!)" ) },
+    { gettext_noop( "Set Earth Guardian" ), 15, 0, 0, 52, 4, gettext_noop( "Sets Earth Elementals to guard a mine against enemy armies." ) },
+    { gettext_noop( "Set Air Guardian" ), 15, 0, 0, 53, 4, gettext_noop( "Sets Air Elementals to guard a mine against enemy armies." ) },
+    { gettext_noop( "Set Fire Guardian" ), 15, 0, 0, 54, 4, gettext_noop( "Sets Fire Elementals to guard a mine against enemy armies." ) },
+    { gettext_noop( "Set Water Guardian" ), 15, 0, 0, 55, 4, gettext_noop( "Sets Water Elementals to guard a mine against enemy armies." ) },
+    { "Random", 1, 0, 0, 0, 0, "Random" },
+    { "Random 1", 1, 0, 0, 0, 0, "Random 1" },
+    { "Random 2", 1, 0, 0, 0, 0, "Random 2" },
+    { "Random 3", 1, 0, 0, 0, 0, "Random 3" },
+    { "Random 4", 1, 0, 0, 0, 0, "Random 4" },
+    { "Random 5", 1, 0, 0, 0, 0, "Random 5" },
+    { gettext_noop( "Petrification" ), 1, 0, 0, 0, 0,
+      gettext_noop( "Turns the affected creature into stone.  A petrified creature receives half damage from a direct attack." ) },
 };
 
-Spell::Spell( int s )
-    : id( s > STONE ? NONE : s )
-{}
-
-bool Spell::operator<( const Spell & s ) const
-{
-    return id < s.id;
-}
-
-bool Spell::operator==( const Spell & s ) const
-{
-    return s.id == id;
-}
-
-bool Spell::operator!=( const Spell & s ) const
-{
-    return s.id != id;
-}
-
-bool Spell::isValid( void ) const
-{
-    return id != Spell::NONE;
-}
-
-int Spell::operator()( void ) const
-{
-    return id;
-}
-
-int Spell::GetID( void ) const
-{
-    return id;
-}
-
-const char * Spell::GetName( void ) const
+const char * Spell::GetName() const
 {
     return _( spells[id].name );
 }
 
-const char * Spell::GetDescription( void ) const
+const char * Spell::GetDescription() const
 {
     return _( spells[id].description );
 }
 
-u32 Spell::MovePoint( void ) const
+uint32_t Spell::movePoints() const
 {
-    return spells[id].mp;
+    return spells[id].movePoints;
 }
 
-u32 Spell::SpellPoint( const HeroBase * hero ) const
+uint32_t Spell::minMovePoints() const
 {
-    u32 res = spells[id].sp;
-    u32 acount = 0;
+    return spells[id].minMovePoints;
+}
 
-    if ( hero ) {
-        switch ( id ) {
-        case BLESS:
-        case MASSBLESS:
-            acount = hero->HasArtifact( Artifact::SNAKE_RING );
-            if ( acount )
-                res = spells[id].sp / ( acount * 2 );
-            break;
-
-        case SUMMONEELEMENT:
-        case SUMMONAELEMENT:
-        case SUMMONFELEMENT:
-        case SUMMONWELEMENT:
-            acount = hero->HasArtifact( Artifact::ELEMENTAL_RING );
-            if ( acount )
-                res = spells[id].sp / ( acount * 2 );
-            break;
-
-        case CURSE:
-        case MASSCURSE:
-            acount = hero->HasArtifact( Artifact::EVIL_EYE );
-            if ( acount )
-                res = spells[id].sp / ( acount * 2 );
-            break;
-
-        default:
-            break;
-        }
-
-        if ( isMindInfluence() ) {
-            acount = hero->HasArtifact( Artifact::SKULLCAP );
-            if ( acount )
-                res = spells[id].sp / ( acount * 2 );
-        }
+uint32_t Spell::spellPoints( const HeroBase * hero ) const
+{
+    if ( hero == nullptr ) {
+        return spells[id].spellPoints;
     }
 
-    return res ? res : 1;
+    fheroes2::ArtifactBonusType type = fheroes2::ArtifactBonusType::NONE;
+    switch ( id ) {
+    case BLESS:
+    case MASSBLESS:
+        type = fheroes2::ArtifactBonusType::BLESS_SPELL_COST_REDUCTION_PERCENT;
+        break;
+    case SUMMONEELEMENT:
+    case SUMMONAELEMENT:
+    case SUMMONFELEMENT:
+    case SUMMONWELEMENT:
+        type = fheroes2::ArtifactBonusType::SUMMONING_SPELL_COST_REDUCTION_PERCENT;
+        break;
+    case CURSE:
+    case MASSCURSE:
+        type = fheroes2::ArtifactBonusType::CURSE_SPELL_COST_REDUCTION_PERCENT;
+        break;
+    default:
+        if ( isMindInfluence() ) {
+            type = fheroes2::ArtifactBonusType::MIND_INFLUENCE_SPELL_COST_REDUCTION_PERCENT;
+        }
+        break;
+    }
+
+    if ( type == fheroes2::ArtifactBonusType::NONE ) {
+        return spells[id].spellPoints;
+    }
+
+    int32_t spellCost = spells[id].spellPoints;
+
+    const std::vector<int32_t> spellReductionPercentage = hero->GetBagArtifacts().getTotalArtifactMultipliedPercent( type );
+    for ( const int32_t value : spellReductionPercentage ) {
+        assert( value >= 0 && value <= 100 );
+        spellCost = spellCost * ( 100 - value ) / 100;
+    }
+
+    if ( spellCost < 1 ) {
+        return 1;
+    }
+
+    return static_cast<uint32_t>( spellCost );
 }
 
-payment_t Spell::GetCost( void ) const
+double Spell::getStrategicValue( double armyStrength, uint32_t currentSpellPoints, int spellPower ) const
 {
-    return payment_t( spells[id].cost );
+    const uint32_t spellCost = spellPoints();
+    const uint32_t casts = spellCost ? std::min( 10U, currentSpellPoints / spellCost ) : 0;
+
+    // use quadratic formula to diminish returns from subsequent spell casts, (up to x5 when spell has 10 uses)
+    const double amountModifier = ( casts == 1 ) ? 1 : casts - ( 0.05 * casts * casts );
+
+    if ( isAdventure() ) {
+        // AI uses Dimension door and View All only spells right now
+        if ( id == Spell::DIMENSIONDOOR ) {
+            return 500.0 * amountModifier;
+        }
+        if ( id == Spell::VIEWALL ) {
+            return 500.0;
+        }
+        return 0.0;
+    }
+
+    if ( isDamage() ) {
+        // Benchmark for Lightning for 20 power * 20 knowledge (maximum uses) is 2500.0
+        return amountModifier * Damage() * spellPower;
+    }
+    // These high impact spells can turn tide of battle
+    if ( isResurrect() || isMassActions() || id == Spell::BLIND || id == Spell::PARALYZE ) {
+        return armyStrength * 0.1 * amountModifier;
+    }
+    if ( isSummon() ) {
+        return Monster( id ).GetMonsterStrength() * ExtraValue() * spellPower * amountModifier;
+    }
+    return armyStrength * 0.04 * amountModifier;
 }
 
-bool Spell::isLevel( int lvl ) const
-{
-    return Level() == lvl;
-}
-
-int Spell::Level( void ) const
+int Spell::Level() const
 {
     switch ( id ) {
     case BLESS:
@@ -328,7 +326,7 @@ int Spell::Level( void ) const
     return 0;
 }
 
-bool Spell::isCombat( void ) const
+bool Spell::isCombat() const
 {
     switch ( id ) {
     case NONE:
@@ -356,32 +354,23 @@ bool Spell::isCombat( void ) const
     return true;
 }
 
-bool Spell::isEnabled() const
+bool Spell::isGuardianType() const
 {
-    return ( spells[id].bits & SP_DISABLE ) == 0;
+    switch ( id ) {
+    case HAUNT:
+    case SETEGUARDIAN:
+    case SETAGUARDIAN:
+    case SETFGUARDIAN:
+    case SETWGUARDIAN:
+        return true;
+    default:
+        break;
+    }
+
+    return false;
 }
 
-bool Spell::isFire() const
-{
-    return id == FIREBALL || id == FIREBLAST;
-}
-
-bool Spell::isCold() const
-{
-    return id == COLDRAY || id == COLDRING;
-}
-
-bool Spell::isAdventure( void ) const
-{
-    return !isCombat();
-}
-
-bool Spell::isDamage( void ) const
-{
-    return Damage() != 0;
-}
-
-u32 Spell::Damage( void ) const
+uint32_t Spell::Damage() const
 {
     switch ( id ) {
     case ARROW:
@@ -398,7 +387,7 @@ u32 Spell::Damage( void ) const
     case COLDRAY:
     case HOLYSHOUT:
     case DEATHRIPPLE:
-        return spells[id].extra;
+        return spells[id].extraValue;
 
     default:
         break;
@@ -407,7 +396,7 @@ u32 Spell::Damage( void ) const
     return 0;
 }
 
-bool Spell::isMindInfluence( void ) const
+bool Spell::isMindInfluence() const
 {
     switch ( id ) {
     case BLIND:
@@ -423,62 +412,17 @@ bool Spell::isMindInfluence( void ) const
     return false;
 }
 
-u32 Spell::IndexSprite( void ) const
+uint32_t Spell::IndexSprite() const
 {
-    return spells[id].sprite;
+    return spells[id].imageId;
 }
 
-u32 Spell::InlIndexSprite( void ) const
-{
-    switch ( id ) {
-    case HASTE:
-    case MASSHASTE:
-        return 0;
-    case SLOW:
-    case MASSSLOW:
-        return 1;
-    case BLIND:
-        return 2;
-    case BLESS:
-    case MASSBLESS:
-        return 3;
-    case CURSE:
-    case MASSCURSE:
-        return 4;
-    case BERSERKER:
-        return 5;
-    case PARALYZE:
-        return 6;
-    case HYPNOTIZE:
-        return 7;
-    case DRAGONSLAYER:
-        return 8;
-    case BLOODLUST:
-        return 9;
-    case SHIELD:
-    case MASSSHIELD:
-        return 10;
-    case STONE:
-        return 11;
-    case ANTIMAGIC:
-        return 12;
-    case STONESKIN:
-        return 13;
-    case STEELSKIN:
-        return 14;
-    default:
-        break;
-    }
-
-    return 0;
-}
-
-u32 Spell::Restore( void ) const
+uint32_t Spell::Restore() const
 {
     switch ( id ) {
     case Spell::CURE:
     case Spell::MASSCURE:
-        return spells[id].extra;
+        return spells[id].extraValue;
 
     default:
         break;
@@ -487,13 +431,13 @@ u32 Spell::Restore( void ) const
     return Resurrect();
 }
 
-u32 Spell::Resurrect( void ) const
+uint32_t Spell::Resurrect() const
 {
     switch ( id ) {
     case Spell::ANIMATEDEAD:
     case Spell::RESURRECT:
     case Spell::RESURRECTTRUE:
-        return spells[id].extra;
+        return spells[id].extraValue;
 
     default:
         break;
@@ -502,19 +446,9 @@ u32 Spell::Resurrect( void ) const
     return 0;
 }
 
-bool Spell::isRestore( void ) const
+uint32_t Spell::ExtraValue() const
 {
-    return Restore() != 0;
-}
-
-bool Spell::isResurrect( void ) const
-{
-    return Resurrect() != 0;
-}
-
-u32 Spell::ExtraValue( void ) const
-{
-    return spells[id].extra;
+    return spells[id].extraValue;
 }
 
 Spell Spell::Rand( int lvl, bool adv )
@@ -522,12 +456,12 @@ Spell Spell::Rand( int lvl, bool adv )
     std::vector<Spell> v;
     v.reserve( 15 );
 
-    for ( u32 sp = NONE; sp < STONE; ++sp ) {
+    for ( int32_t sp = NONE; sp < PETRIFY; ++sp ) {
         const Spell spell( sp );
-        if ( ( ( adv && !spell.isCombat() ) || ( !adv && spell.isCombat() ) ) && lvl == spell.Level() && spell.isEnabled() )
+        if ( ( ( adv && !spell.isCombat() ) || ( !adv && spell.isCombat() ) ) && lvl == spell.Level() )
             v.push_back( spell );
     }
-    return v.size() ? Rand::Get( v ) : Spell( Spell::NONE );
+    return !v.empty() ? Rand::Get( v ) : Spell( Spell::NONE );
 }
 
 Spell Spell::RandCombat( int lvl )
@@ -541,7 +475,7 @@ Spell Spell::RandAdventure( int lvl )
     return res.isValid() ? res : RandCombat( lvl );
 }
 
-bool Spell::isUndeadOnly( void ) const
+bool Spell::isUndeadOnly() const
 {
     switch ( id ) {
     case ANIMATEDEAD:
@@ -556,7 +490,7 @@ bool Spell::isUndeadOnly( void ) const
     return false;
 }
 
-bool Spell::isALiveOnly( void ) const
+bool Spell::isALiveOnly() const
 {
     switch ( id ) {
     case BLESS:
@@ -605,12 +539,15 @@ bool Spell::isSingleTarget() const
     case MIRRORIMAGE:
     case SHIELD:
         return true;
+
+    default:
+        break;
     }
 
     return false;
 }
 
-bool Spell::isApplyWithoutFocusObject( void ) const
+bool Spell::isApplyWithoutFocusObject() const
 {
     if ( isMassActions() || isSummon() )
         return true;
@@ -632,7 +569,7 @@ bool Spell::isApplyWithoutFocusObject( void ) const
     return false;
 }
 
-bool Spell::isSummon( void ) const
+bool Spell::isSummon() const
 {
     switch ( id ) {
     case SUMMONEELEMENT:
@@ -664,7 +601,7 @@ bool Spell::isEffectDispel() const
     return false;
 }
 
-bool Spell::isApplyToAnyTroops( void ) const
+bool Spell::isApplyToAnyTroops() const
 {
     switch ( id ) {
     case DISPEL:
@@ -678,7 +615,7 @@ bool Spell::isApplyToAnyTroops( void ) const
     return false;
 }
 
-bool Spell::isApplyToFriends( void ) const
+bool Spell::isApplyToFriends() const
 {
     switch ( id ) {
     case BLESS:
@@ -709,7 +646,7 @@ bool Spell::isApplyToFriends( void ) const
     return false;
 }
 
-bool Spell::isMassActions( void ) const
+bool Spell::isMassActions() const
 {
     switch ( id ) {
     case MASSCURE:
@@ -728,7 +665,7 @@ bool Spell::isMassActions( void ) const
     return false;
 }
 
-bool Spell::isApplyToEnemies( void ) const
+bool Spell::isApplyToEnemies() const
 {
     switch ( id ) {
     case MASSSLOW:
@@ -781,12 +718,8 @@ bool Spell::isRaceCompatible( int race ) const
     return true;
 }
 
-u32 Spell::CalculateDimensionDoorDistance( u32 current_sp, u32 total_hp )
+int32_t Spell::CalculateDimensionDoorDistance()
 {
-    if ( GameStatic::Spell_DD_Distance() && GameStatic::Spell_DD_HP() && GameStatic::Spell_DD_SP() && total_hp ) {
-        const u32 res = ( GameStatic::Spell_DD_Distance() * current_sp * GameStatic::Spell_DD_HP() ) / ( GameStatic::Spell_DD_SP() * total_hp );
-        return res ? ( res < 255 ? res : 255 ) : 1;
-    }
     // original h2 variant
     return 14;
 }

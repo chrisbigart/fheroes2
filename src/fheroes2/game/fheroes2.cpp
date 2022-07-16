@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -20,66 +21,58 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#include <cstdio>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 
 #include "agg.h"
-#include "audio_mixer.h"
-#include "audio_music.h"
+#include "audio_manager.h"
 #include "bin_info.h"
+#include "core.h"
 #include "cursor.h"
 #include "dir.h"
 #include "embedded_image.h"
-#include "engine.h"
 #include "game.h"
 #include "game_logo.h"
 #include "game_video.h"
+#include "h2d.h"
+#include "image_palette.h"
 #include "localevent.h"
 #include "logging.h"
 #include "screen.h"
+#include "settings.h"
 #include "system.h"
-#include "translations.h"
+#ifdef WITH_DEBUG
+#include "tools.h"
+#endif
 #include "ui_tool.h"
 #include "zzlib.h"
 
 namespace
 {
-    const char * configurationFileName = "fheroes2.cfg";
-
     std::string GetCaption()
     {
-        return std::string( "Free Heroes of Might and Magic II, version: " + Settings::GetVersion() );
-    }
-
-    void SetVideoDriver( const std::string & driver )
-    {
-        System::SetEnvironment( "SDL_VIDEODRIVER", driver.c_str() );
+        return std::string( "fheroes2 engine, version: " + Settings::GetVersion() );
     }
 
     int PrintHelp( const char * basename )
     {
-        COUT( "Usage: " << basename << " [OPTIONS]" );
-#ifndef BUILD_RELEASE
-        COUT( "  -d <level>\tprint debug messages, see src/engine/logging.h for possible values of <level> argument" );
+        COUT( "Usage: " << basename << " [OPTIONS]" )
+#ifdef WITH_DEBUG
+        COUT( "  -d <level>\tprint debug messages, see src/engine/logging.h for possible values of <level> argument" )
 #endif
-        COUT( "  -h\t\tprint this help message and exit" );
+        COUT( "  -h\t\tprint this help message and exit" )
 
         return EXIT_SUCCESS;
     }
 
     void ReadConfigs()
     {
-        Settings & conf = Settings::Get();
-
+        const std::string configurationFileName( Settings::configFileName );
         const std::string confFile = Settings::GetLastFile( "", configurationFileName );
 
+        Settings & conf = Settings::Get();
         if ( System::IsFile( confFile ) && conf.Read( confFile ) ) {
-            const std::string & externalCommand = conf.externalMusicCommand();
-            if ( !externalCommand.empty() )
-                Music::SetExtCommand( externalCommand );
-
             LocalEvent::Get().SetControllerPointerSpeed( conf.controllerPointerSpeed() );
         }
         else {
@@ -91,7 +84,7 @@ namespace
     {
         const std::string configDir = System::GetConfigDirectory( "fheroes2" );
 
-        if ( !configDir.empty() && !System::IsDirectory( configDir ) ) {
+        if ( !System::IsDirectory( configDir ) ) {
             System::MakeDirectory( configDir );
         }
     }
@@ -116,115 +109,14 @@ namespace
             System::MakeDirectory( dataFilesSave );
     }
 
-    void SetTimidityEnvPath()
+    class DisplayInitializer
     {
-        const std::string prefix_timidity = System::ConcatePath( "files", "timidity" );
-        const std::string result = Settings::GetLastFile( prefix_timidity, "timidity.cfg" );
-
-        if ( System::IsFile( result ) )
-            System::SetEnvironment( "TIMIDITY_PATH", System::GetDirname( result ).c_str() );
-    }
-
-    void SetLangEnvPath( const Settings & conf )
-    {
-#ifdef WITH_TTF
-        if ( conf.Unicode() ) {
-            System::SetLocale( LC_ALL, "" );
-            System::SetLocale( LC_NUMERIC, "C" );
-
-            std::string mofile = conf.ForceLang().empty() ? System::GetMessageLocale( 1 ).append( ".mo" ) : std::string( conf.ForceLang() ).append( ".mo" );
-
-            ListFiles translations = Settings::FindFiles( System::ConcatePath( "files", "lang" ), mofile, false );
-
-            if ( translations.size() ) {
-                if ( Translation::bindDomain( "fheroes2", translations.back().c_str() ) )
-                    Translation::setDomain( "fheroes2" );
-            }
-            else
-                ERROR_LOG( "translation not found: " << mofile );
-        }
-#else
-        (void)conf;
-#endif
-        Translation::setStripContext( '|' );
-    }
-}
-
-#if defined( _MSC_VER )
-#undef main
-#endif
-
-int main( int argc, char ** argv )
-{
-    InitHardware();
-    Logging::InitLog();
-
-    DEBUG_LOG( DBG_ALL, DBG_INFO, GetCaption() );
-
-    Settings & conf = Settings::Get();
-    conf.SetProgramPath( argv[0] );
-
-    InitConfigDir();
-    InitDataDir();
-    ReadConfigs();
-
-    // getopt
-    {
-        int opt;
-        while ( ( opt = System::GetCommandOptions( argc, argv, "hd:" ) ) != -1 )
-            switch ( opt ) {
-#ifndef BUILD_RELEASE
-            case 'd':
-                conf.SetDebug( System::GetOptionsArgument() ? GetInt( System::GetOptionsArgument() ) : 0 );
-                break;
-#endif
-            case '?':
-            case 'h':
-                return PrintHelp( argv[0] );
-
-            default:
-                break;
-            }
-    }
-
-    if ( conf.SelectVideoDriver().size() )
-        SetVideoDriver( conf.SelectVideoDriver() );
-
-    // random init
-    if ( conf.Music() )
-        SetTimidityEnvPath();
-
-    u32 subsystem = INIT_VIDEO;
-
-#if defined( FHEROES2_VITA ) || defined( __SWITCH__ )
-    subsystem |= INIT_GAMECONTROLLER;
-#endif
-
-    if ( conf.Sound() || conf.Music() )
-        subsystem |= INIT_AUDIO;
-#ifdef WITH_AUDIOCD
-    if ( conf.MusicCD() )
-        subsystem |= INIT_CDROM | INIT_AUDIO;
-#endif
-    if ( SDL::Init( subsystem ) ) {
-        try
+    public:
+        DisplayInitializer()
         {
-            std::atexit( SDL::Quit );
+            const Settings & conf = Settings::Get();
 
-            SetLangEnvPath( conf );
-
-            if ( Mixer::isValid() ) {
-                Mixer::SetChannels( 16 );
-                Mixer::Volume( -1, Mixer::MaxVolume() * conf.SoundVolume() / 10 );
-                Music::Volume( Mixer::MaxVolume() * conf.MusicVolume() / 10 );
-                if ( conf.Music() ) {
-                    Music::SetFadeIn( 900 );
-                }
-            }
-            else if ( conf.Sound() || conf.Music() ) {
-                conf.ResetSound();
-                conf.ResetMusic();
-            }
+            fheroes2::engine().setVSync( conf.isVSyncEnabled() );
 
             fheroes2::Display & display = fheroes2::Display::instance();
             if ( conf.FullScreen() != fheroes2::engine().isFullScreen() )
@@ -238,48 +130,165 @@ int main( int argc, char ** argv )
             SDL_ShowCursor( SDL_DISABLE ); // hide system cursor
 
             // Initialize local event processing.
-            LocalEvent::Get().RegisterCycling( fheroes2::PreRenderSystemInfo, fheroes2::PostRenderSystemInfo );
+            LocalEvent::RegisterCycling( fheroes2::PreRenderSystemInfo, fheroes2::PostRenderSystemInfo );
 
             // Update mouse cursor when switching between software emulation and OS mouse modes.
             fheroes2::cursor().registerUpdater( Cursor::Refresh );
 
+#if !defined( MACOS_APP_BUNDLE )
             const fheroes2::Image & appIcon = CreateImageFromZlib( 32, 32, iconImage, sizeof( iconImage ), true );
             fheroes2::engine().setIcon( appIcon );
-
-            DEBUG_LOG( DBG_GAME, DBG_INFO, conf.String() );
-
-            // read data dir
-            if ( !AGG::Init() ) {
-                fheroes2::Display::instance().release();
-                return EXIT_FAILURE;
-            }
-
-            atexit( &AGG::Quit );
-
-            // load BIN data
-            Bin_Info::InitBinInfo();
-
-            // init game data
-            Game::Init();
-
-            if ( conf.isShowIntro() ) {
-                fheroes2::showTeamInfo();
-
-                Video::ShowVideo( "H2XINTRO.SMK", Video::VideoAction::PLAY_TILL_VIDEO_END );
-            }
-
-            // init cursor
-            const CursorRestorer cursorRestorer( true, Cursor::POINTER );
-
-            Game::mainGameLoop( conf.isFirstGameRun() );
+#endif
         }
-        catch ( const std::exception & ex ) {
-            ERROR_LOG( "Exception '" << ex.what() << "' occured during application runtime." );
+
+        DisplayInitializer( const DisplayInitializer & ) = delete;
+        DisplayInitializer & operator=( const DisplayInitializer & ) = delete;
+
+        ~DisplayInitializer()
+        {
+            fheroes2::Display::instance().release();
         }
+    };
+
+    class DataInitializer
+    {
+    public:
+        DataInitializer()
+        {
+            const fheroes2::ScreenPaletteRestorer screenRestorer;
+
+            try {
+                _aggInitializer.reset( new AGG::AGGInitializer );
+
+                _h2dInitializer.reset( new fheroes2::h2d::H2DInitializer );
+            }
+            catch ( ... ) {
+                fheroes2::Display & display = fheroes2::Display::instance();
+                const fheroes2::Image & image = CreateImageFromZlib( 290, 190, errorMessage, sizeof( errorMessage ), false );
+
+                display.fill( 0 );
+                fheroes2::Resize( image, display );
+
+                display.render();
+
+                LocalEvent & le = LocalEvent::Get();
+                while ( le.HandleEvents() && !le.KeyPress() && !le.MouseClickLeft() ) {
+                    // Do nothing.
+                }
+
+                throw;
+            }
+        }
+
+        DataInitializer( const DataInitializer & ) = delete;
+        DataInitializer & operator=( const DataInitializer & ) = delete;
+        ~DataInitializer() = default;
+
+        const std::string & getOriginalAGGFilePath() const
+        {
+            return _aggInitializer->getOriginalAGGFilePath();
+        }
+
+        const std::string & getExpansionAGGFilePath() const
+        {
+            return _aggInitializer->getExpansionAGGFilePath();
+        }
+
+    private:
+        std::unique_ptr<AGG::AGGInitializer> _aggInitializer;
+        std::unique_ptr<fheroes2::h2d::H2DInitializer> _h2dInitializer;
+    };
+}
+
+#if defined( _MSC_VER )
+#undef main
+#endif
+
+int main( int argc, char ** argv )
+{
+    try {
+        const fheroes2::HardwareInitializer hardwareInitializer;
+        Logging::InitLog();
+
+        COUT( GetCaption() )
+
+        Settings & conf = Settings::Get();
+        conf.SetProgramPath( argv[0] );
+
+        InitConfigDir();
+        InitDataDir();
+        ReadConfigs();
+
+        // getopt
+        {
+            int opt;
+            while ( ( opt = System::GetCommandOptions( argc, argv, "hd:" ) ) != -1 )
+                switch ( opt ) {
+#ifdef WITH_DEBUG
+                case 'd':
+                    conf.SetDebug( System::GetOptionsArgument() ? GetInt( System::GetOptionsArgument() ) : 0 );
+                    break;
+#endif
+                case '?':
+                case 'h':
+                    return PrintHelp( argv[0] );
+
+                default:
+                    break;
+                }
+        }
+
+        std::set<fheroes2::SystemInitializationComponent> coreComponents{ fheroes2::SystemInitializationComponent::Audio,
+                                                                          fheroes2::SystemInitializationComponent::Video };
+
+#if defined( TARGET_PS_VITA ) || defined( TARGET_NINTENDO_SWITCH )
+        coreComponents.emplace( fheroes2::SystemInitializationComponent::GameController );
+#endif
+
+        const fheroes2::CoreInitializer coreInitializer( coreComponents );
+
+        DEBUG_LOG( DBG_GAME, DBG_INFO, conf.String() )
+
+        const DisplayInitializer displayInitializer;
+
+        const DataInitializer dataInitializer;
+
+        const ListFiles midiSoundFonts = Settings::FindFiles( System::ConcatePath( "files", "soundfonts" ), ".sf2", false );
+#ifdef WITH_DEBUG
+        for ( const std::string & file : midiSoundFonts ) {
+            DEBUG_LOG( DBG_GAME, DBG_INFO, "MIDI sound font to load: " << file )
+        }
+#endif
+
+        const AudioManager::AudioInitializer audioInitializer( dataInitializer.getOriginalAGGFilePath(), dataInitializer.getExpansionAGGFilePath(), midiSoundFonts );
+
+        // Load palette.
+        fheroes2::setGamePalette( AGG::getDataFromAggFile( "KB.PAL" ) );
+        fheroes2::Display::instance().changePalette( nullptr, true );
+
+        // load BIN data
+        Bin_Info::InitBinInfo();
+
+        // init game data
+        Game::Init();
+
+        conf.setGameLanguage( conf.getGameLanguage() );
+
+        if ( conf.isShowIntro() ) {
+            fheroes2::showTeamInfo();
+
+            Video::ShowVideo( "H2XINTRO.SMK", Video::VideoAction::PLAY_TILL_VIDEO_END );
+        }
+
+        // init cursor
+        const CursorRestorer cursorRestorer( true, Cursor::POINTER );
+
+        Game::mainGameLoop( conf.isFirstGameRun() );
     }
-
-    fheroes2::Display::instance().release();
-    CloseHardware();
+    catch ( const std::exception & ex ) {
+        ERROR_LOG( "Exception '" << ex.what() << "' occurred during application runtime." )
+        return EXIT_FAILURE;
+    }
 
     return EXIT_SUCCESS;
 }

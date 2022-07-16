@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -25,57 +26,67 @@
 
 #include "monster.h"
 
-struct Week : std::pair<int, int>
+enum class WeekName : int
 {
-    enum
-    {
-        UNNAMED,
-        PLAGUE,
-        ANT,
-        GRASSHOPPER,
-        DRAGONFLY,
-        SPIDER,
-        BUTTERFLY,
-        BUMBLEBEE,
-        LOCUST,
-        EARTHWORM,
-        HORNET,
-        BEETLE,
-        SQUIRREL,
-        RABBIT,
-        GOPHER,
-        BADGER,
-        EAGLE,
-        WEASEL,
-        RAVEN,
-        MONGOOSE,
-        AARDVARK,
-        LIZARD,
-        TORTOISE,
-        HEDGEHOG,
-        CONDOR,
-
-        MONSTERS // week of monsters game
-    };
-
-    Week( int type = UNNAMED, int mons = Monster::UNKNOWN )
-        : std::pair<int, int>( type, mons )
-    {}
-
-    int GetType( void ) const
-    {
-        return first;
-    }
-    int GetMonster( void ) const
-    {
-        return second;
-    }
-    const char * GetName( void ) const;
-
-    static int WeekRand( void );
-    static int MonthRand( void );
+    UNNAMED,
+    PLAGUE,
+    ANT,
+    GRASSHOPPER,
+    DRAGONFLY,
+    SPIDER,
+    BUTTERFLY,
+    BUMBLEBEE,
+    LOCUST,
+    EARTHWORM,
+    HORNET,
+    BEETLE,
+    SQUIRREL,
+    RABBIT,
+    GOPHER,
+    BADGER,
+    EAGLE,
+    WEASEL,
+    RAVEN,
+    MONGOOSE,
+    AARDVARK,
+    LIZARD,
+    TORTOISE,
+    HEDGEHOG,
+    CONDOR,
+    MONSTERS // week of "monster"
 };
 
-StreamBase & operator>>( StreamBase &, Week & );
+class World;
+
+struct Week
+{
+    Week( const WeekName type = WeekName::UNNAMED, const Monster::monster_t monster = Monster::UNKNOWN )
+        : _week( type )
+        , _monster( monster )
+    {}
+
+    WeekName GetType() const
+    {
+        return _week;
+    }
+
+    Monster::monster_t GetMonster() const
+    {
+        return _monster;
+    }
+
+    const char * GetName() const;
+
+    static Week RandomWeek( const World & world, const bool isNewMonth, const uint32_t weekSeed );
+
+    friend StreamBase & operator>>( StreamBase & stream, Week & week );
+
+private:
+    WeekName _week;
+    Monster::monster_t _monster;
+};
+
+StreamBase & operator>>( StreamBase & stream, Week & week );
+StreamBase & operator<<( StreamBase & stream, const Week & week );
 
 #endif

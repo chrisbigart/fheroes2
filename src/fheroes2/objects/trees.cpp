@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,11 +24,16 @@
 #include <algorithm>
 
 #include "direction.h"
-#include "icn.h"
 #include "mp2.h"
+#include "tools.h"
 #include "trees.h"
 
-int ObjTree::GetPassable( u32 index )
+namespace
+{
+    const std::bitset<256> objTreeShadowBitset = fheroes2::makeBitsetFromVector<256>( { 0, 3, 7, 10, 13, 17, 20, 23, 26, 29, 32, 34 } );
+}
+
+int ObjTree::GetPassable( const uint8_t index )
 {
     if ( isShadow( index ) )
         return DIRECTION_ALL;
@@ -35,18 +41,17 @@ int ObjTree::GetPassable( u32 index )
     return ( 5 == index || 15 == index || 22 == index || 27 == index ? 0 : DIRECTION_CENTER_ROW | DIRECTION_BOTTOM_ROW );
 }
 
-bool ObjTree::isAction( u32 index )
+bool ObjTree::isAction( uint32_t index )
 {
     return MP2::OBJ_ZERO != GetActionObject( index );
 }
 
-bool ObjTree::isShadow( u32 index )
+bool ObjTree::isShadow( const uint8_t index )
 {
-    const u8 shadows[] = {0, 3, 7, 10, 13, 17, 20, 23, 26, 29, 32, 34};
-    return std::end( shadows ) != std::find( shadows, std::end( shadows ), index );
+    return objTreeShadowBitset[index];
 }
 
-int ObjTree::GetActionObject( u32 )
+int ObjTree::GetActionObject( uint32_t /* unused */ )
 {
     return MP2::OBJ_ZERO;
 }

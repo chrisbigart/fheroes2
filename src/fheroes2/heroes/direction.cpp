@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -20,37 +21,49 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#include <sstream>
-
 #include "direction.h"
 
 std::string Direction::String( int direct )
 {
-    const char * str_direct[] = {"unknown", "center", "top", "top right", "right", "bottom right", "bottom", "bottom left", "left", "top left"};
-    std::ostringstream os;
+    std::string temp;
 
-    if ( direct & CENTER )
-        os << str_direct[1] << ",";
-    if ( direct & TOP )
-        os << str_direct[2] << ",";
-    if ( direct & TOP_RIGHT )
-        os << str_direct[3] << ",";
-    if ( direct & RIGHT )
-        os << str_direct[4] << ",";
-    if ( direct & BOTTOM_RIGHT )
-        os << str_direct[5] << ",";
-    if ( direct & BOTTOM )
-        os << str_direct[6] << ",";
-    if ( direct & BOTTOM_LEFT )
-        os << str_direct[7] << ",";
-    if ( direct & LEFT )
-        os << str_direct[8] << ",";
-    if ( direct & TOP_LEFT )
-        os << str_direct[9] << ",";
+    if ( direct & CENTER ) {
+        temp += "center, ";
+    }
+    if ( direct & TOP ) {
+        temp += "top, ";
+    }
+    if ( direct & TOP_RIGHT ) {
+        temp += "top-right, ";
+    }
+    if ( direct & RIGHT ) {
+        temp += "right, ";
+    }
+    if ( direct & BOTTOM_RIGHT ) {
+        temp += "bottom-right, ";
+    }
+    if ( direct & BOTTOM ) {
+        temp += "bottom, ";
+    }
+    if ( direct & BOTTOM_LEFT ) {
+        temp += "bottom-left, ";
+    }
+    if ( direct & LEFT ) {
+        temp += "left, ";
+    }
+    if ( direct & TOP_LEFT ) {
+        temp += "top-left, ";
+    }
 
-    const std::string & res = os.str();
+    if ( !temp.empty() && temp.back() == ' ' ) {
+        temp.pop_back();
+    }
 
-    return res.empty() ? str_direct[0] : res;
+    if ( !temp.empty() && temp.back() == ',' ) {
+        temp.pop_back();
+    }
+
+    return temp.empty() ? "unknown" : temp;
 }
 
 bool Direction::isDiagonal( int direction )
@@ -199,7 +212,7 @@ int Direction::Reflect( int direct )
     return UNKNOWN;
 }
 
-const Directions & Direction::All( void )
+const Directions & Direction::All()
 {
     static const Directions allDirections = Directions( {TOP_LEFT, TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT} );
     return allDirections;

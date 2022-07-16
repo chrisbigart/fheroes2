@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2020                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2020 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -53,6 +53,11 @@ public:
     int32_t height() const;
     double fps() const;
     unsigned long frameCount() const;
+
+    unsigned long getCurrentFrame() const
+    {
+        return _currentFrameId;
+    }
 
 private:
     std::vector<std::vector<uint8_t> > _audioChannel;

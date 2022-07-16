@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,64 +23,72 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cmath>
-#include <cstdlib>
-#include <map>
 
-#include "agg.h"
-#include "audio_mixer.h"
-#include "battle.h"
-#include "buildinginfo.h"
-#include "castle.h"
+#include "audio.h"
+#include "audio_manager.h"
 #include "cursor.h"
 #include "difficulty.h"
 #include "game.h"
 #include "game_credits.h"
 #include "game_delays.h"
+#include "game_hotkeys.h"
 #include "game_interface.h"
 #include "game_static.h"
 #include "icn.h"
-#include "kingdom.h"
-#include "logging.h"
+#include "m82.h"
 #include "maps_tiles.h"
 #include "monster.h"
 #include "mp2.h"
-#include "mus.h"
-#include "payment.h"
-#include "profit.h"
 #include "rand.h"
+#include "save_format_version.h"
 #include "settings.h"
 #include "skill.h"
-#include "spell.h"
-#include "system.h"
-#include "text.h"
-#include "tinyconfig.h"
 #include "tools.h"
+#include "translations.h"
 #include "world.h"
 
-namespace Game
+namespace
 {
-    u32 GetMixerChannelFromObject( const Maps::Tiles & );
-    void AnimateDelaysInitialize( void );
-    void KeyboardGlobalFilter( int, int );
-
-    void HotKeysDefaults( void );
-    void HotKeysLoad( const std::string & );
-
-    bool disable_change_music = false;
-    int current_music = MUS::UNKNOWN;
-    u32 castle_animation_frame = 0;
-    u32 maps_animation_frame = 0;
-    std::string last_name;
-    int save_version = CURRENT_FORMAT_VERSION;
-    std::vector<int> reserved_vols( LOOPXX_COUNT, 0 );
     std::string lastMapFileName;
     std::vector<Player> savedPlayers;
 
+    uint16_t save_version = CURRENT_FORMAT_VERSION;
+
+    std::string last_name;
+
+    bool updateSoundsOnFocusUpdate = true;
+
+    uint32_t maps_animation_frame = 0;
+
+    // TODO: this function returns a sound track based on a provided tile. It works fine for most of objects as they have only one "main" tile.
+    // However, some objects like Oracle or Volcano can be bigger than 1 tile leading to multiple sounds coming from the same object and these
+    // sounds might not be synchronized. This is mostly noticeable with 3D Audio mode on.
+    M82::SoundType getSoundTypeFromTile( const Maps::Tiles & tile )
+    {
+        // check stream first
+        if ( tile.isStream() ) {
+            return M82::LOOP0014;
+        }
+
+        const MP2::MapObjectType objectType = tile.GetObject( false );
+
+        // This is a horrible hack but we want to play sounds only for a particular sprite belonging to Stones.
+        if ( objectType == MP2::OBJ_STONES && tile.containsSprite( 200, 183 ) ) {
+            return M82::LOOP0019;
+        }
+
+        return M82::getAdventureMapObjectSound( objectType );
+    }
+}
+
+namespace Game
+{
+    void AnimateDelaysInitialize();
+
     namespace ObjectFadeAnimation
     {
-        FadeTask::FadeTask( int object_, uint32_t objectIndex_, uint32_t animationIndex_, int32_t fromIndex_, int32_t toIndex_, uint8_t alpha_, bool fadeOut_,
-                            bool fadeIn_, uint8_t objectTileset_ )
+        FadeTask::FadeTask( MP2::MapObjectType object_, uint32_t objectIndex_, uint32_t animationIndex_, int32_t fromIndex_, int32_t toIndex_, uint8_t alpha_,
+                            bool fadeOut_, bool fadeIn_, uint8_t objectTileset_ )
             : object( object_ )
             , objectIndex( objectIndex_ )
             , animationIndex( animationIndex_ )
@@ -101,7 +110,6 @@ namespace Game
             , fadeOut( false )
             , fadeIn( false )
             , objectTileset( 0 )
-
         {}
 
         // Single instance of FadeTask.
@@ -112,7 +120,7 @@ namespace Game
 // Returns the difficulty level based on the type of game.
 int Game::getDifficulty()
 {
-    Settings & configuration = Settings::Get();
+    const Settings & configuration = Settings::Get();
 
     return ( configuration.isCampaignGameType() ? configuration.CurrentFileInfo().difficulty : configuration.GameDifficulty() );
 }
@@ -161,17 +169,17 @@ void Game::SavePlayers( const std::string & mapFileName, const Players & players
     }
 }
 
-void Game::SetLoadVersion( int ver )
+void Game::SetLoadVersion( uint16_t ver )
 {
     save_version = ver;
 }
 
-int Game::GetLoadVersion( void )
+uint16_t Game::GetLoadVersion()
 {
     return save_version;
 }
 
-const std::string & Game::GetLastSavename( void )
+const std::string & Game::GetLastSavename()
 {
     return last_name;
 }
@@ -188,17 +196,17 @@ fheroes2::GameMode Game::Credits()
     return fheroes2::GameMode::MAIN_MENU;
 }
 
-bool Game::ChangeMusicDisabled( void )
+bool Game::UpdateSoundsOnFocusUpdate()
 {
-    return disable_change_music;
+    return updateSoundsOnFocusUpdate;
 }
 
-void Game::DisableChangeMusic( bool /*f*/ )
+void Game::SetUpdateSoundsOnFocusUpdate( const bool update )
 {
-    // disable_change_music = f;
+    updateSoundsOnFocusUpdate = update;
 }
 
-void Game::Init( void )
+void Game::Init()
 {
     // default events
     LocalEvent::SetStateDefaults();
@@ -210,43 +218,30 @@ void Game::Init( void )
 
     Game::AnimateDelaysInitialize();
 
-    HotKeysDefaults();
-
-    const std::string hotkeys = Settings::GetLastFile( "", "fheroes2.key" );
-    Game::HotKeysLoad( hotkeys );
+    Game::HotKeysLoad( Settings::GetLastFile( "", "fheroes2.key" ) );
 }
 
-int Game::CurrentMusic( void )
-{
-    return current_music;
-}
-
-void Game::SetCurrentMusic( int mus )
-{
-    current_music = mus;
-}
-
-void Game::ObjectFadeAnimation::PrepareFadeTask( int object, int32_t fromIndex, int32_t toIndex, bool fadeOut, bool fadeIn )
+void Game::ObjectFadeAnimation::PrepareFadeTask( const MP2::MapObjectType objectType, int32_t fromIndex, int32_t toIndex, bool fadeOut, bool fadeIn )
 {
     const uint8_t alpha = fadeOut ? 255u : 0;
     const Maps::Tiles & fromTile = world.GetTiles( fromIndex );
 
-    if ( object == MP2::OBJ_ZERO ) {
+    if ( objectType == MP2::OBJ_ZERO ) {
         fadeTask = FadeTask();
     }
-    else if ( object == MP2::OBJ_MONSTER ) {
+    else if ( objectType == MP2::OBJ_MONSTER ) {
         const auto & spriteIndicies = Maps::Tiles::GetMonsterSpriteIndices( fromTile, fromTile.QuantityMonster().GetSpriteIndex() );
 
-        fadeTask = FadeTask( object, spriteIndicies.first, spriteIndicies.second, fromIndex, toIndex, alpha, fadeOut, fadeIn, 0 );
+        fadeTask = FadeTask( objectType, spriteIndicies.first, spriteIndicies.second, fromIndex, toIndex, alpha, fadeOut, fadeIn, 0 );
     }
-    else if ( object == MP2::OBJ_BOAT ) {
-        fadeTask = FadeTask( object, fromTile.GetObjectSpriteIndex(), 0, fromIndex, toIndex, alpha, fadeOut, fadeIn, 0 );
+    else if ( objectType == MP2::OBJ_BOAT ) {
+        fadeTask = FadeTask( objectType, fromTile.GetObjectSpriteIndex(), 0, fromIndex, toIndex, alpha, fadeOut, fadeIn, 0 );
     }
     else {
-        const int icn = MP2::GetICNObject( object );
+        const int icn = MP2::GetICNObject( fromTile.GetObjectTileset() );
         const uint32_t animationIndex = ICN::AnimationFrame( icn, fromTile.GetObjectSpriteIndex(), Game::MapsAnimationFrame(), fromTile.GetQuantity2() != 0 );
 
-        fadeTask = FadeTask( object, fromTile.GetObjectSpriteIndex(), animationIndex, fromIndex, toIndex, alpha, fadeOut, fadeIn, fromTile.GetObjectTileset() );
+        fadeTask = FadeTask( objectType, fromTile.GetObjectSpriteIndex(), animationIndex, fromIndex, toIndex, alpha, fadeOut, fadeIn, fromTile.GetObjectTileset() );
     }
 }
 
@@ -268,12 +263,8 @@ void Game::ObjectFadeAnimation::PerformFadeTask()
         }
     };
     auto redrawGameArea = []() {
-        fheroes2::Display & display = fheroes2::Display::instance();
-        Interface::GameArea & gameArea = Interface::Basic::Get().GetGameArea();
-
-        gameArea.Redraw( display, Interface::LEVEL_ALL );
-
-        display.render();
+        Interface::Basic::Get().Redraw( Interface::REDRAW_GAMEAREA );
+        fheroes2::Display::instance().render();
     };
 
     LocalEvent & le = LocalEvent::Get();
@@ -331,59 +322,176 @@ const Game::ObjectFadeAnimation::FadeTask & Game::ObjectFadeAnimation::GetFadeTa
     return fadeTask;
 }
 
-u32 & Game::MapsAnimationFrame( void )
+uint32_t & Game::MapsAnimationFrame()
 {
     return maps_animation_frame;
 }
 
-u32 & Game::CastleAnimationFrame( void )
+// play environment sounds from the game area in focus
+void Game::EnvironmentSoundMixer()
 {
-    return castle_animation_frame;
-}
-
-/* play all sound from focus area game */
-void Game::EnvironmentSoundMixer( void )
-{
-    if ( !Settings::Get().Sound() ) {
+    int availableChannels = Mixer::getChannelCount();
+    if ( availableChannels <= 2 ) {
+        // 2 channels are left for hero's movement.
         return;
     }
 
-    const fheroes2::Point abs_pt( Interface::GetFocusCenter() );
-    std::fill( reserved_vols.begin(), reserved_vols.end(), 0 );
+    availableChannels -= 2;
 
-    // scan 4x4 square from focus
-    for ( s32 yy = abs_pt.y - 3; yy <= abs_pt.y + 3; ++yy ) {
-        for ( s32 xx = abs_pt.x - 3; xx <= abs_pt.x + 3; ++xx ) {
-            if ( Maps::isValidAbsPoint( xx, yy ) ) {
-                const u32 channel = GetMixerChannelFromObject( world.GetTiles( xx, yy ) );
-                if ( channel < reserved_vols.size() ) {
-                    // calculation volume
-                    const int length = std::max( std::abs( xx - abs_pt.x ), std::abs( yy - abs_pt.y ) );
-                    const int volume = ( 2 < length ? 4 : ( 1 < length ? 8 : ( 0 < length ? 12 : 16 ) ) ) * Mixer::MaxVolume() / 16;
+    fheroes2::Point center;
+    fheroes2::Point tilePixelOffset;
 
-                    if ( volume > reserved_vols[channel] )
-                        reserved_vols[channel] = volume;
-                }
+    Player * player = Settings::Get().GetPlayers().GetCurrent();
+    if ( player != nullptr ) {
+        Focus & focus = player->GetFocus();
+
+        const Heroes * hero = focus.GetHeroes();
+        if ( hero != nullptr ) {
+            center = hero->GetCenter();
+            tilePixelOffset = hero->getCurrentPixelOffset();
+        }
+        else if ( focus.GetCastle() ) {
+            center = focus.GetCastle()->GetCenter();
+        }
+        else {
+            center = { world.w() / 2, world.h() / 2 };
+        }
+    }
+    else {
+        center = { world.w() / 2, world.h() / 2 };
+    }
+
+    std::map<M82::SoundType, std::vector<AudioManager::AudioLoopEffectInfo>> soundEffects;
+
+    const int32_t maxOffset = 3;
+
+    // Usual area of getting object sounds around a center is 7 x 7 pixel. However, in case of a moving hero we need to expand the area to make sound transition smooth.
+    int32_t scanningOffset = maxOffset;
+    if ( tilePixelOffset != fheroes2::Point() ) {
+        ++scanningOffset;
+    }
+
+    std::vector<fheroes2::Point> positions;
+    positions.reserve( 2 * 2 * scanningOffset * scanningOffset );
+
+    for ( int32_t y = -scanningOffset; y <= scanningOffset; ++y ) {
+        const int32_t posY = y + center.y;
+        for ( int32_t x = -scanningOffset; x <= scanningOffset; ++x ) {
+            if ( Maps::isValidAbsPoint( x + center.x, posY ) ) {
+                positions.emplace_back( x, y );
             }
         }
     }
 
-    AGG::LoadLOOPXXSounds( reserved_vols, true );
+    // Sort positions by distance to the center.
+    std::stable_sort( positions.begin(), positions.end(),
+                      []( const fheroes2::Point & p1, const fheroes2::Point & p2 ) { return p1.x * p1.x + p1.y * p1.y < p2.x * p2.x + p2.y * p2.y; } );
+
+    const double maxDistance = std::sqrt( ( maxOffset * maxOffset + maxOffset * maxOffset ) * TILEWIDTH * TILEWIDTH );
+
+    const bool is3DAudioEnabled = Settings::Get().is3DAudioEnabled();
+
+    for ( const fheroes2::Point & pos : positions ) {
+        const M82::SoundType soundType = getSoundTypeFromTile( world.GetTiles( pos.x + center.x, pos.y + center.y ) );
+        if ( soundType == M82::UNKNOWN ) {
+            continue;
+        }
+
+        fheroes2::Point actualPosition = pos;
+        actualPosition.x *= TILEWIDTH;
+        actualPosition.y *= TILEWIDTH;
+
+        actualPosition -= tilePixelOffset;
+
+        const double distance = std::sqrt( actualPosition.x * actualPosition.x + actualPosition.y * actualPosition.y );
+        if ( distance >= maxDistance ) {
+            continue;
+        }
+
+        const uint8_t volumePercentage = static_cast<uint8_t>( ( maxDistance - distance ) * 100 / maxDistance );
+
+        assert( volumePercentage <= 100 );
+        if ( volumePercentage == 0 ) {
+            continue;
+        }
+
+        int16_t angle = 0;
+
+        if ( is3DAudioEnabled ) {
+            // This is a schema how the direction of sound looks like:
+            // |      0     |
+            // | 270     90 |
+            // |     180    |
+            // so the direction to an object on the top is 0 degrees, on the right side - 90, bottom - 180 and left side - 270 degrees.
+
+            // We need to swap X and Y axes and invert Y axis as on screen Y axis goes from top to bottom.
+            angle = static_cast<int16_t>( std::atan2( actualPosition.x, -actualPosition.y ) * 180 / M_PI );
+            // It is exteremely important to normalize the angle.
+            if ( angle < 0 ) {
+                angle = 360 + angle;
+            }
+        }
+
+        std::vector<AudioManager::AudioLoopEffectInfo> & effects = soundEffects[soundType];
+        bool doesEffectExist = false;
+        for ( AudioManager::AudioLoopEffectInfo & info : effects ) {
+            if ( info.angle == angle ) {
+                info.volumePercentage = std::max( volumePercentage, info.volumePercentage );
+                doesEffectExist = true;
+                break;
+            }
+        }
+
+        if ( doesEffectExist ) {
+            continue;
+        }
+
+        effects.emplace_back( angle, volumePercentage );
+
+        --availableChannels;
+        if ( availableChannels == 0 ) {
+            break;
+        }
+    }
+
+    AudioManager::playLoopSoundsAsync( std::move( soundEffects ) );
 }
 
-u32 Game::GetMixerChannelFromObject( const Maps::Tiles & tile )
+void Game::restoreSoundsForCurrentFocus()
 {
-    // force: check stream
-    if ( tile.isStream() )
-        return 13;
+    AudioManager::ResetAudio();
 
-    return M82::GetIndexLOOP00XXFromObject( tile.GetObject( false ) );
+    switch ( Interface::GetFocusType() ) {
+    case GameFocus::HEROES: {
+        const Heroes * focusedHero = Interface::GetFocusHeroes();
+        assert( focusedHero != nullptr );
+
+        const int heroIndexPos = focusedHero->GetIndex();
+        if ( heroIndexPos >= 0 ) {
+            Game::EnvironmentSoundMixer();
+            AudioManager::PlayMusicAsync( MUS::FromGround( world.GetTiles( heroIndexPos ).GetGround() ), Music::PlaybackMode::RESUME_AND_PLAY_INFINITE );
+        }
+        break;
+    }
+
+    case GameFocus::CASTLE: {
+        const Castle * focusedCastle = Interface::GetFocusCastle();
+        assert( focusedCastle != nullptr );
+
+        Game::EnvironmentSoundMixer();
+        AudioManager::PlayMusicAsync( MUS::FromGround( world.GetTiles( focusedCastle->GetIndex() ).GetGround() ), Music::PlaybackMode::RESUME_AND_PLAY_INFINITE );
+        break;
+    }
+
+    default:
+        break;
+    }
 }
 
-u32 Game::GetRating( void )
+uint32_t Game::GetRating()
 {
     const Settings & conf = Settings::Get();
-    u32 rating = 50;
+    uint32_t rating = 50;
 
     switch ( conf.MapsDifficulty() ) {
     case Difficulty::NORMAL:
@@ -420,7 +528,7 @@ u32 Game::GetRating( void )
     return rating;
 }
 
-u32 Game::GetGameOverScores( void )
+uint32_t Game::GetGameOverScores()
 {
     const Settings & conf = Settings::Get();
 
@@ -438,6 +546,8 @@ u32 Game::GetGameOverScores( void )
         break;
     case Maps::XLARGE:
         mapSizeFactor = 60;
+        break;
+    default:
         break;
     }
 
@@ -464,96 +574,103 @@ u32 Game::GetGameOverScores( void )
     return GetRating() * ( 200 - daysScore ) / 100;
 }
 
-void Game::ShowMapLoadingText( void )
-{
-    fheroes2::Display & display = fheroes2::Display::instance();
-    const fheroes2::Rect pos( 0, display.height() / 2, display.width(), display.height() / 2 );
-    TextBox text( _( "Map is loading..." ), Font::BIG, pos.width );
-
-    // blit test
-    display.fill( 0 );
-    text.Blit( pos.x, pos.y );
-    display.render();
-}
-
-u32 Game::GetLostTownDays( void )
+uint32_t Game::GetLostTownDays()
 {
     return GameStatic::GetGameOverLostDays();
 }
 
-u32 Game::GetViewDistance( u32 d )
-{
-    return GameStatic::GetOverViewDistance( d );
-}
-
-u32 Game::GetWhirlpoolPercent( void )
+uint32_t Game::GetWhirlpoolPercent()
 {
     return GameStatic::GetLostOnWhirlpoolPercent();
 }
 
-std::string Game::GetEncodeString( const std::string & str1 )
-{
-    const Settings & conf = Settings::Get();
-
-    // encode name
-    if ( conf.Unicode() && conf.MapsCharset().size() )
-        return EncodeString( str1.c_str(), conf.MapsCharset().c_str() );
-
-    return str1;
-}
-
-int Game::GetKingdomColors( void )
+int Game::GetKingdomColors()
 {
     return Settings::Get().GetPlayers().GetColors();
 }
 
-int Game::GetActualKingdomColors( void )
+int Game::GetActualKingdomColors()
 {
     return Settings::Get().GetPlayers().GetActualColors();
 }
 
-std::string Game::CountScoute( uint32_t count, int scoute, bool shorts )
+std::string Game::formatMonsterCount( const uint32_t count, const int scoutingLevel, const bool abbreviateNumber /* = false */ )
 {
-    double infelicity = 0;
-    std::string res;
-
-    switch ( scoute ) {
+    switch ( scoutingLevel ) {
     case Skill::Level::BASIC:
-        infelicity = count * 30 / 100.0;
-        break;
+    case Skill::Level::ADVANCED: {
+        // Always use abbreviated numbers for ranges, otherwise the string might become too long
+        auto formatString = []( const uint32_t min, const uint32_t max ) {
+            const std::string minStr = fheroes2::abbreviateNumber( min );
+            const std::string maxStr = fheroes2::abbreviateNumber( max );
 
-    case Skill::Level::ADVANCED:
-        infelicity = count * 15 / 100.0;
-        break;
+            if ( minStr == maxStr ) {
+                return '~' + minStr;
+            }
 
+            return minStr + '-' + maxStr;
+        };
+
+        const auto [min, max] = Army::SizeRange( count );
+        assert( min <= max );
+
+        // Open range without upper bound
+        if ( max == UINT32_MAX ) {
+            return fheroes2::abbreviateNumber( min ) + '+';
+        }
+
+        // With basic scouting level, the range is divided in half and the part of the range into
+        // which the monster count falls is returned
+        if ( scoutingLevel == Skill::Level::BASIC ) {
+            const uint32_t half = min + ( max - min ) / 2;
+
+            if ( count < half ) {
+                return formatString( min, half );
+            }
+
+            return formatString( half, max );
+        }
+
+        // With advanced scouting level, the range is divided into four parts and the part of the
+        // range into which the monster count falls is returned
+        if ( scoutingLevel == Skill::Level::ADVANCED ) {
+            const uint32_t firstQuarter = min + ( max - min ) / 4;
+
+            if ( count < firstQuarter ) {
+                return formatString( min, firstQuarter );
+            }
+
+            const uint32_t secondQuarter = min + ( max - min ) / 2;
+
+            if ( count < secondQuarter ) {
+                return formatString( firstQuarter, secondQuarter );
+            }
+
+            const uint32_t thirdQuarter = min + ( max - min ) / 2 + ( max - min ) / 4;
+
+            if ( count < thirdQuarter ) {
+                return formatString( secondQuarter, thirdQuarter );
+            }
+
+            return formatString( thirdQuarter, max );
+        }
+
+        // We shouldn't be here
+        assert( 0 );
+
+        break;
+    }
+
+    // With expert scouting level, the exact monster count is returned (possibly in abbreviated form)
     case Skill::Level::EXPERT:
-        res = shorts ? GetStringShort( count ) : std::to_string( count );
-        break;
+        return ( abbreviateNumber ? fheroes2::abbreviateNumber( count ) : std::to_string( count ) );
 
     default:
-        return Army::SizeString( count );
+        break;
     }
 
-    if ( res.empty() ) {
-        uint32_t min = Rand::Get( static_cast<uint32_t>( std::floor( count - infelicity + 0.5 ) ), static_cast<uint32_t>( std::floor( count + infelicity + 0.5 ) ) );
-        uint32_t max = 0;
-
-        if ( min > count ) {
-            max = min;
-            min = static_cast<uint32_t>( std::floor( count - infelicity + 0.5 ) );
-        }
-        else
-            max = static_cast<uint32_t>( std::floor( count + infelicity + 0.5 ) );
-
-        res = std::to_string( min );
-
-        if ( min != max ) {
-            res.append( "-" );
-            res.append( std::to_string( max ) );
-        }
-    }
-
-    return res;
+    // Otherwise we just return the approximate string representation (Few, Several, Pack, ...)
+    return Army::SizeString( count );
 }
 
 std::string Game::CountThievesGuild( uint32_t monsterCount, int guildCount )
@@ -562,7 +679,7 @@ std::string Game::CountThievesGuild( uint32_t monsterCount, int guildCount )
     return guildCount == 1 ? "???" : Army::SizeString( monsterCount );
 }
 
-void Game::PlayPickupSound( void )
+void Game::PlayPickupSound()
 {
     int wav = M82::UNKNOWN;
 
@@ -593,5 +710,5 @@ void Game::PlayPickupSound( void )
         return;
     }
 
-    AGG::PlaySound( wav );
+    AudioManager::PlaySound( wav );
 }

@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2020                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2020 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -19,83 +19,101 @@
  ***************************************************************************/
 
 #include "image_tool.h"
-#include "palette_h2.h"
+#include "image_palette.h"
+#include "logging.h"
+
+#include <cassert>
 
 #include <SDL_version.h>
-#include <SDL_video.h>
-
-#if defined( FHEROES2_IMAGE_SUPPORT )
 #if SDL_VERSION_ATLEAST( 2, 0, 0 )
-#define FHEROES2_ENABLE_PNG 1
+#include <SDL_surface.h>
+#else
+#include <SDL_video.h>
+#endif
+
+#if SDL_VERSION_ATLEAST( 2, 0, 0 )
+#if defined( WITH_IMAGE )
+#define ENABLE_PNG
 #include <SDL_image.h>
 #endif
 #endif
 
 namespace
 {
-    std::vector<uint8_t> PALPAlette()
+    bool isPNGFilePath( const std::string & path )
     {
+        const std::string pngExtension( ".png" );
+        return path.size() > pngExtension.size() && ( path.compare( path.size() - pngExtension.size(), pngExtension.size(), pngExtension ) == 0 );
+    }
+
+    std::vector<uint8_t> PALPalette()
+    {
+        const uint8_t * gamePalette = fheroes2::getGamePalette();
+
         std::vector<uint8_t> palette( 256 * 3 );
         for ( size_t i = 0; i < palette.size(); ++i ) {
-            palette[i] = kb_pal[i] << 2;
+            palette[i] = gamePalette[i] << 2;
         }
 
         return palette;
     }
 
+#if defined( ENABLE_PNG )
     bool SaveImage( const fheroes2::Image & image, const std::string & path )
+#else
+    bool SaveImage( const fheroes2::Image & image, std::string path )
+#endif
     {
-        const std::vector<uint8_t> & palette = PALPAlette();
+        const std::vector<uint8_t> & palette = PALPalette();
         const uint8_t * currentPalette = palette.data();
 
 #if SDL_VERSION_ATLEAST( 2, 0, 0 )
-        SDL_Surface * surface = SDL_CreateRGBSurface( 0, image.width(), image.height(), 32, 0xFF, 0xFF00, 0xFF0000, 0xFF000000 );
+        SDL_Surface * surface = SDL_CreateRGBSurface( 0, image.width(), image.height(), 8, 0, 0, 0, 0 );
 #else
-        SDL_Surface * surface = SDL_CreateRGBSurface( SDL_SWSURFACE, image.width(), image.height(), 32, 0xFF, 0xFF00, 0xFF0000, 0xFF000000 );
+        SDL_Surface * surface = SDL_CreateRGBSurface( SDL_SWSURFACE, image.width(), image.height(), 8, 0xFF, 0xFF00, 0xFF0000, 0xFF000000 );
 #endif
-        if ( surface == nullptr )
+        if ( surface == nullptr ) {
+            ERROR_LOG( "Error while creating a SDL surface for an image to be saved under " << path << ". Error " << SDL_GetError() )
             return false;
+        }
+
+        assert( surface->format->BitsPerPixel == 8 );
+
+        std::vector<SDL_Color> paletteSDL;
+        paletteSDL.resize( 256 );
+        for ( int32_t i = 0; i < 256; ++i ) {
+            const uint8_t * value = currentPalette + i * 3;
+            SDL_Color & col = paletteSDL[i];
+
+            col.r = *value;
+            col.g = *( value + 1 );
+            col.b = *( value + 2 );
+        }
+
+#if SDL_VERSION_ATLEAST( 2, 0, 0 )
+        SDL_SetPaletteColors( surface->format->palette, paletteSDL.data(), 0, 256 );
+#else
+        SDL_SetPalette( surface, SDL_LOGPAL | SDL_PHYSPAL, paletteSDL.data(), 0, 256 );
+#endif
 
         const uint32_t width = image.width();
         const uint32_t height = image.height();
 
-        uint32_t * out = static_cast<uint32_t *>( surface->pixels );
-        const uint32_t * outEnd = out + width * height;
-        const uint8_t * in = image.image();
+        memcpy( surface->pixels, image.image(), width * height );
 
-        if ( surface->format->Amask > 0 ) {
-            const uint8_t * transform = image.transform();
-
-            for ( ; out != outEnd; ++out, ++in, ++transform ) {
-                if ( *transform == 1 ) {
-                    *out = SDL_MapRGBA( surface->format, 0, 0, 0, 0 );
-                }
-                else if ( *transform == 2 ) {
-                    *out = SDL_MapRGBA( surface->format, 0, 0, 0, 64 );
-                }
-                else {
-                    const uint8_t * value = currentPalette + *in * 3;
-                    *out = SDL_MapRGBA( surface->format, *value, *( value + 1 ), *( value + 2 ), 255 );
-                }
-            }
-        }
-        else {
-            for ( ; out != outEnd; ++out, ++in ) {
-                const uint8_t * value = currentPalette + *in * 3;
-                *out = SDL_MapRGB( surface->format, *value, *( value + 1 ), *( value + 2 ) );
-            }
-        }
-
-#if defined( FHEROES2_ENABLE_PNG )
+#if defined( ENABLE_PNG )
         int res = 0;
-        const std::string pngExtension( ".png" );
-        if ( path.size() > pngExtension.size() && path.compare( path.size() - pngExtension.size(), pngExtension.size(), pngExtension ) ) {
+        if ( isPNGFilePath( path ) ) {
             res = IMG_SavePNG( surface, path.c_str() );
         }
         else {
             res = SDL_SaveBMP( surface, path.c_str() );
         }
 #else
+        if ( isPNGFilePath( path ) ) {
+            memcpy( path.data() + path.size() - 3, "bmp", 3 );
+        }
+
         const int res = SDL_SaveBMP( surface, path.c_str() );
 #endif
 
@@ -150,7 +168,7 @@ namespace fheroes2
                 const uint8_t * inXEnd = inX + surface->w * 3;
 
                 for ( ; inX != inXEnd; inX += 3, ++outX ) {
-                    *outX = GetColorId( *( inX + 2 ), *( inX + 1 ), *( inX ) );
+                    *outX = GetColorId( *( inX + 2 ), *( inX + 1 ), *inX );
                 }
             }
         }
@@ -176,16 +194,16 @@ namespace fheroes2
                         if ( alpha == 0 ) {
                             *transformX = 1;
                         }
-                        else if ( *( inX ) == 0 && *( inX + 1 ) == 0 && *( inX + 2 ) == 0 ) {
+                        else if ( *inX == 0 && *( inX + 1 ) == 0 && *( inX + 2 ) == 0 ) {
                             *transformX = 2;
                         }
                         else {
-                            *outX = GetColorId( *( inX + 2 ), *( inX + 1 ), *( inX ) );
+                            *outX = GetColorId( *( inX + 2 ), *( inX + 1 ), *inX );
                             *transformX = 0;
                         }
                     }
                     else {
-                        *outX = GetColorId( *( inX + 2 ), *( inX + 1 ), *( inX ) );
+                        *outX = GetColorId( *( inX + 2 ), *( inX + 1 ), *inX );
                         *transformX = 0;
                     }
                 }
@@ -213,7 +231,7 @@ namespace fheroes2
 
         const uint8_t * dataEnd = data + sizeData;
 
-        while ( 1 ) {
+        while ( true ) {
             if ( 0 == *data ) { // 0x00 - end of row
                 imageData += width;
                 imageTransform += width;
@@ -291,38 +309,12 @@ namespace fheroes2
         return sprite;
     }
 
-    Sprite addShadow( const Sprite & in, const Point & shadowOffset, const uint8_t shadowType )
+    bool isPNGFormatSupported()
     {
-        if ( in.empty() || shadowOffset.x > 0 || shadowOffset.y < 0 )
-            return in;
-
-        const int32_t width = in.width();
-        const int32_t height = in.height();
-
-        Sprite out( width - shadowOffset.x, height + shadowOffset.y );
-        out.reset();
-
-        Copy( in, 0, 0, out, -shadowOffset.x, 0, width, height );
-
-        const int32_t widthOut = out.width();
-
-        // Shadow has (-x, +y) offset.
-        const uint8_t * transformInY = out.transform() - shadowOffset.x;
-        const uint8_t * transformInYEnd = transformInY + widthOut * height;
-        uint8_t * transformOutY = out.transform() + shadowOffset.y * widthOut;
-
-        for ( ; transformInY != transformInYEnd; transformInY += widthOut, transformOutY += widthOut ) {
-            const uint8_t * transformInX = transformInY;
-            uint8_t * transformOutX = transformOutY;
-            const uint8_t * transformInXEnd = transformInX + width;
-
-            for ( ; transformInX != transformInXEnd; ++transformInX, ++transformOutX ) {
-                if ( *transformInX == 0 && *transformOutX == 1 ) {
-                    *transformOutX = shadowType;
-                }
-            }
-        }
-
-        return out;
+#if defined( ENABLE_PNG )
+        return true;
+#else
+        return false;
+#endif
     }
 }

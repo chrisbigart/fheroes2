@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2010 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2010 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,9 +24,16 @@
 #ifndef H2BATTLE_CATAPULT_H
 #define H2BATTLE_CATAPULT_H
 
-#include "gamedefs.h"
+#include <cstdint>
+#include <vector>
+
+#include "math_base.h"
 
 class HeroBase;
+namespace Rand
+{
+    class DeterministicRandomGenerator;
+}
 
 namespace Battle
 {
@@ -44,23 +52,27 @@ namespace Battle
     class Catapult
     {
     public:
-        explicit Catapult( const HeroBase & hero );
+        explicit Catapult( const HeroBase & hero, const Rand::DeterministicRandomGenerator & randomGenerator );
+        Catapult( const Catapult & ) = delete;
+
+        Catapult & operator=( const Catapult & ) = delete;
 
         static fheroes2::Point GetTargetPosition( int target, bool hit );
 
-        u32 GetShots( void ) const
+        uint32_t GetShots() const
         {
             return catShots;
         }
 
-        int GetTarget( const std::vector<u32> & ) const;
-        u32 GetDamage() const;
+        int GetTarget( const std::vector<uint32_t> & ) const;
+        uint32_t GetDamage() const;
         bool IsNextShotHit() const;
 
     private:
-        u32 catShots;
-        u32 doubleDamageChance;
+        uint32_t catShots;
+        uint32_t doubleDamageChance;
         bool canMiss;
+        const Rand::DeterministicRandomGenerator & _randomGenerator;
     };
 }
 

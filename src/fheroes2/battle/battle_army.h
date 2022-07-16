@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2012 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2012 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -26,21 +27,28 @@
 #include "army.h"
 #include "bitmodes.h"
 
+namespace Rand
+{
+    class DeterministicRandomGenerator;
+}
+
 namespace Battle
 {
     class Unit;
+    class TroopsUidGenerator;
 
     class Units : public std::vector<Unit *>
     {
     public:
         Units();
-        Units( const Units &, bool filter = false );
+        Units( const Units & ) = delete;
+        Units( const Units & units, const bool filter );
         virtual ~Units() = default;
 
         Units & operator=( const Units & ) = delete;
 
-        Unit * FindMode( u32 );
-        Unit * FindUID( u32 );
+        Unit * FindMode( uint32_t mod ) const;
+        Unit * FindUID( uint32_t pid ) const;
 
         void SortSlowest();
         void SortFastest();
@@ -50,36 +58,35 @@ namespace Battle
     class Force : public Units, public BitModes
     {
     public:
-        Force( Army &, bool );
+        Force( Army & parent, bool opposite, const Rand::DeterministicRandomGenerator & randomGenerator, TroopsUidGenerator & generator );
         Force( const Force & ) = delete;
 
         ~Force() override;
 
         Force & operator=( const Force & ) = delete;
 
-        HeroBase * GetCommander( void );
-        const HeroBase * GetCommander( void ) const;
+        HeroBase * GetCommander();
+        const HeroBase * GetCommander() const;
 
-        bool isValid( void ) const;
+        const Units & getUnits() const;
+
+        bool isValid( const bool considerBattlefieldArmy = true ) const;
         bool HasMonster( const Monster & ) const;
-        u32 GetDeadHitPoints( void ) const;
-        u32 GetDeadCounts( void ) const;
-        int GetColor( void ) const;
-        int GetControl( void ) const;
-        uint32_t GetSurrenderCost( void ) const;
-        Troops GetKilledTroops( void ) const;
+        uint32_t GetDeadHitPoints() const;
+        uint32_t GetDeadCounts() const;
+        int GetColor() const;
+        int GetControl() const;
+        uint32_t GetSurrenderCost() const;
+        Troops GetKilledTroops() const;
         bool animateIdleUnits();
         void resetIdleAnimation();
 
-        void NewTurn( void );
-        void SyncArmyCount( bool checkResurrected );
-
-        static Unit * GetCurrentUnit( const Force & army1, const Force & army2, bool part1, int preferredColor );
-        static void UpdateOrderUnits( const Force & army1, const Force & army2, const Unit * activeUnit, int preferredColor, const Units & orderHistory, Units & orders );
+        void NewTurn();
+        void SyncArmyCount();
 
     private:
         Army & army;
-        std::vector<u32> uids;
+        std::vector<uint32_t> uids;
     };
 }
 

@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2012 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2012 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -25,10 +26,13 @@
 #include "army.h"
 #include "dialog.h"
 #include "dialog_selectitems.h"
-#include "game.h"
+#include "game_hotkeys.h"
 #include "icn.h"
 #include "race.h"
 #include "text.h"
+#include "tools.h"
+#include "translations.h"
+#include "ui_monster.h"
 #include "world.h"
 
 #include <cassert>
@@ -40,20 +44,30 @@ namespace
         const Army * armyFrom = troopFrom.GetArmy();
         const bool saveLastTroop = armyFrom->SaveLastTroop() && armyFrom != armyTarget;
         const bool isSameTroopType = troopTarget.isValid() && troopFrom.GetID() == troopTarget.GetID();
+        const uint32_t overallCount = isSameTroopType ? troopFrom.GetCount() + troopTarget.GetCount() : troopFrom.GetCount();
 
-        if ( troopFrom.GetCount() <= 1 ) {
-            // cross-army split logic - prevent splits where we'd lose the last stack of a hero
-            if ( saveLastTroop )
+        assert( overallCount > 0 );
+
+        if ( overallCount == 1 ) {
+            // prevent cross-army split if we lose the last unit in the hero army
+            if ( saveLastTroop ) {
                 return;
-            // join the two stacks if the troop types are same and the source stack is just 1 unit
-            else if ( isSameTroopType ) {
-                troopTarget.SetCount( troopTarget.GetCount() + troopFrom.GetCount() );
-                troopFrom.Reset();
             }
-            // or else just move the source troop around
-            else if ( !troopTarget.isValid() ) {
-                Army::SwapTroops( troopFrom, troopTarget );
-            }
+
+            // it seems that we are just moving a single unit to a free cell
+            assert( !troopTarget.isValid() );
+
+            Army::SwapTroops( troopFrom, troopTarget );
+        }
+        else if ( !troopTarget.isValid() && troopFrom.GetCount() == 2 ) {
+            // a player splits a slot with two monsters into an empty slot; move one monster into the source slot to the target slot.
+            troopFrom.SetCount( 1 );
+            troopTarget.Set( troopFrom.GetMonster(), 1 );
+        }
+        else if ( isSameTroopType && troopFrom.isValid() && troopFrom.GetCount() == 1 && troopTarget.isValid() && troopTarget.GetCount() == 1 ) {
+            // a player splits the same troop type and both count one; move a monster from the source slot to the target slot.
+            troopFrom.Reset();
+            troopTarget.SetCount( 2 );
         }
         else {
             uint32_t freeSlots = static_cast<uint32_t>( 1 + armyTarget->Size() - armyTarget->GetCount() );
@@ -64,9 +78,8 @@ namespace
             const uint32_t maxCount = saveLastTroop ? troopFrom.GetCount() - 1 : troopFrom.GetCount();
             uint32_t redistributeCount = isSameTroopType ? 1 : troopFrom.GetCount() / 2;
 
-            // if splitting to the same troop type, use this bool to turn off fast split option at the beginning of the dialog
             bool useFastSplit = !isSameTroopType;
-            const uint32_t slots = Dialog::ArmySplitTroop( ( freeSlots > maxCount ? maxCount : freeSlots ), maxCount, saveLastTroop, redistributeCount, useFastSplit );
+            const uint32_t slots = Dialog::ArmySplitTroop( ( freeSlots > overallCount ? overallCount : freeSlots ), maxCount, redistributeCount, useFastSplit );
 
             if ( slots < 2 || slots > 6 )
                 return;
@@ -129,15 +142,15 @@ namespace
 
     bool IsSplitHotkeyUsed( ArmyTroop & troopFrom, Army * armyTarget )
     {
-        if ( Game::HotKeyHoldEvent( Game::EVENT_STACKSPLIT_CTRL ) ) {
+        if ( Game::HotKeyHoldEvent( Game::HotKeyEvent::SPLIT_STACK_BY_ONE ) ) {
             RedistributeTroopByOne( troopFrom, armyTarget );
             return true;
         }
-        else if ( Game::HotKeyHoldEvent( Game::EVENT_JOINSTACKS ) ) {
+        if ( Game::HotKeyHoldEvent( Game::HotKeyEvent::JOIN_STACKS ) ) {
             armyTarget->JoinAllTroopsOfType( troopFrom );
             return true;
         }
-        else if ( Game::HotKeyHoldEvent( Game::EVENT_STACKSPLIT_SHIFT ) ) {
+        if ( Game::HotKeyHoldEvent( Game::HotKeyEvent::SPLIT_STACK_BY_HALF ) ) {
             RedistributeTroopEvenly( troopFrom, armyTarget );
             return true;
         }
@@ -154,7 +167,7 @@ ArmyBar::ArmyBar( Army * ptr, bool mini, bool ro, bool change /* false */ )
     , can_change( change )
 {
     if ( use_mini_sprite )
-        SetBackground( fheroes2::Size( 43, 43 ), fheroes2::GetColorId( 0, 45, 0 ) );
+        SetBackground( { 43, 43 }, fheroes2::GetColorId( 0, 45, 0 ) );
     else {
         const fheroes2::Sprite & sprite = fheroes2::AGG::GetICN( ICN::STRIP, 2 );
         SetItemSize( sprite.width(), sprite.height() );
@@ -171,9 +184,14 @@ void ArmyBar::SetArmy( Army * ptr )
     _army = ptr;
     items.clear();
 
-    if ( ptr )
-        for ( u32 ii = 0; ii < ptr->Size(); ++ii )
-            items.push_back( reinterpret_cast<ArmyTroop *>( ptr->GetTroop( ii ) ) );
+    if ( ptr ) {
+        for ( uint32_t ii = 0; ii < ptr->Size(); ++ii ) {
+            ArmyTroop * troop = dynamic_cast<ArmyTroop *>( ptr->GetTroop( ii ) );
+            assert( troop != nullptr );
+
+            items.push_back( troop );
+        }
+    }
 
     SetContentItems();
 }
@@ -228,40 +246,12 @@ void ArmyBar::RedrawItem( ArmyTroop & troop, const fheroes2::Rect & pos, bool se
 
             fheroes2::Blit( mons32, srcrt.x, srcrt.y, dstsf, pos.x + ( pos.width - mons32.width() ) / 2, pos.y + pos.height - mons32.height() - 1, srcrt.width,
                             srcrt.height );
-        }
-        else {
-            switch ( troop.GetRace() ) {
-            case Race::KNGT:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 4 ), dstsf, pos.x, pos.y );
-                break;
-            case Race::BARB:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 5 ), dstsf, pos.x, pos.y );
-                break;
-            case Race::SORC:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 6 ), dstsf, pos.x, pos.y );
-                break;
-            case Race::WRLK:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 7 ), dstsf, pos.x, pos.y );
-                break;
-            case Race::WZRD:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 8 ), dstsf, pos.x, pos.y );
-                break;
-            case Race::NECR:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 9 ), dstsf, pos.x, pos.y );
-                break;
-            default:
-                fheroes2::Blit( fheroes2::AGG::GetICN( ICN::STRIP, 10 ), dstsf, pos.x, pos.y );
-                break;
-            }
 
-            const fheroes2::Sprite & spmonh = fheroes2::AGG::GetICN( troop.ICNMonh(), 0 );
-            fheroes2::Blit( spmonh, dstsf, pos.x + spmonh.x(), pos.y + spmonh.y() );
-        }
-
-        if ( use_mini_sprite ) {
             text.Blit( pos.x + pos.width - text.w() - 3, pos.y + pos.height - text.h(), dstsf );
         }
         else {
+            fheroes2::renderMonsterFrame( troop, dstsf, pos.getPosition() );
+
             text.Blit( pos.x + pos.width - text.w() - 3, pos.y + pos.height - text.h() - 1, dstsf );
         }
 
@@ -272,7 +262,7 @@ void ArmyBar::RedrawItem( ArmyTroop & troop, const fheroes2::Rect & pos, bool se
     }
 }
 
-void ArmyBar::ResetSelected( void )
+void ArmyBar::ResetSelected()
 {
     spcursor.hide();
     Interface::ItemsActionBar<ArmyTroop>::ResetSelected();
@@ -301,7 +291,13 @@ bool ArmyBar::ActionBarCursor( ArmyTroop & troop )
         }
         else if ( !troop.isValid() ) {
             if ( !read_only ) {
-                msg = _( "Move or right click to redistribute %{name}" );
+                if ( troop2->GetCount() == 1 ) {
+                    msg = _( "Move the %{name} " );
+                }
+                else {
+                    msg = _( "Move or right click to redistribute %{name}" );
+                }
+
                 StringReplace( msg, "%{name}", troop2->GetName() );
             }
         }
@@ -345,7 +341,13 @@ bool ArmyBar::ActionBarCursor( ArmyTroop & destTroop, ArmyTroop & selectedTroop 
     else if ( save_last_troop )
         msg = _( "Cannot move last troop" );
     else {
-        msg = _( "Move or right click to redistribute %{name}" );
+        if ( selectedTroop.GetCount() == 1 ) {
+            msg = _( "Move the %{name}" );
+        }
+        else {
+            msg = _( "Move or right click to redistribute %{name}" );
+        }
+
         StringReplace( msg, "%{name}", selectedTroop.GetName() );
     }
 
@@ -365,7 +367,7 @@ bool ArmyBar::ActionBarLeftMouseSingleClick( ArmyTroop & troop )
         const bool isSameTroopType = troop.isValid() && troop.GetID() == selectedTroop->GetID();
 
         // prioritize standard split via shift hotkey
-        if ( ( !troop.isValid() || isSameTroopType ) && Game::HotKeyHoldEvent( Game::EVENT_STACKSPLIT_SHIFT ) ) {
+        if ( ( !troop.isValid() || isSameTroopType ) && Game::HotKeyHoldEvent( Game::HotKeyEvent::SPLIT_STACK_BY_HALF ) ) {
             RedistributeArmy( *selectedTroop, troop, _army );
             ResetSelected();
         }
@@ -381,7 +383,7 @@ bool ArmyBar::ActionBarLeftMouseSingleClick( ArmyTroop & troop )
         // exchange
         else if ( selectedTroop ) {
             // count this as an attempt to split to a troop type that is not the same
-            if ( Game::HotKeyHoldEvent( Game::EVENT_STACKSPLIT_SHIFT ) )
+            if ( Game::HotKeyHoldEvent( Game::HotKeyEvent::SPLIT_STACK_BY_HALF ) )
                 ResetSelected();
             else if ( IsSplitHotkeyUsed( troop, _army ) )
                 return false;
@@ -432,9 +434,9 @@ bool ArmyBar::ActionBarLeftMouseSingleClick( ArmyTroop & troop )
             const Monster mons = Dialog::SelectMonster( cur );
 
             if ( mons.isValid() ) {
-                u32 count = 1;
+                uint32_t count = 1;
 
-                if ( Dialog::SelectCount( "Set Count", 1, 500000, count ) )
+                if ( Dialog::SelectCount( _( "Set Count" ), 1, 500000, count ) )
                     troop.Set( mons, count );
             }
         }
@@ -451,7 +453,7 @@ bool ArmyBar::ActionBarLeftMouseSingleClick( ArmyTroop & destTroop, ArmyTroop & 
 
     // specifically for shift hotkey, handle this logic before anything else
     // this will ensure that clicking on a different troop type while shift key is pressed will not show the split dialogue, which can be ambiguous
-    if ( Game::HotKeyHoldEvent( Game::EVENT_STACKSPLIT_SHIFT ) ) {
+    if ( Game::HotKeyHoldEvent( Game::HotKeyEvent::SPLIT_STACK_BY_HALF ) ) {
         if ( destTroop.isEmpty() || isSameTroopType ) {
             RedistributeArmy( selectedTroop, destTroop, _army );
             ResetSelected();
@@ -518,13 +520,13 @@ bool ArmyBar::ActionBarLeftMouseDoubleClick( ArmyTroop & troop )
              castle && castle->GetRace() == troop.GetRace() && castle->isBuild( troop.GetUpgrade().GetDwelling() ) ) {
             flags |= Dialog::UPGRADE;
 
-            if ( !world.GetKingdom( _army->GetColor() ).AllowPayment( troop.GetUpgradeCost() ) )
+            if ( !world.GetKingdom( _army->GetColor() ).AllowPayment( troop.GetTotalUpgradeCost() ) )
                 flags |= Dialog::UPGRADE_DISABLE;
         }
 
         switch ( Dialog::ArmyInfo( troop, flags ) ) {
         case Dialog::UPGRADE:
-            world.GetKingdom( _army->GetColor() ).OddFundsResource( troop.GetUpgradeCost() );
+            world.GetKingdom( _army->GetColor() ).OddFundsResource( troop.GetTotalUpgradeCost() );
             troop.Upgrade();
             break;
 

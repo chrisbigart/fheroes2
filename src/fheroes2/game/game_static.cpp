@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -20,16 +21,15 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#include <cmath>
-#include <cstring>
+#include <array>
 
-#include "difficulty.h"
 #include "game.h"
 #include "game_static.h"
 #include "mp2.h"
 #include "race.h"
 #include "resource.h"
-#include "settings.h"
+#include "save_format_version.h"
+#include "serialize.h"
 #include "skill.h"
 #include "skill_static.h"
 
@@ -118,279 +118,30 @@ namespace Skill
         /* estates */ 1,   /* leadership */ 0, /* logistics */ 1, /* luck */ 1,
         /* mysticism */ 1, /* navigation */ 1, /* necromancy*/ 0, /* pathfinding */ 1,
         /* scouting */ 1,  /* wisdom */ 1};
-
-    StreamBase & operator<<( StreamBase & msg, const level_t & obj )
-    {
-        return msg << obj.basic << obj.advanced << obj.expert;
-    }
-
-    StreamBase & operator>>( StreamBase & msg, level_t & obj )
-    {
-        return msg >> obj.basic >> obj.advanced >> obj.expert;
-    }
-
-    StreamBase & operator<<( StreamBase & msg, const primary_t & obj )
-    {
-        return msg << obj.attack << obj.defense << obj.power << obj.knowledge;
-    }
-
-    StreamBase & operator>>( StreamBase & msg, primary_t & obj )
-    {
-        return msg >> obj.attack >> obj.defense >> obj.power >> obj.knowledge;
-    }
-
-    StreamBase & operator<<( StreamBase & msg, const secondary_t & obj )
-    {
-        return msg << obj.archery << obj.ballistics << obj.diplomacy << obj.eagleeye << obj.estates << obj.leadership << obj.logistics << obj.luck << obj.mysticism
-                   << obj.navigation << obj.necromancy << obj.pathfinding << obj.scouting << obj.wisdom;
-    }
-
-    StreamBase & operator>>( StreamBase & msg, secondary_t & obj )
-    {
-        return msg >> obj.archery >> obj.ballistics >> obj.diplomacy >> obj.eagleeye >> obj.estates >> obj.leadership >> obj.logistics >> obj.luck >> obj.mysticism
-               >> obj.navigation >> obj.necromancy >> obj.pathfinding >> obj.scouting >> obj.wisdom;
-    }
-
-    StreamBase & operator<<( StreamBase & msg, const stats_t & obj )
-    {
-        return msg << obj.captain_primary << obj.initial_primary << obj.initial_book << obj.initial_spell << obj.initial_secondary << obj.over_level
-                   << obj.mature_primary_under << obj.mature_primary_over << obj.mature_secondary;
-    }
-
-    StreamBase & operator>>( StreamBase & msg, stats_t & obj )
-    {
-        return msg >> obj.captain_primary >> obj.initial_primary >> obj.initial_book >> obj.initial_spell >> obj.initial_secondary >> obj.over_level
-               >> obj.mature_primary_under >> obj.mature_primary_over >> obj.mature_secondary;
-    }
-
-    StreamBase & operator<<( StreamBase & msg, const values_t & obj )
-    {
-        return msg << obj.values;
-    }
-
-    StreamBase & operator>>( StreamBase & msg, values_t & obj )
-    {
-        return msg >> obj.values;
-    }
 }
 
 namespace GameStatic
 {
-    u8 whirlpool_lost_percent = 50;
-
-    /* town, castle, heroes, artifact_telescope, object_observation_tower, object_magi_eyes */
-    u8 overview_distance[] = {4, 5, 4, 1, 20, 9};
-
-    u8 gameover_lost_days = 7;
-
-    // kingdom
-    u8 kingdom_max_heroes = 8;
-    cost_t kingdom_starting_resource[] = {{10000, 30, 10, 30, 10, 10, 10},
-                                          {7500, 20, 5, 20, 5, 5, 5},
-                                          {5000, 10, 2, 10, 2, 2, 2},
-                                          {2500, 5, 0, 5, 0, 0, 0},
-                                          {0, 0, 0, 0, 0, 0, 0},
-                                          // ai resource
-                                          {10000, 30, 10, 30, 10, 10, 10}};
-
-    // castle
-    u8 castle_grown_well = 2;
-    u8 castle_grown_wel2 = 8;
-    u8 castle_grown_week_of = 5;
-    u8 castle_grown_month_of = 100;
-
-    u8 mageguild_restore_spell_points_day[] = {20, 40, 60, 80, 100};
-
-    // heroes
-    u8 heroes_spell_points_day = 1;
-
-    // spells
-    u16 spell_dd_distance = 0;
-    u16 spell_dd_sp = 0;
-    u16 spell_dd_hp = 0;
-
-    // monsters
-    float monsterUpgradeRatio = 1.0f;
-
-    // visit objects mod: OBJ_BUOY, OBJ_OASIS, OBJ_WATERINGHOLE, OBJ_TEMPLE, OBJ_GRAVEYARD, OBJ_DERELICTSHIP,
-    // OBJ_SHIPWRECK, OBJ_MERMAID, OBJ_FAERIERING, OBJ_FOUNTAIN, OBJ_IDOL, OBJ_PYRAMID
-    int8_t objects_mod[] = {1, 1, 1, 2, -1, -1, -1, 1, 1, 1, 1, -2};
-
     // world
-    u32 uniq = 0;
+    uint32_t uniq = 0;
 }
 
-StreamBase & GameStatic::operator<<( StreamBase & msg, const Data & /*obj*/ )
+uint32_t GameStatic::GetLostOnWhirlpoolPercent()
 {
-    msg << whirlpool_lost_percent << kingdom_max_heroes << castle_grown_well << castle_grown_wel2 << castle_grown_week_of << castle_grown_month_of
-        << heroes_spell_points_day << gameover_lost_days << spell_dd_distance << spell_dd_sp << spell_dd_hp;
-
-    u8 array_size = ARRAY_COUNT( overview_distance );
-    msg << array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg << overview_distance[ii];
-
-    array_size = ARRAY_COUNT( kingdom_starting_resource );
-    msg << array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg << kingdom_starting_resource[ii];
-
-    array_size = ARRAY_COUNT( mageguild_restore_spell_points_day );
-    msg << array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg << mageguild_restore_spell_points_day[ii];
-
-    array_size = ARRAY_COUNT( objects_mod );
-    msg << array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg << objects_mod[ii];
-
-    msg << monsterUpgradeRatio << uniq;
-
-    // skill statics
-    array_size = ARRAY_COUNT( Skill::_stats );
-    msg << array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg << Skill::_stats[ii];
-
-    array_size = ARRAY_COUNT( Skill::_values );
-    msg << array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg << Skill::_values[ii];
-
-    msg << Skill::_from_witchs_hut;
-
-    return msg;
+    return 50;
 }
 
-StreamBase & GameStatic::operator>>( StreamBase & msg, const Data & /*obj*/ )
+uint32_t GameStatic::getFogDiscoveryDistance( const FogDiscoveryType type )
 {
-    msg >> whirlpool_lost_percent >> kingdom_max_heroes >> castle_grown_well >> castle_grown_wel2 >> castle_grown_week_of >> castle_grown_month_of
-        >> heroes_spell_points_day >> gameover_lost_days >> spell_dd_distance >> spell_dd_sp >> spell_dd_hp;
-
-    u8 array_size = 0;
-
-    msg >> array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg >> overview_distance[ii];
-
-    msg >> array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg >> kingdom_starting_resource[ii];
-
-    msg >> array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg >> mageguild_restore_spell_points_day[ii];
-
-    msg >> array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg >> objects_mod[ii];
-
-    msg >> monsterUpgradeRatio >> uniq;
-    if ( monsterUpgradeRatio < 0 ) {
-        monsterUpgradeRatio = 1.0f;
-    }
-
-    msg >> array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg >> Skill::_stats[ii];
-
-    msg >> array_size;
-    for ( u32 ii = 0; ii < array_size; ++ii )
-        msg >> Skill::_values[ii];
-
-    msg >> Skill::_from_witchs_hut;
-
-    return msg;
-}
-
-bool GameStatic::isCustomMonsterUpgradeOption()
-{
-    return std::fabs( monsterUpgradeRatio - 1.0f ) > 0.001f;
-}
-
-float GameStatic::GetMonsterUpgradeRatio()
-{
-    return monsterUpgradeRatio;
-}
-
-u32 GameStatic::GetLostOnWhirlpoolPercent( void )
-{
-    return whirlpool_lost_percent;
-}
-
-u32 GameStatic::GetOverViewDistance( u32 d )
-{
-    return d >= ARRAY_COUNT( overview_distance ) ? 0 : overview_distance[d];
-}
-
-u32 GameStatic::GetGameOverLostDays( void )
-{
-    return gameover_lost_days;
-}
-
-u32 GameStatic::GetHeroesRestoreSpellPointsPerDay( void )
-{
-    return heroes_spell_points_day;
-}
-
-u32 GameStatic::GetMageGuildRestoreSpellPointsPercentDay( int level )
-{
-    return level && level < 6 ? mageguild_restore_spell_points_day[level - 1] : 0;
-}
-
-u32 GameStatic::GetKingdomMaxHeroes( void )
-{
-    return kingdom_max_heroes;
-}
-
-u32 GameStatic::GetCastleGrownWell( void )
-{
-    return castle_grown_well;
-}
-
-u32 GameStatic::GetCastleGrownWel2( void )
-{
-    return castle_grown_wel2;
-}
-
-u32 GameStatic::GetCastleGrownWeekOf( void )
-{
-    return castle_grown_week_of;
-}
-
-u32 GameStatic::GetCastleGrownMonthOf( void )
-{
-    return castle_grown_month_of;
-}
-
-s32 GameStatic::ObjectVisitedModifiers( int obj )
-{
-    switch ( obj ) {
-    case MP2::OBJ_BUOY:
-        return objects_mod[0];
-    case MP2::OBJ_OASIS:
-        return objects_mod[1];
-    case MP2::OBJ_WATERINGHOLE:
-        return objects_mod[2];
-    case MP2::OBJ_TEMPLE:
-        return objects_mod[3];
-    case MP2::OBJ_GRAVEYARD:
-        return objects_mod[4];
-    case MP2::OBJ_DERELICTSHIP:
-        return objects_mod[5];
-    case MP2::OBJ_SHIPWRECK:
-        return objects_mod[6];
-    case MP2::OBJ_MERMAID:
-        return objects_mod[7];
-    case MP2::OBJ_FAERIERING:
-        return objects_mod[8];
-    case MP2::OBJ_FOUNTAIN:
-        return objects_mod[9];
-    case MP2::OBJ_IDOL:
-        return objects_mod[10];
-    case MP2::OBJ_PYRAMID:
-        return objects_mod[11];
+    switch ( type ) {
+    case FogDiscoveryType::CASTLE:
+        return 5;
+    case FogDiscoveryType::HEROES:
+        return 4;
+    case FogDiscoveryType::OBSERVATION_TOWER:
+        return 20;
+    case FogDiscoveryType::MAGI_EYES:
+        return 9;
     default:
         break;
     }
@@ -398,34 +149,65 @@ s32 GameStatic::ObjectVisitedModifiers( int obj )
     return 0;
 }
 
-u32 GameStatic::Spell_DD_Distance( void )
+uint32_t GameStatic::GetGameOverLostDays()
 {
-    return spell_dd_distance;
+    return 7;
 }
 
-u32 GameStatic::Spell_DD_SP( void )
+uint32_t GameStatic::GetHeroesRestoreSpellPointsPerDay()
 {
-    return spell_dd_sp;
+    return 1;
 }
 
-u32 GameStatic::Spell_DD_HP( void )
+uint32_t GameStatic::GetKingdomMaxHeroes()
 {
-    return spell_dd_hp;
+    return 8;
 }
 
-void GameStatic::SetSpell_DD_Distance( int v )
+uint32_t GameStatic::GetCastleGrownWell()
 {
-    spell_dd_distance = v;
+    return 2;
 }
 
-void GameStatic::SetSpell_DD_SP( int v )
+uint32_t GameStatic::GetCastleGrownWel2()
 {
-    spell_dd_sp = v;
+    return 8;
 }
 
-void GameStatic::SetSpell_DD_HP( int v )
+uint32_t GameStatic::GetCastleGrownWeekOf()
 {
-    spell_dd_hp = v;
+    return 5;
+}
+
+uint32_t GameStatic::GetCastleGrownMonthOf()
+{
+    return 100;
+}
+
+int32_t GameStatic::ObjectVisitedModifiers( const MP2::MapObjectType objectType )
+{
+    switch ( objectType ) {
+    case MP2::OBJ_BUOY:
+    case MP2::OBJ_OASIS:
+    case MP2::OBJ_WATERINGHOLE:
+    case MP2::OBJ_MERMAID:
+    case MP2::OBJ_FAERIERING:
+    case MP2::OBJ_FOUNTAIN:
+    case MP2::OBJ_IDOL:
+        return 1;
+    case MP2::OBJ_TEMPLE:
+        return 2;
+    case MP2::OBJ_GRAVEYARD:
+    case MP2::OBJ_DERELICTSHIP:
+    case MP2::OBJ_SHIPWRECK:
+        return -1;
+    case MP2::OBJ_PYRAMID:
+        return -2;
+    default:
+        break;
+    }
+
+    return 0;
 }
 
 const Skill::stats_t * GameStatic::GetSkillStats( int race )
@@ -488,18 +270,12 @@ const Skill::values_t * GameStatic::GetSkillValues( int type )
     return nullptr;
 }
 
-const Skill::secondary_t * GameStatic::GetSkillForWitchsHut( void )
+const Skill::secondary_t * GameStatic::GetSkillForWitchsHut()
 {
     return &Skill::_from_witchs_hut;
 }
 
-GameStatic::Data & GameStatic::Data::Get( void )
-{
-    static Data gds;
-    return gds;
-}
-
-int GameStatic::GetBattleMoatReduceDefense( void )
+int GameStatic::GetBattleMoatReduceDefense()
 {
     return 3;
 }

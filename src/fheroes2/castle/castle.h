@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,6 +23,8 @@
 #ifndef H2CASTLE_H
 #define H2CASTLE_H
 
+#include <algorithm>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -29,25 +32,16 @@
 #include "bitmodes.h"
 #include "captain.h"
 #include "castle_heroes.h"
-#include "heroes.h"
 #include "mageguild.h"
-#include "monster_anim.h"
 #include "position.h"
 #include "ui_button.h"
 
+namespace fheroes2
+{
+    class RandomMonsterAnimation;
+}
+
 class Heroes;
-
-class MeetingButton : public fheroes2::ButtonSprite
-{
-public:
-    MeetingButton( s32, s32 );
-};
-
-class SwapButton : public fheroes2::ButtonSprite
-{
-public:
-    SwapButton( s32, s32 );
-};
 
 enum building_t : uint32_t
 {
@@ -109,72 +103,117 @@ public:
     {
         ALLOWCASTLE = 0x0002,
         CUSTOMARMY = 0x0004,
-        ALLOWBUILD = 0x0008,
-        DISABLEHIRES = 0x0010,
-        CAPITAL = 0x0020
+        ALLOWBUILD = 0x0008
+    };
+
+    enum class CastleDialogReturnValue : int
+    {
+        DoNothing,
+        Close, // Close the dialog.
+        NextCastle, // Open main dialog of the next castle.
+        PreviousCastle, // Open main dialog of the previous castle.
+        NextCostructionWindow, // Open construction dialog of the next castle.
+        PreviousCostructionWindow // Open construction dialog of the previous castle.
     };
 
     Castle();
-    Castle( s32, s32, int rs );
+    Castle( int32_t cx, int32_t cy, int rc );
+    Castle( const Castle & ) = delete;
     ~Castle() override = default;
 
-    void LoadFromMP2( StreamBuf );
+    Castle & operator=( const Castle & ) = delete;
 
-    Captain & GetCaptain( void );
-    const Captain & GetCaptain( void ) const;
+    void LoadFromMP2( const std::vector<uint8_t> & data );
 
-    bool isCastle( void ) const;
-    bool isCapital( void ) const;
-    bool HaveNearlySea( void ) const;
-    bool PresentBoat( void ) const;
-    bool AllowBuyHero( const Heroes &, std::string * = nullptr ) const;
-    bool isPosition( const fheroes2::Point & ) const;
-    bool isNecromancyShrineBuild( void ) const;
+    Captain & GetCaptain()
+    {
+        return captain;
+    }
 
-    u32 CountBuildings( void ) const;
+    const Captain & GetCaptain() const
+    {
+        return captain;
+    }
+
+    bool isCastle() const
+    {
+        return ( building & BUILD_CASTLE ) != 0;
+    }
+
+    bool HaveNearlySea() const;
+    bool PresentBoat() const;
+    bool AllowBuyHero( std::string * = nullptr ) const;
+    bool isPosition( const fheroes2::Point & pt ) const override;
+    bool isNecromancyShrineBuild() const;
+
+    uint32_t CountBuildings() const;
 
     Heroes * RecruitHero( Heroes * );
-    CastleHeroes GetHeroes( void ) const;
+    CastleHeroes GetHeroes() const;
 
-    int GetRace( void ) const;
-    const std::string & GetName( void ) const;
-    int GetControl( void ) const override;
+    int GetRace() const
+    {
+        return race;
+    }
 
-    int GetLevelMageGuild( void ) const;
-    const MageGuild & GetMageGuild( void ) const;
-    bool HaveLibraryCapability( void ) const;
-    bool isLibraryBuild( void ) const;
+    const std::string & GetName() const
+    {
+        return name;
+    }
+
+    // This method must be called only at the time of map loading and only for castles with empty names.
+    void setName( const std::set<std::string> & usedNames );
+
+    int GetControl() const override;
+
+    int GetLevelMageGuild() const;
+
+    const MageGuild & GetMageGuild() const
+    {
+        return mageguild;
+    }
+
+    bool HaveLibraryCapability() const;
+    bool isLibraryBuild() const;
     void MageGuildEducateHero( HeroBase & ) const;
 
-    const Army & GetArmy( void ) const;
-    Army & GetArmy( void );
-    const Army & GetActualArmy( void ) const;
-    Army & GetActualArmy( void );
+    bool isFortificationBuild() const;
+
+    const Army & GetArmy() const;
+    Army & GetArmy();
+    const Army & GetActualArmy() const;
+    Army & GetActualArmy();
     double GetGarrisonStrength( const Heroes * attackingHero ) const;
-    u32 getMonstersInDwelling( u32 ) const;
-    u32 GetActualDwelling( u32 ) const;
+    uint32_t getMonstersInDwelling( uint32_t ) const;
+
+    // Returns the correct dwelling type available in the castle. BUILD_NOTHING is returned if this is not a dwelling.
+    uint32_t GetActualDwelling( const uint32_t buildId ) const;
 
     bool RecruitMonsterFromDwelling( uint32_t dw, uint32_t count, bool force = false );
     bool RecruitMonster( const Troop & troop, bool showDialog = true );
     void recruitBestAvailable( Funds budget );
     uint32_t getRecruitLimit( const Monster & monster, const Funds & budget ) const;
 
+    void recruitCastleMax( const Troops & currentCastleArmy, const std::vector<uint32_t> & allCastleDwellings );
+
     int getBuildingValue() const;
 
     // Used only for AI.
+    double getArmyRecruitmentValue() const;
     double getVisitValue( const Heroes & hero ) const;
 
     void ChangeColor( int );
 
-    void ActionNewDay( void );
-    void ActionNewWeek( void );
-    void ActionNewMonth( void );
-    void ActionPreBattle( void );
+    void ActionNewDay();
+    void ActionNewWeek();
+    void ActionNewMonth() const;
+
+    void ActionPreBattle();
     void ActionAfterBattle( bool attacker_wins );
 
     void DrawImageCastle( const fheroes2::Point & pt ) const;
 
-    int OpenDialog( bool readonly = false );
+    CastleDialogReturnValue OpenDialog( const bool readOnly, const bool openConstructionWindow );
 
     int GetAttackModificator( const std::string * ) const;
     int GetDefenseModificator( const std::string * ) const;
@@ -183,43 +222,43 @@ public:
     int GetMoraleModificator( std::string * ) const;
     int GetLuckModificator( std::string * ) const;
 
-    bool AllowBuyBuilding( u32 ) const;
-    bool isBuild( u32 bd ) const;
-    bool BuyBuilding( u32 );
-    bool AllowBuyBoat( void ) const;
-    bool BuyBoat( void ) const;
-    u32 GetBuildingRequirement( u32 ) const;
+    bool AllowBuyBuilding( uint32_t ) const;
 
-    int CheckBuyBuilding( u32 ) const;
+    bool isBuild( uint32_t bd ) const
+    {
+        return ( building & bd ) != 0;
+    }
+
+    bool BuyBuilding( uint32_t );
+    bool AllowBuyBoat() const;
+    bool BuyBoat() const;
+    uint32_t GetBuildingRequirement( uint32_t ) const;
+
+    int CheckBuyBuilding( const uint32_t build ) const;
     static int GetAllBuildingStatus( const Castle & );
 
-    void Scoute( void ) const;
+    void Scoute() const;
 
-    std::string GetStringBuilding( u32 ) const;
-    std::string GetDescriptionBuilding( u32 ) const;
+    std::string GetStringBuilding( uint32_t ) const;
+    std::string GetDescriptionBuilding( uint32_t ) const;
 
-    // Returns message displayed in the status bar on the castle view
-    // when hover over the building
-    std::string buildingStatusMessage( const uint32_t buildingId ) const;
+    static const char * GetStringBuilding( uint32_t, int race );
+    static const char * GetDescriptionBuilding( uint32_t, int race );
 
-    static const char * GetStringBuilding( u32, int race );
-    static const char * GetDescriptionBuilding( u32, int race );
-
-    static int GetICNBuilding( u32, int race );
+    static int GetICNBuilding( uint32_t, int race );
     static int GetICNBoat( int race );
-    u32 GetUpgradeBuilding( u32 ) const;
+    uint32_t GetUpgradeBuilding( uint32_t ) const;
 
     static bool PredicateIsCastle( const Castle * );
     static bool PredicateIsTown( const Castle * );
-    static bool PredicateIsCapital( const Castle * );
     static bool PredicateIsBuildBuilding( const Castle * castle, const uint32_t building );
 
-    static u32 GetGrownWell( void );
-    static u32 GetGrownWel2( void );
-    static u32 GetGrownWeekOf();
-    static u32 GetGrownMonthOf( void );
+    static uint32_t GetGrownWell();
+    static uint32_t GetGrownWel2();
+    static uint32_t GetGrownWeekOf();
+    static uint32_t GetGrownMonthOf();
 
-    std::string String( void ) const;
+    std::string String() const;
 
     int DialogBuyHero( const Heroes * ) const;
     int DialogBuyCastle( bool fixed = true ) const;
@@ -227,29 +266,39 @@ public:
     void SwapCastleHeroes( CastleHeroes & );
 
 private:
-    u32 * GetDwelling( u32 dw );
-    void EducateHeroes( void );
-    fheroes2::Rect RedrawResourcePanel( const fheroes2::Point & ) const;
-    u32 OpenTown( void );
-    void OpenTavern( void ) const;
-    void OpenWell( void );
+    enum class ConstructionDialogResult : int
+    {
+        DoNothing,
+        NextConstructionWindow, // Open construction dialog for the next castle.
+        PrevConstructionWindow, // Open construction dialog for the previous castle.
+        Build, // Build something.
+        RecruitHero // Recruit a hero.
+    };
+
+    uint32_t * GetDwelling( uint32_t dw );
+    void EducateHeroes();
+
+    ConstructionDialogResult openConstructionDialog( uint32_t & dwellingTobuild );
+
+    void OpenTavern() const;
+    void OpenWell();
     void OpenMageGuild( const CastleHeroes & heroes ) const;
     void WellRedrawInfoArea( const fheroes2::Point & cur_pt, const std::vector<fheroes2::RandomMonsterAnimation> & monsterAnimInfo ) const;
-    void JoinRNDArmy( void );
-    void PostLoad( void );
+    Troops getAvailableArmy( Funds potentialBudget ) const;
+    void JoinRNDArmy();
+    void PostLoad();
 
-private:
     friend StreamBase & operator<<( StreamBase &, const Castle & );
     friend StreamBase & operator>>( StreamBase &, Castle & );
 
     int race;
-    u32 building;
+    uint32_t building;
     Captain captain;
 
     std::string name;
 
     MageGuild mageguild;
-    u32 dwelling[CASTLEMAXMONSTER];
+    uint32_t dwelling[CASTLEMAXMONSTER];
     Army army;
 };
 
@@ -270,12 +319,12 @@ namespace CastleDialog
 
         bool IsFadeDone() const
         {
-            return _alpha >= 255;
+            return _alpha == 255;
         }
 
         void StopFadeBuilding();
 
-        uint32_t GetAlpha() const
+        uint8_t GetAlpha() const
         {
             return _alpha;
         }
@@ -286,7 +335,7 @@ namespace CastleDialog
         }
 
     private:
-        uint32_t _alpha;
+        uint8_t _alpha;
         uint32_t _build;
     };
 
@@ -297,7 +346,7 @@ namespace CastleDialog
             , coord( r )
         {}
 
-        bool operator==( u32 b ) const
+        bool operator==( uint32_t b ) const
         {
             return b == static_cast<uint32_t>( id );
         }
@@ -311,42 +360,53 @@ namespace CastleDialog
         CacheBuildings( const Castle &, const fheroes2::Point & );
     };
 
-    void RedrawAllBuilding( const Castle & castle, const fheroes2::Point & dst_pt, const CacheBuildings & orders, const CastleDialog::FadeBuilding & alphaBuilding );
-    void RedrawBuildingSpriteToArea( const fheroes2::Sprite &, s32, s32, const fheroes2::Rect &, uint8_t alpha = 255 );
+    void RedrawAllBuilding( const Castle & castle, const fheroes2::Point & dst_pt, const CacheBuildings & orders, const CastleDialog::FadeBuilding & alphaBuilding,
+                            const uint32_t animationIndex );
 
-    void CastleRedrawBuilding( const Castle &, const fheroes2::Point &, u32 build, u32 frame, uint8_t alpha = 255 );
-    void CastleRedrawBuildingExtended( const Castle &, const fheroes2::Point &, u32 build, u32 frame, uint8_t alpha = 255 );
-
-    bool RoadConnectionNeeded( const Castle & castle, const uint32_t buildId, const bool constructionInProgress );
-    void RedrawRoadConnection( const Castle & castle, const fheroes2::Point & position, const uint32_t buildId, const uint8_t alpha = 255 );
+    void CastleRedrawBuilding( const Castle &, const fheroes2::Point &, uint32_t build, uint32_t frame, uint8_t alpha = 255 );
+    void CastleRedrawBuildingExtended( const Castle &, const fheroes2::Point &, uint32_t build, uint32_t frame, uint8_t alpha = 255 );
 }
 
 struct VecCastles : public std::vector<Castle *>
 {
-    Castle * GetFirstCastle( void ) const;
+    Castle * GetFirstCastle() const;
 
     void ChangeColors( int, int );
-    void SortByBuildingValue();
 };
 
 class AllCastles
 {
 public:
     AllCastles();
-    AllCastles( AllCastles & ) = delete;
+    AllCastles( const AllCastles & ) = delete;
 
     ~AllCastles();
 
     AllCastles & operator=( const AllCastles & ) = delete;
 
-    void Init( void );
-    void Clear( void );
+    void Init();
+    void Clear();
 
     void AddCastle( Castle * castle );
 
     Castle * Get( const fheroes2::Point & position ) const;
 
     void Scoute( int ) const;
+
+    void NewDay()
+    {
+        std::for_each( _castles.begin(), _castles.end(), []( Castle * castle ) { castle->ActionNewDay(); } );
+    }
+
+    void NewWeek()
+    {
+        std::for_each( _castles.begin(), _castles.end(), []( Castle * castle ) { castle->ActionNewWeek(); } );
+    }
+
+    void NewMonth()
+    {
+        std::for_each( _castles.begin(), _castles.end(), []( Castle * castle ) { castle->ActionNewMonth(); } );
+    }
 
     // begin/end methods so we can iterate through the elements
     std::vector<Castle *>::const_iterator begin() const

@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2020                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2020 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -20,7 +20,11 @@
 
 #pragma once
 
+#include <functional>
+
 #include "image.h"
+#include "timing.h"
+#include "ui_base.h"
 
 namespace fheroes2
 {
@@ -47,6 +51,23 @@ namespace fheroes2
         bool _isHidden;
     };
 
+    class TimedEventValidator : public ActionObject
+    {
+    public:
+        explicit TimedEventValidator( std::function<bool()> verification, const uint64_t delayBeforeFirstUpdateMs = 500, const uint64_t delayBetweenUpdateMs = 100 );
+        ~TimedEventValidator() override = default;
+
+        bool isDelayPassed();
+
+    protected:
+        void senderUpdate( const ActionObject * sender ) override;
+
+    private:
+        std::function<bool()> _verification;
+        fheroes2::TimeDelay _delayBetweenUpdateMs;
+        fheroes2::TimeDelay _delayBeforeFirstUpdateMs;
+    };
+
     // This class is useful for cases of playing videos only
     class ScreenPaletteRestorer
     {
@@ -59,6 +80,21 @@ namespace fheroes2
         ScreenPaletteRestorer & operator=( const ScreenPaletteRestorer & ) = delete;
 
         void changePalette( const uint8_t * palette ) const;
+    };
+
+    struct GameInterfaceTypeRestorer
+    {
+        GameInterfaceTypeRestorer() = delete;
+        explicit GameInterfaceTypeRestorer( const bool isEvilInterface_ );
+
+        ~GameInterfaceTypeRestorer();
+
+        GameInterfaceTypeRestorer( const GameInterfaceTypeRestorer & ) = delete;
+        GameInterfaceTypeRestorer & operator=( const GameInterfaceTypeRestorer & ) = delete;
+
+        const bool isEvilInterface;
+
+        const bool isOriginalEvilInterface;
     };
 
     Image CreateDeathWaveEffect( const Image & in, int32_t x, int32_t waveWidth, int32_t waveHeight );

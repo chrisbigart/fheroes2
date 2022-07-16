@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,11 +22,9 @@
  ***************************************************************************/
 
 #include <algorithm>
-#include <sstream>
 
 #include "artifact.h"
 #include "settings.h"
-#include "skill.h"
 #include "spell_storage.h"
 
 SpellStorage::SpellStorage()
@@ -73,14 +72,16 @@ bool SpellStorage::hasAdventureSpell( const int lvl ) const
     return false;
 }
 
-std::string SpellStorage::String( void ) const
+std::string SpellStorage::String() const
 {
-    std::ostringstream os;
+    std::string output;
 
-    for ( const_iterator it = begin(); it != end(); ++it )
-        os << ( *it ).GetName() << ", ";
+    for ( const_iterator it = begin(); it != end(); ++it ) {
+        output += it->GetName();
+        output += ", ";
+    }
 
-    return os.str();
+    return output;
 }
 
 void SpellStorage::Append( const BagArtifacts & bag )
@@ -91,23 +92,5 @@ void SpellStorage::Append( const BagArtifacts & bag )
 
 void SpellStorage::Append( const Artifact & art )
 {
-    switch ( art() ) {
-    case Artifact::SPELL_SCROLL:
-        Append( Spell( art.GetSpell() ) );
-        break;
-
-    case Artifact::CRYSTAL_BALL:
-        if ( Settings::Get().ExtWorldArtifactCrystalBall() ) {
-            Append( Spell( Spell::IDENTIFYHERO ) );
-            Append( Spell( Spell::VISIONS ) );
-        }
-        break;
-
-    case Artifact::BATTLE_GARB:
-        Append( Spell( Spell::TOWNPORTAL ) );
-        break;
-
-    default:
-        break;
-    }
+    Append( Spell( art.getSpellId() ) );
 }

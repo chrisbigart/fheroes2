@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2008 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2008 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,24 +24,78 @@
 #ifndef H2AUDIO_H
 #define H2AUDIO_H
 
-#include <SDL.h>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "dir.h"
 
 namespace Audio
 {
-    struct Spec : public SDL_AudioSpec
+    // Audio initialization and deinitialization functions are not designed to be called
+    // concurrently from different threads. They should be called from the main thread only.
+    void Init();
+    void Quit();
+
+    void Mute();
+    void Unmute();
+
+    bool isValid();
+}
+
+namespace Mixer
+{
+    void SetChannels( const int num );
+
+    int getChannelCount();
+
+    // To play the audio in a new channel set its value to -1. Returns channel ID. A negative value (-1) in case of failure.
+    int Play( const uint8_t * ptr, const uint32_t size, const int channelId, const bool loop );
+    int PlayFromDistance( const uint8_t * ptr, const uint32_t size, const int channelId, const bool loop, const int16_t angle, const uint8_t volumePercentage );
+
+    int applySoundEffect( const int channelId, const int16_t angle, const uint8_t volumePercentage );
+
+    // Returns the previous volume percentage value.
+    int setVolume( const int channelId, const int volumePercentage );
+
+    void Pause( const int channelId = -1 );
+    void Resume( const int channelId = -1 );
+    void Stop( const int channelId = -1 );
+
+    bool isPlaying( const int channelId );
+}
+
+namespace Music
+{
+    enum class PlaybackMode : uint8_t
     {
-        Spec();
+        PLAY_ONCE,
+        RESUME_AND_PLAY_INFINITE,
+        REWIND_AND_PLAY_INFINITE
     };
 
-    struct CVT : public SDL_AudioCVT
-    {
-        CVT();
+    // Music UID is used to cache existing songs. It is caller's responsibility to generate them.
+    // This function return true in case of music track for corresponding Music UID is cached.
+    bool Play( const uint64_t musicUID, const PlaybackMode playbackMode );
 
-        bool Build( const Spec & src, const Spec & dst );
-        bool Convert( void );
-    };
+    // Load a music track from memory and play it.
+    void Play( const uint64_t musicUID, const std::vector<uint8_t> & v, const PlaybackMode playbackMode );
 
-    Spec & GetHardwareSpec( void );
+    // Load a music track from a file system location and play it.
+    void Play( const uint64_t musicUID, const std::string & file, const PlaybackMode playbackMode );
+
+    // Returns the previous volume percentage value.
+    int setVolume( const int volumePercentage );
+
+    void SetFadeInMs( const int timeMs );
+
+    void Stop();
+
+    bool isPlaying();
+
+    void SetMidiSoundFonts( const ListFiles & files );
+
+    std::vector<uint8_t> Xmi2Mid( const std::vector<uint8_t> & buf );
 }
 
 #endif

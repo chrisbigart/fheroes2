@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,8 +22,8 @@
  ***************************************************************************/
 
 #include <algorithm>
-#include <cstdlib>
-#include <numeric>
+#include <cassert>
+#include <cmath>
 
 #include "ai.h"
 #include "difficulty.h"
@@ -33,55 +34,79 @@
 #include "maps.h"
 #include "maps_tiles.h"
 #include "race.h"
+#include "serialize.h"
 #include "translations.h"
 #include "world.h"
 
 namespace
 {
-    std::vector<int32_t> getTileToClearIndicies( const int32_t tileIndex, int scouteValue, const int playerColor )
+    Maps::Indexes MapsIndexesFilteredObject( const Maps::Indexes & indexes, const MP2::MapObjectType objectType, const bool ignoreHeroes = true )
     {
-        std::vector<int32_t> indicies;
-
-        if ( scouteValue <= 0 || !Maps::isValidAbsIndex( tileIndex ) ) {
-            return indicies;
-        }
-
-        const fheroes2::Point center = Maps::GetPoint( tileIndex );
-
-        // AI is cheating!
-        const bool isAIPlayer = world.GetKingdom( playerColor ).isControlAI();
-        if ( isAIPlayer ) {
-            scouteValue += Difficulty::GetScoutingBonus( Game::getDifficulty() );
-        }
-
-        const int revealRadiusSquared = scouteValue * scouteValue + 4; // constant factor for "backwards compatibility"
-        for ( int32_t y = center.y - scouteValue; y <= center.y + scouteValue; ++y ) {
-            if ( y < 0 || y >= world.h() )
-                continue;
-
-            for ( int32_t x = center.x - scouteValue; x <= center.x + scouteValue; ++x ) {
-                if ( x < 0 || x >= world.w() )
-                    continue;
-
-                const int32_t dx = x - center.x;
-                const int32_t dy = y - center.y;
-                if ( revealRadiusSquared >= dx * dx + dy * dy ) {
-                    indicies.emplace_back( Maps::GetIndexFromAbsPoint( x, y ) );
-                }
+        Maps::Indexes result;
+        for ( size_t idx = 0; idx < indexes.size(); ++idx ) {
+            if ( world.GetTiles( indexes[idx] ).GetObject( !ignoreHeroes ) == objectType ) {
+                result.push_back( indexes[idx] );
             }
         }
+        return result;
+    }
 
-        return indicies;
+    Maps::Indexes MapsIndexesObject( const MP2::MapObjectType objectType, const bool ignoreHeroes = true )
+    {
+        Maps::Indexes result;
+        const int32_t size = static_cast<int32_t>( world.getSize() );
+        for ( int32_t idx = 0; idx < size; ++idx ) {
+            if ( world.GetTiles( idx ).GetObject( !ignoreHeroes ) == objectType ) {
+                result.push_back( idx );
+            }
+        }
+        return result;
+    }
+
+    bool isTileUnderMonsterProtection( const int32_t tileIndex, const int32_t monsterTileIndex )
+    {
+        const Maps::Tiles & tile = world.GetTiles( tileIndex );
+        const Maps::Tiles & monsterTile = world.GetTiles( monsterTileIndex );
+
+        // A pickupable object can be accessed without triggering a monster attack
+        if ( MP2::isPickupObject( tile.GetObject() ) || monsterTile.GetObject() != MP2::OBJ_MONSTER || tile.isWater() != monsterTile.isWater() ) {
+            return false;
+        }
+
+        const int directionToMonster = Maps::GetDirection( tileIndex, monsterTileIndex );
+        const int directionFromMonster = Direction::Reflect( directionToMonster );
+
+        // The tile is directly accessible to the monster
+        if ( ( tile.GetPassable() & directionToMonster ) && ( monsterTile.GetPassable() & directionFromMonster ) ) {
+            return true;
+        }
+
+        // The tile is not directly accessible to the monster, but he can still attack in the diagonal direction if, when the hero moves away from the tile
+        // in question in the vertical direction and the monster moves away from his tile in the horizontal direction, they would have to meet
+        if ( directionFromMonster == Direction::TOP_LEFT && ( tile.GetPassable() & Direction::BOTTOM ) && ( monsterTile.GetPassable() & Direction::LEFT ) ) {
+            return true;
+        }
+        if ( directionFromMonster == Direction::TOP_RIGHT && ( tile.GetPassable() & Direction::BOTTOM ) && ( monsterTile.GetPassable() & Direction::RIGHT ) ) {
+            return true;
+        }
+        if ( directionFromMonster == Direction::BOTTOM_RIGHT && ( tile.GetPassable() & Direction::TOP ) && ( monsterTile.GetPassable() & Direction::RIGHT ) ) {
+            return true;
+        }
+        if ( directionFromMonster == Direction::BOTTOM_LEFT && ( tile.GetPassable() & Direction::TOP ) && ( monsterTile.GetPassable() & Direction::LEFT ) ) {
+            return true;
+        }
+
+        return false;
     }
 }
 
-struct ComparsionDistance
+struct ComparisonDistance
 {
-    explicit ComparsionDistance( const int32_t index )
+    explicit ComparisonDistance( const int32_t index )
         : centerPoint( Maps::GetPoint( index ) )
     {}
 
-    ComparsionDistance() = delete;
+    ComparisonDistance() = delete;
 
     bool operator()( const int32_t index1, const int32_t index2 ) const
     {
@@ -99,47 +124,22 @@ struct ComparsionDistance
     const fheroes2::Point centerPoint;
 };
 
-Maps::Indexes Maps::MapsIndexesFilteredObject( const Maps::Indexes & indexes, const int obj, const bool ignoreHeroes /* = true */ )
-{
-    Maps::Indexes result;
-    for ( size_t idx = 0; idx < indexes.size(); ++idx ) {
-        if ( world.GetTiles( indexes[idx] ).GetObject( !ignoreHeroes ) == obj ) {
-            result.push_back( indexes[idx] );
-        }
-    }
-    return result;
-}
-
-Maps::Indexes Maps::MapsIndexesObject( const int obj, const bool ignoreHeroes /* = true */ )
-{
-    Maps::Indexes result;
-    const int32_t size = static_cast<int32_t>( world.getSize() );
-    for ( int32_t idx = 0; idx < size; ++idx ) {
-        if ( world.GetTiles( idx ).GetObject( !ignoreHeroes ) == obj ) {
-            result.push_back( idx );
-        }
-    }
-    return result;
-}
-
 const char * Maps::SizeString( int s )
 {
-    const char * mapsize[] = {"Unknown", _( "maps|Small" ), _( "maps|Medium" ), _( "maps|Large" ), _( "maps|Extra Large" ), _( "maps|Custom Size" )};
-
     switch ( s ) {
     case SMALL:
-        return mapsize[1];
+        return _( "maps|Small" );
     case MEDIUM:
-        return mapsize[2];
+        return _( "maps|Medium" );
     case LARGE:
-        return mapsize[3];
+        return _( "maps|Large" );
     case XLARGE:
-        return mapsize[4];
+        return _( "maps|Extra Large" );
     default:
         break;
     }
 
-    return mapsize[5];
+    return _( "maps|Custom Size" );
 }
 
 const char * Maps::GetMinesName( int type )
@@ -291,230 +291,218 @@ int32_t Maps::GetIndexFromAbsPoint( const int32_t x, const int32_t y )
     return y * world.w() + x;
 }
 
-Maps::Indexes Maps::GetAroundIndexes( int32_t center )
-{
-    Indexes result;
-    if ( !isValidAbsIndex( center ) )
-        return result;
-
-    result.reserve( 8 );
-    const int width = world.w();
-    const int x = center % width;
-    const int y = center / width;
-
-    if ( y > 0 ) {
-        if ( x > 0 )
-            result.push_back( center - width - 1 );
-
-        result.push_back( center - width );
-
-        if ( x < width - 1 )
-            result.push_back( center - width + 1 );
-    }
-
-    if ( x > 0 )
-        result.push_back( center - 1 );
-    if ( x < width - 1 )
-        result.push_back( center + 1 );
-
-    if ( y < world.h() - 1 ) {
-        if ( x > 0 )
-            result.push_back( center + width - 1 );
-
-        result.push_back( center + width );
-
-        if ( x < width - 1 )
-            result.push_back( center + width + 1 );
-    }
-
-    return result;
-}
-
-Maps::Indexes Maps::GetAroundIndexes( const int32_t tileIndex, const int32_t maxDistanceFromTile, bool sortTiles )
+Maps::Indexes Maps::getAroundIndexes( const int32_t tileIndex, const int32_t maxDistanceFromTile /* = 1 */ )
 {
     Indexes results;
-    results.reserve( maxDistanceFromTile * 12 );
 
-    const int32_t width = world.w();
-    const int32_t size = world.h() * width;
-
-    for ( int32_t y = -maxDistanceFromTile; y <= maxDistanceFromTile; ++y ) {
-        int32_t tileId = tileIndex + y * width;
-        for ( int32_t x = -maxDistanceFromTile; x <= maxDistanceFromTile; ++x ) {
-            tileId += x;
-            if ( tileId >= 0 && tileId < size && tileId != tileIndex ) {
-                results.push_back( tileId );
-            }
-        }
+    if ( !isValidAbsIndex( tileIndex ) || maxDistanceFromTile <= 0 ) {
+        return results;
     }
 
-    if ( sortTiles ) {
-        std::sort( results.begin(), results.end(), ComparsionDistance( tileIndex ) );
+    results.reserve( ( maxDistanceFromTile * 2 + 1 ) * ( maxDistanceFromTile * 2 + 1 ) - 1 );
+
+    assert( world.w() > 0 );
+
+    const int32_t centerX = tileIndex % world.w();
+    const int32_t centerY = tileIndex / world.w();
+
+    for ( int32_t y = -maxDistanceFromTile; y <= maxDistanceFromTile; ++y ) {
+        for ( int32_t x = -maxDistanceFromTile; x <= maxDistanceFromTile; ++x ) {
+            // the central tile is not included
+            if ( x == 0 && y == 0 ) {
+                continue;
+            }
+
+            const int32_t tileX = centerX + x;
+            const int32_t tileY = centerY + y;
+
+            if ( isValidAbsPoint( tileX, tileY ) ) {
+                results.push_back( tileY * world.w() + tileX );
+            }
+        }
     }
 
     return results;
 }
 
-void Maps::ClearFog( const int32_t tileIndex, const int scouteValue, const int playerColor )
+void Maps::ClearFog( const int32_t tileIndex, int scouteValue, const int playerColor )
 {
-    const std::vector<int32_t> tileIndicies = getTileToClearIndicies( tileIndex, scouteValue, playerColor );
-    if ( tileIndicies.empty() ) {
+    if ( scouteValue <= 0 || !Maps::isValidAbsIndex( tileIndex ) ) {
         // Nothing to uncover.
         return;
     }
 
+    const fheroes2::Point center = Maps::GetPoint( tileIndex );
+
+    // AI is cheating!
     const bool isAIPlayer = world.GetKingdom( playerColor ).isControlAI();
+    if ( isAIPlayer ) {
+        scouteValue += Difficulty::GetScoutingBonus( Game::getDifficulty() );
+    }
+
     const int alliedColors = Players::GetPlayerFriends( playerColor );
 
-    for ( const int32_t index : tileIndicies ) {
-        Maps::Tiles & tile = world.GetTiles( index );
-        if ( isAIPlayer && tile.isFog( playerColor ) ) {
-            AI::Get().revealFog( tile );
-        }
+    const int revealRadiusSquared = scouteValue * scouteValue + 4; // constant factor for "backwards compatibility"
 
-        tile.ClearFog( alliedColors );
+    const int32_t minY = std::max( center.y - scouteValue, 0 );
+    const int32_t maxY = std::min( center.y + scouteValue, world.h() - 1 );
+    assert( minY < maxY );
+
+    const int32_t minX = std::max( center.x - scouteValue, 0 );
+    const int32_t maxX = std::min( center.x + scouteValue, world.w() - 1 );
+    assert( minX < maxX );
+
+    for ( int32_t y = minY; y <= maxY; ++y ) {
+        const int32_t dy = y - center.y;
+
+        for ( int32_t x = minX; x <= maxX; ++x ) {
+            const int32_t dx = x - center.x;
+            if ( revealRadiusSquared >= dx * dx + dy * dy ) {
+                Maps::Tiles & tile = world.GetTiles( x, y );
+                if ( isAIPlayer && tile.isFog( playerColor ) ) {
+                    AI::Get().revealFog( tile );
+                }
+
+                tile.ClearFog( alliedColors );
+            }
+        }
     }
 }
 
-int32_t Maps::getFogTileCountToBeRevealed( const int32_t tileIndex, const int scouteValue, const int playerColor )
+int32_t Maps::getFogTileCountToBeRevealed( const int32_t tileIndex, int scouteValue, const int playerColor )
 {
-    const std::vector<int32_t> tileIndicies = getTileToClearIndicies( tileIndex, scouteValue, playerColor );
+    if ( scouteValue <= 0 || !Maps::isValidAbsIndex( tileIndex ) ) {
+        return 0;
+    }
+
+    const fheroes2::Point center = Maps::GetPoint( tileIndex );
+
+    // AI is cheating!
+    const bool isAIPlayer = world.GetKingdom( playerColor ).isControlAI();
+    if ( isAIPlayer ) {
+        scouteValue += Difficulty::GetScoutingBonus( Game::getDifficulty() );
+    }
+
+    const int revealRadiusSquared = scouteValue * scouteValue + 4; // constant factor for "backwards compatibility"
+
+    const int32_t minY = std::max( center.y - scouteValue, 0 );
+    const int32_t maxY = std::min( center.y + scouteValue, world.h() - 1 );
+    assert( minY < maxY );
+
+    const int32_t minX = std::max( center.x - scouteValue, 0 );
+    const int32_t maxX = std::min( center.x + scouteValue, world.w() - 1 );
+    assert( minX < maxX );
 
     int32_t tileCount = 0;
 
-    for ( const int32_t index : tileIndicies ) {
-        const Maps::Tiles & tile = world.GetTiles( index );
-        if ( tile.isFog( playerColor ) ) {
-            ++tileCount;
+    for ( int32_t y = minY; y <= maxY; ++y ) {
+        const int32_t dy = y - center.y;
+
+        for ( int32_t x = minX; x <= maxX; ++x ) {
+            const int32_t dx = x - center.x;
+            if ( revealRadiusSquared >= dx * dx + dy * dy ) {
+                const Maps::Tiles & tile = world.GetTiles( x, y );
+                if ( tile.isFog( playerColor ) ) {
+                    ++tileCount;
+                }
+            }
         }
     }
 
     return tileCount;
 }
 
-Maps::Indexes Maps::ScanAroundObject( const int32_t center, const int obj, const bool ignoreHeroes )
+Maps::Indexes Maps::ScanAroundObject( const int32_t center, const MP2::MapObjectType objectType, const bool ignoreHeroes )
 {
-    Maps::Indexes results = Maps::GetAroundIndexes( center );
-    return MapsIndexesFilteredObject( results, obj, ignoreHeroes );
+    Indexes results = getAroundIndexes( center );
+    return MapsIndexesFilteredObject( results, objectType, ignoreHeroes );
 }
 
-Maps::Indexes Maps::ScanAroundObject( const int32_t center, const int obj )
+Maps::Indexes Maps::GetFreeIndexesAroundTile( const int32_t center )
 {
-    Maps::Indexes results = Maps::GetAroundIndexes( center );
-    return MapsIndexesFilteredObject( results, obj );
-}
-
-Maps::Indexes Maps::ScanAroundObjectWithDistance( const int32_t center, const uint32_t dist, const int obj )
-{
-    Indexes results = Maps::GetAroundIndexes( center, dist, true );
-    return MapsIndexesFilteredObject( results, obj );
-}
-
-Maps::Indexes Maps::GetObjectPositions( int obj, bool ignoreHeroes )
-{
-    return MapsIndexesObject( obj, ignoreHeroes );
-}
-
-Maps::Indexes Maps::GetObjectPositions( int32_t center, int obj, bool ignoreHeroes )
-{
-    Indexes results = MapsIndexesObject( obj, ignoreHeroes );
-    std::sort( results.begin(), results.end(), ComparsionDistance( center ) );
+    Indexes results = getAroundIndexes( center );
+    results.erase( std::remove_if( results.begin(), results.end(), []( const int32_t tile ) { return !world.GetTiles( tile ).isClearGround(); } ), results.end() );
     return results;
 }
 
-Maps::Indexes Maps::GetObjectsPositions( const std::vector<uint8_t> & objs )
+bool Maps::isValidForDimensionDoor( int32_t targetIndex, bool isWater )
 {
-    if ( objs.size() == 1 ) {
-        return MapsIndexesObject( objs[0], true );
-    }
-
-    Maps::Indexes result;
-    if ( objs.empty() )
-        return result;
-
-    const int32_t size = static_cast<int32_t>( world.getSize() );
-    for ( int32_t idx = 0; idx < size; ++idx ) {
-        const int objectID = world.GetTiles( idx ).GetObject( true );
-
-        for ( const uint8_t obj : objs ) {
-            if ( obj == objectID ) {
-                result.push_back( idx );
-                break;
-            }
-        }
-    }
-    return result;
+    const Maps::Tiles & tile = world.GetTiles( targetIndex );
+    return ( tile.GetPassable() & Direction::CENTER ) != 0 && isWater == tile.isWater() && !MP2::isActionObject( tile.GetObject( true ) );
 }
 
-bool MapsTileIsUnderProtection( int32_t from, int32_t index ) /* from: center, index: monster */
+Maps::Indexes Maps::ScanAroundObject( const int32_t center, const MP2::MapObjectType objectType )
 {
-    const Maps::Tiles & tile1 = world.GetTiles( from );
-    const Maps::Tiles & tile2 = world.GetTiles( index );
-
-    if ( !MP2::isPickupObject( tile1.GetObject() ) && tile2.GetObject() == MP2::OBJ_MONSTER && tile1.isWater() == tile2.isWater() ) {
-        const int monsterDirection = Maps::GetDirection( index, from );
-        // if monster can attack to
-        if ( ( tile2.GetPassable() & monsterDirection ) && ( tile1.GetPassable() & Maps::GetDirection( from, index ) ) )
-            return true;
-
-        // h2 specific monster attack: BOTTOM_LEFT impassable!
-        if ( Direction::BOTTOM_LEFT == monsterDirection && ( Direction::LEFT & tile2.GetPassable() ) && ( Direction::TOP & tile1.GetPassable() ) )
-            return true;
-
-        // h2 specific monster attack: BOTTOM_RIGHT impassable!
-        if ( Direction::BOTTOM_RIGHT == monsterDirection && ( Direction::RIGHT & tile2.GetPassable() ) && ( Direction::TOP & tile1.GetPassable() ) )
-            return true;
-    }
-
-    return false;
+    Indexes results = getAroundIndexes( center );
+    return MapsIndexesFilteredObject( results, objectType );
 }
 
-bool Maps::TileIsUnderProtection( int32_t center )
+Maps::Indexes Maps::ScanAroundObjectWithDistance( const int32_t center, const uint32_t dist, const MP2::MapObjectType objectType )
 {
-    return MP2::OBJ_MONSTER == world.GetTiles( center ).GetObject() ? true : !GetTilesUnderProtection( center ).empty();
+    Indexes results = getAroundIndexes( center, dist );
+    std::sort( results.begin(), results.end(), ComparisonDistance( center ) );
+    return MapsIndexesFilteredObject( results, objectType );
 }
 
-Maps::Indexes Maps::GetTilesUnderProtection( int32_t center )
+Maps::Indexes Maps::GetObjectPositions( const MP2::MapObjectType objectType, bool ignoreHeroes )
+{
+    return MapsIndexesObject( objectType, ignoreHeroes );
+}
+
+Maps::Indexes Maps::GetObjectPositions( int32_t center, const MP2::MapObjectType objectType, bool ignoreHeroes )
+{
+    Indexes results = MapsIndexesObject( objectType, ignoreHeroes );
+    std::sort( results.begin(), results.end(), ComparisonDistance( center ) );
+    return results;
+}
+
+bool Maps::isTileUnderProtection( const int32_t tileIndex )
+{
+    return world.GetTiles( tileIndex ).GetObject() == MP2::OBJ_MONSTER ? true : !getMonstersProtectingTile( tileIndex ).empty();
+}
+
+Maps::Indexes Maps::getMonstersProtectingTile( const int32_t tileIndex )
 {
     Indexes result;
-    if ( !isValidAbsIndex( center ) )
+    if ( !isValidAbsIndex( tileIndex ) )
         return result;
 
     result.reserve( 9 );
     const int width = world.w();
-    const int x = center % width;
-    const int y = center / width;
+    const int x = tileIndex % width;
+    const int y = tileIndex / width;
 
-    auto validateAndInsert = [&result, &center]( const int index ) {
-        if ( MapsTileIsUnderProtection( center, index ) )
-            result.push_back( index );
+    auto validateAndInsert = [&result, tileIndex]( const int monsterTileIndex ) {
+        if ( isTileUnderMonsterProtection( tileIndex, monsterTileIndex ) ) {
+            result.push_back( monsterTileIndex );
+        }
     };
 
     if ( y > 0 ) {
         if ( x > 0 )
-            validateAndInsert( center - width - 1 );
+            validateAndInsert( tileIndex - width - 1 );
 
-        validateAndInsert( center - width );
+        validateAndInsert( tileIndex - width );
 
         if ( x < width - 1 )
-            validateAndInsert( center - width + 1 );
+            validateAndInsert( tileIndex - width + 1 );
     }
 
     if ( x > 0 )
-        validateAndInsert( center - 1 );
-    if ( MP2::OBJ_MONSTER == world.GetTiles( center ).GetObject() )
-        result.push_back( center );
+        validateAndInsert( tileIndex - 1 );
+    if ( MP2::OBJ_MONSTER == world.GetTiles( tileIndex ).GetObject() )
+        result.push_back( tileIndex );
     if ( x < width - 1 )
-        validateAndInsert( center + 1 );
+        validateAndInsert( tileIndex + 1 );
 
     if ( y < world.h() - 1 ) {
         if ( x > 0 )
-            validateAndInsert( center + width - 1 );
+            validateAndInsert( tileIndex + width - 1 );
 
-        validateAndInsert( center + width );
+        validateAndInsert( tileIndex + width );
 
         if ( x < width - 1 )
-            validateAndInsert( center + width + 1 );
+            validateAndInsert( tileIndex + width + 1 );
     }
 
     return result;
@@ -525,33 +513,37 @@ uint32_t Maps::GetApproximateDistance( const int32_t pos1, const int32_t pos2 )
     const fheroes2::Point point1( GetPoint( pos1 ) );
     const fheroes2::Point point2( GetPoint( pos2 ) );
 
-    const fheroes2::Size sz( std::abs( point1.x - point2.x ), std::abs( point1.y - point2.y ) );
-    // diagonal move costs 1.5 as much
-    return std::max( sz.width, sz.height ) + std::min( sz.width, sz.height ) / 2;
+    const uint32_t diffX = std::abs( point1.x - point2.x );
+    const uint32_t diffY = std::abs( point1.y - point2.y );
+
+    assert( diffX < Maps::XLARGE && diffY < Maps::XLARGE );
+
+    return std::max( diffX, diffY ) + std::min( diffX, diffY ) / 2;
 }
 
-void Maps::MinimizeAreaForCastle( const fheroes2::Point & center )
+uint32_t Maps::GetStraightLineDistance( const int32_t pos1, const int32_t pos2 )
+{
+    const fheroes2::Point point1( GetPoint( pos1 ) );
+    const fheroes2::Point point2( GetPoint( pos2 ) );
+
+    const uint32_t diffX = std::abs( point1.x - point2.x );
+    const uint32_t diffY = std::abs( point1.y - point2.y );
+
+    assert( diffX < Maps::XLARGE && diffY < Maps::XLARGE );
+
+    return static_cast<uint32_t>( std::hypot( diffX, diffY ) );
+}
+
+void Maps::ReplaceRandomCastleObjectId( const fheroes2::Point & center )
 {
     // Reset castle ID
     for ( int32_t y = -3; y < 2; ++y ) {
         for ( int32_t x = -2; x < 3; ++x ) {
             Maps::Tiles & tile = world.GetTiles( center.x + x, center.y + y );
 
-            if ( MP2::OBJN_RNDCASTLE == tile.GetObject() || MP2::OBJN_RNDTOWN == tile.GetObject() || MP2::OBJN_CASTLE == tile.GetObject() )
-                tile.setAsEmpty();
-        }
-    }
-
-    // set minimum area castle ID
-    for ( int32_t y = -1; y < 1; ++y ) {
-        for ( int32_t x = -2; x < 3; ++x ) {
-            Maps::Tiles & tile = world.GetTiles( center.x + x, center.y + y );
-
-            // skip angle
-            if ( y == -1 && ( x == -2 || x == 2 ) )
-                continue;
-
-            tile.SetObject( MP2::OBJN_CASTLE );
+            if ( MP2::OBJN_RNDCASTLE == tile.GetObject() || MP2::OBJN_RNDTOWN == tile.GetObject() ) {
+                tile.SetObject( MP2::OBJN_CASTLE );
+            }
         }
     }
 
@@ -575,17 +567,17 @@ void Maps::UpdateCastleSprite( const fheroes2::Point & center, int race, bool is
 
     // correct only RND town and castle
     const Maps::Tiles & entranceTile = world.GetTiles( center.x, center.y );
-    const int entranceObject = entranceTile.GetObject();
+    const MP2::MapObjectType objectType = entranceTile.GetObject();
     const uint32_t castleID = entranceTile.GetObjectUID();
 
-    if ( isRandom && ( entranceObject != MP2::OBJ_RNDCASTLE && entranceObject != MP2::OBJ_RNDTOWN ) ) {
+    if ( isRandom && ( objectType != MP2::OBJ_RNDCASTLE && objectType != MP2::OBJ_RNDTOWN ) ) {
         DEBUG_LOG( DBG_GAME, DBG_WARN,
                    "incorrect object"
-                       << ", index: " << GetIndexFromAbsPoint( center.x, center.y ) );
+                       << ", index: " << GetIndexFromAbsPoint( center.x, center.y ) )
         return;
     }
 
-    int raceIndex = 0; // Race::KNIGHT
+    uint8_t raceIndex = 0; // Race::KNIGHT
     switch ( race ) {
     case Race::BARB:
         raceIndex = 1;
@@ -606,14 +598,14 @@ void Maps::UpdateCastleSprite( const fheroes2::Point & center, int race, bool is
         break;
     }
 
-    for ( int index = 0; index < 16; ++index ) {
-        const int fullTownIndex = index + ( isCastle ? 0 : 16 ) + raceIndex * 32;
-        const int lookupID = isRandom ? index + ( isCastle ? 0 : 16 ) : fullTownIndex;
+    const int castleCoordinates[16][2] = { { 0, -3 }, { -2, -2 }, { -1, -2 }, { 0, -2 }, { 1, -2 }, { 2, -2 }, { -2, -1 }, { -1, -1 },
+                                           { 0, -1 }, { 1, -1 },  { 2, -1 },  { -2, 0 }, { -1, 0 }, { 0, 0 },  { 1, 0 },   { 2, 0 } };
+    const int shadowCoordinates[16][2] = { { -4, -2 }, { -3, -2 }, { -2, -2 }, { -1, -2 }, { -5, -1 }, { -4, -1 }, { -3, -1 }, { -2, -1 },
+                                           { -1, -1 }, { -4, 0 },  { -3, 0 },  { -2, 0 },  { -1, 0 },  { -3, 1 },  { -2, 1 },  { -1, 1 } };
 
-        static const int castleCoordinates[16][2]
-            = {{0, -3}, {-2, -2}, {-1, -2}, {0, -2}, {1, -2}, {2, -2}, {-2, -1}, {-1, -1}, {0, -1}, {1, -1}, {2, -1}, {-2, 0}, {-1, 0}, {0, 0}, {1, 0}, {2, 0}};
-        static const int shadowCoordinates[16][2]
-            = {{-4, -2}, {-3, -2}, {-2, -2}, {-1, -2}, {-5, -1}, {-4, -1}, {-3, -1}, {-2, -1}, {-1, -1}, {-4, 0}, {-3, 0}, {-2, 0}, {-1, 0}, {-3, 1}, {-2, 1}, {-1, 1}};
+    for ( uint8_t index = 0; index < 16; ++index ) {
+        const uint8_t fullTownIndex = index + ( isCastle ? 0 : 16 ) + raceIndex * 32;
+        const uint8_t lookupID = isRandom ? index + ( isCastle ? 0 : 16 ) : fullTownIndex;
 
         const int castleTile = GetIndexFromAbsPoint( center.x + castleCoordinates[index][0], center.y + castleCoordinates[index][1] );
         if ( isValidAbsIndex( castleTile ) ) {
@@ -643,29 +635,12 @@ void Maps::UpdateCastleSprite( const fheroes2::Point & center, int race, bool is
     }
 }
 
-int Maps::TileIsCoast( int32_t center, int filter )
-{
-    int result = 0;
-    const Directions & directions = Direction::All();
-
-    for ( Directions::const_iterator it = directions.begin(); it != directions.end(); ++it )
-        if ( ( *it & filter ) && isValidDirection( center, *it ) && world.GetTiles( GetDirectionIndex( center, *it ) ).isWater() )
-            result |= *it;
-
-    return result;
-}
-
 StreamBase & operator>>( StreamBase & sb, IndexObject & st )
 {
     return sb >> st.first >> st.second;
 }
 
 StreamBase & operator>>( StreamBase & sb, ObjectColor & st )
-{
-    return sb >> st.first >> st.second;
-}
-
-StreamBase & operator>>( StreamBase & sb, ResourceCount & st )
 {
     return sb >> st.first >> st.second;
 }

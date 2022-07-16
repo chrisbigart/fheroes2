@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2020                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2020 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -22,7 +22,9 @@
 #include "localevent.h"
 #include "screen.h"
 #include "settings.h"
+#include "system.h"
 #include "text.h"
+#include "translations.h"
 
 #include <chrono>
 #include <cmath>
@@ -30,6 +32,7 @@
 #include <cstring>
 #include <ctime>
 #include <deque>
+#include <utility>
 
 namespace
 {
@@ -38,7 +41,7 @@ namespace
     {
     public:
         SystemInfoRenderer()
-            : _startTime( std::chrono::high_resolution_clock::now() )
+            : _startTime( std::chrono::steady_clock::now() )
         {}
 
         void preRender()
@@ -49,13 +52,14 @@ namespace
             const int32_t offsetX = 26;
             const int32_t offsetY = fheroes2::Display::instance().height() - 30;
 
-            std::time_t rawtime = std::time( nullptr );
-            char mbstr[10] = {0};
-            std::strftime( mbstr, sizeof( mbstr ), "%H:%M:%S", std::localtime( &rawtime ) );
+            const tm tmi = System::GetTM( std::time( nullptr ) );
+
+            char mbstr[10] = { 0 };
+            std::strftime( mbstr, sizeof( mbstr ), "%H:%M:%S", &tmi );
 
             std::string info( mbstr );
 
-            std::chrono::time_point<std::chrono::high_resolution_clock> endTime = std::chrono::high_resolution_clock::now();
+            std::chrono::time_point<std::chrono::steady_clock> endTime = std::chrono::steady_clock::now();
             const std::chrono::duration<double> time = endTime - _startTime;
             _startTime = endTime;
 
@@ -73,10 +77,10 @@ namespace
             averageFps /= static_cast<double>( _fps.size() );
             const int currentFps = static_cast<int>( averageFps );
 
-            info += ", FPS: ";
+            info += _( ", FPS: " );
             info += std::to_string( currentFps );
             if ( averageFps < 10 ) {
-                info += ".";
+                info += '.';
                 info += std::to_string( static_cast<int>( ( averageFps - currentFps ) * 10 ) );
             }
 
@@ -92,7 +96,7 @@ namespace
         }
 
     private:
-        std::chrono::time_point<std::chrono::high_resolution_clock> _startTime;
+        std::chrono::time_point<std::chrono::steady_clock> _startTime;
         TextSprite _text;
         std::deque<double> _fps;
     };
@@ -161,20 +165,59 @@ namespace fheroes2
         return _isHidden;
     }
 
+    TimedEventValidator::TimedEventValidator( std::function<bool()> verification, const uint64_t delayBeforeFirstUpdateMs, const uint64_t delayBetweenUpdateMs )
+        : _verification( std::move( verification ) )
+        , _delayBetweenUpdateMs( delayBetweenUpdateMs )
+        , _delayBeforeFirstUpdateMs( delayBeforeFirstUpdateMs )
+    {}
+
+    bool TimedEventValidator::isDelayPassed()
+    {
+        if ( _delayBeforeFirstUpdateMs.isPassed() && _delayBetweenUpdateMs.isPassed() && _verification() ) {
+            _delayBetweenUpdateMs.reset();
+            return true;
+        }
+        return false;
+    }
+
+    void TimedEventValidator::senderUpdate( const ActionObject * sender )
+    {
+        if ( sender == nullptr )
+            return;
+        _delayBeforeFirstUpdateMs.reset();
+        _delayBetweenUpdateMs.reset();
+    }
+
     ScreenPaletteRestorer::ScreenPaletteRestorer()
     {
-        LocalEvent::Get().PauseCycling();
+        LocalEvent::PauseCycling();
     }
 
     ScreenPaletteRestorer::~ScreenPaletteRestorer()
     {
         Display::instance().changePalette( nullptr );
-        LocalEvent::Get().ResumeCycling();
+        LocalEvent::ResumeCycling();
     }
 
     void ScreenPaletteRestorer::changePalette( const uint8_t * palette ) const
     {
         Display::instance().changePalette( palette );
+    }
+
+    GameInterfaceTypeRestorer::GameInterfaceTypeRestorer( const bool isEvilInterface_ )
+        : isEvilInterface( isEvilInterface_ )
+        , isOriginalEvilInterface( Settings::Get().ExtGameEvilInterface() )
+    {
+        if ( isEvilInterface != isOriginalEvilInterface ) {
+            Settings::Get().SetEvilInterface( isEvilInterface );
+        }
+    }
+
+    GameInterfaceTypeRestorer::~GameInterfaceTypeRestorer()
+    {
+        if ( isEvilInterface != isOriginalEvilInterface ) {
+            Settings::Get().SetEvilInterface( isOriginalEvilInterface );
+        }
     }
 
     Image CreateDeathWaveEffect( const Image & in, int32_t x, int32_t waveWidth, int32_t waveHeight )
@@ -309,9 +352,10 @@ namespace fheroes2
     void FadeDisplay( int delayMs )
     {
         Display & display = Display::instance();
-        const Image temp = display;
+        Image temp;
+        Copy( display, temp );
 
-        FadeDisplay( temp, fheroes2::Point( 0, 0 ), 5, delayMs );
+        FadeDisplay( temp, { 0, 0 }, 5, delayMs );
 
         Copy( temp, display ); // restore the original image
     }

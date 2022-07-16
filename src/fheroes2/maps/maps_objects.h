@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2013 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2013 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,14 +24,12 @@
 #define H2MAPS_OBJECTS_H
 
 #include <string>
-#include <vector>
 
 #include "artifact.h"
-#include "gamedefs.h"
-#include "monster.h"
-#include "pairs.h"
 #include "position.h"
 #include "resource.h"
+
+class StreamBuf;
 
 class MapObjectSimple : public MapPosition
 {
@@ -39,17 +38,19 @@ public:
         : uid( 0 )
         , type( v )
     {}
-    virtual ~MapObjectSimple() = default;
+    ~MapObjectSimple() override = default;
 
-    int GetType( void ) const
+    int GetType() const
     {
         return type;
     }
-    u32 GetUID( void ) const
+
+    uint32_t GetUID() const
     {
         return uid;
     }
-    void SetUID( u32 v )
+
+    void SetUID( uint32_t v )
     {
         uid = v;
     }
@@ -58,7 +59,7 @@ protected:
     friend StreamBase & operator<<( StreamBase &, const MapObjectSimple & );
     friend StreamBase & operator>>( StreamBase &, MapObjectSimple & );
 
-    u32 uid;
+    uint32_t uid;
     int type;
 };
 
@@ -69,7 +70,7 @@ struct MapEvent : public MapObjectSimple
 {
     MapEvent();
 
-    void LoadFromMP2( s32 index, StreamBuf );
+    void LoadFromMP2( int32_t index, StreamBuf );
 
     bool isAllow( int color ) const;
     void SetVisited( int color );
@@ -91,10 +92,10 @@ struct MapSphinx : public MapObjectSimple
 {
     MapSphinx();
 
-    void LoadFromMP2( s32 index, StreamBuf );
+    void LoadFromMP2( int32_t index, StreamBuf );
 
     bool AnswerCorrect( const std::string & answer );
-    void SetQuiet( void );
+    void SetQuiet();
 
     Funds resources;
     Artifact artifact;
@@ -110,56 +111,12 @@ struct MapSign : public MapObjectSimple
 {
     MapSign();
 
-    void LoadFromMP2( s32 index, StreamBuf );
+    void LoadFromMP2( int32_t index, StreamBuf );
 
     std::string message;
 };
 
 StreamBase & operator<<( StreamBase &, const MapSign & );
 StreamBase & operator>>( StreamBase &, MapSign & );
-
-struct MapResource : public MapObjectSimple
-{
-    MapResource();
-
-    ResourceCount resource;
-};
-
-StreamBase & operator<<( StreamBase &, const MapResource & );
-StreamBase & operator>>( StreamBase &, MapResource & );
-
-struct MapArtifact : public MapObjectSimple
-{
-    MapArtifact();
-
-    Artifact artifact;
-    int condition;
-    int extended;
-
-    Funds QuantityFunds( void ) const;
-    ResourceCount QuantityResourceCount( void ) const;
-};
-
-StreamBase & operator<<( StreamBase &, const MapArtifact & );
-StreamBase & operator>>( StreamBase &, MapArtifact & );
-
-struct MapMonster : public MapObjectSimple
-{
-    MapMonster();
-
-    Monster monster;
-
-    int condition;
-    int count;
-
-    Troop QuantityTroop( void ) const;
-    bool JoinConditionSkip( void ) const;
-    bool JoinConditionMoney( void ) const;
-    bool JoinConditionFree( void ) const;
-    bool JoinConditionForce( void ) const;
-};
-
-StreamBase & operator<<( StreamBase &, const MapMonster & );
-StreamBase & operator>>( StreamBase &, MapMonster & );
 
 #endif

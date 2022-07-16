@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,17 +22,26 @@
  ***************************************************************************/
 
 #include <algorithm>
+#include <set>
 
 #include "direction.h"
-#include "icn.h"
 #include "mp2.h"
 #include "objdirt.h"
+#include "tools.h"
 
-int ObjDirt::GetPassable( u32 index )
+namespace
 {
-    const u8 disabled[] = {23, 24, 25, 26, 27, 28, 29, 30, 32, 33, 34, 35, 36, 37, 48, 49, 50, 51};
-    const u8 restricted[] = {7,  9,  12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 40, 41, 42, 43, 44, 45,  53,  54,  55,  56,  57,  58,  60,  61,  63,  64,  66,  67,  69, 71,
-                             73, 74, 76, 77, 79, 80, 82, 83, 85, 86, 88, 89, 90, 92, 93, 98, 99, 101, 102, 104, 105, 118, 123, 127, 130, 133, 134, 137, 139, 152, 189};
+    const std::bitset<256> objDirtShadowBitset = fheroes2::makeBitsetFromVector<256>(
+        { 0,   1,   5,   6,   14,  47,  52,  59,  62,  65,  68,  70,  72,  75,  78,  81,  84,  87,  91,  94,  97,  100, 103, 111, 114, 117,
+          126, 128, 136, 149, 150, 158, 161, 162, 163, 164, 165, 166, 167, 168, 177, 178, 179, 180, 181, 182, 183, 184, 193, 196, 200 } );
+}
+
+int ObjDirt::GetPassable( const uint8_t index )
+{
+    const uint8_t disabled[] = { 23, 24, 25, 26, 27, 28, 29, 30, 32, 33, 34, 35, 36, 37, 48, 49, 50, 51 };
+    const uint8_t restricted[]
+        = { 7,  9,  12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 40, 41, 42, 43, 44, 45,  53,  54,  55,  56,  57,  58,  60,  61,  63,  64,  66,  67,  69, 71,
+            73, 74, 76, 77, 79, 80, 82, 83, 85, 86, 88, 89, 90, 92, 93, 98, 99, 101, 102, 104, 105, 118, 123, 127, 130, 133, 134, 137, 139, 152, 189 };
 
     if ( isShadow( index ) )
         return DIRECTION_ALL;
@@ -41,20 +51,17 @@ int ObjDirt::GetPassable( u32 index )
     return std::end( restricted ) != std::find( restricted, std::end( restricted ), index ) ? DIRECTION_CENTER_ROW | DIRECTION_BOTTOM_ROW : DIRECTION_ALL;
 }
 
-bool ObjDirt::isAction( u32 index )
+bool ObjDirt::isAction( uint32_t index )
 {
     return MP2::OBJ_ZERO != GetActionObject( index );
 }
 
-bool ObjDirt::isShadow( u32 index )
+bool ObjDirt::isShadow( const uint8_t index )
 {
-    const u8 shadows[] = {0,  1,  5,   6,   14,  47,  52,  59,  62,  65,  68,  70,  72,  75,  78,  81,  84,  87, 91,
-                          94, 97, 100, 103, 111, 114, 117, 126, 128, 136, 149, 150, 161, 165, 177, 181, 196, 200};
-
-    return std::end( shadows ) != std::find( shadows, std::end( shadows ), index );
+    return objDirtShadowBitset[index];
 }
 
-int ObjDirt::GetActionObject( u32 index )
+int ObjDirt::GetActionObject( uint32_t index )
 {
     switch ( index ) {
     case 8:

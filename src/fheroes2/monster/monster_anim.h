@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2021                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2021 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -19,6 +19,9 @@
  ***************************************************************************/
 
 #pragma once
+
+#include <array>
+#include <list>
 
 #include "battle_animation.h"
 
@@ -64,10 +67,17 @@ namespace Monster_Info
 
 namespace fheroes2
 {
+    const std::array<uint8_t, 15> & getMonsterAnimationSequence();
+
     class RandomMonsterAnimation
     {
     public:
         explicit RandomMonsterAnimation( const Monster & monster );
+
+        RandomMonsterAnimation( const RandomMonsterAnimation & ) = delete;
+        RandomMonsterAnimation( RandomMonsterAnimation && ) = default;
+
+        RandomMonsterAnimation & operator=( const RandomMonsterAnimation & ) = delete;
 
         void increment();
 

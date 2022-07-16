@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,64 +22,60 @@
  ***************************************************************************/
 
 #include "artifact_ultimate.h"
+#include "game.h"
 #include "interface_gamearea.h"
-#include "maps.h"
+#include "rand.h"
+#include "save_format_version.h"
+#include "serialize.h"
 
 UltimateArtifact::UltimateArtifact()
-    : index( -1 )
-    , isfound( false )
+    : _index( -1 )
+    , _isFound( false )
 {}
 
-void UltimateArtifact::Set( s32 pos, const Artifact & a )
+void UltimateArtifact::Set( const int32_t position, const Artifact & a )
 {
     Artifact & art = *this;
     art = a.isValid() ? a : Artifact::Rand( Artifact::ART_ULTIMATE );
-    index = pos;
-    isfound = false;
+    _index = position;
+    _isFound = false;
+
+    // Since artifact cannot be placed closer than 9 tiles from any edge and puzzle screen is 14 x 14 tiles it's absolutely safe to put offset within [-2; +2] range.
+    _offset.x = Rand::Get( 0, 4 ) - 2;
+    _offset.y = Rand::Get( 0, 4 ) - 2;
 }
 
 fheroes2::Image UltimateArtifact::GetPuzzleMapSurface() const
 {
-    return Interface::GameArea::GenerateUltimateArtifactAreaSurface( index );
+    return Interface::GameArea::GenerateUltimateArtifactAreaSurface( _index, _offset );
 }
 
-const Artifact & UltimateArtifact::GetArtifact( void ) const
+const Artifact & UltimateArtifact::GetArtifact() const
 {
     return *this;
 }
 
-bool UltimateArtifact::isFound( void ) const
+bool UltimateArtifact::isPosition( const int32_t position ) const
 {
-    return isfound;
+    return 0 <= _index && position == _index;
 }
 
-void UltimateArtifact::SetFound( bool f )
-{
-    isfound = f;
-}
-
-bool UltimateArtifact::isPosition( s32 pos ) const
-{
-    return 0 <= index && pos == index;
-}
-
-void UltimateArtifact::Reset( void )
+void UltimateArtifact::Reset()
 {
     Artifact::Reset();
-    puzzlemap.reset();
-    index = -1;
-    isfound = false;
+
+    _offset = fheroes2::Point();
+    _index = -1;
+    _isFound = false;
 }
 
 StreamBase & operator<<( StreamBase & msg, const UltimateArtifact & ultimate )
 {
-    return msg << static_cast<Artifact>( ultimate ) << ultimate.index << ultimate.isfound;
+    return msg << static_cast<const Artifact &>( ultimate ) << ultimate._index << ultimate._isFound << ultimate._offset;
 }
 
 StreamBase & operator>>( StreamBase & msg, UltimateArtifact & ultimate )
 {
     Artifact & artifact = ultimate;
-    msg >> artifact >> ultimate.index >> ultimate.isfound;
-
-    return msg;
+    return msg >> artifact >> ultimate._index >> ultimate._isFound >> ultimate._offset;
 }

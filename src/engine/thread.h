@@ -1,8 +1,6 @@
 /***************************************************************************
- *   Copyright (C) 2009 by Andrey Afletdinov <fheroes2@gmail.com>          *
- *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2022                                                    *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -20,49 +18,57 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#ifndef SDLTHREAD_H
-#define SDLTHREAD_H
+#pragma once
 
-#include "types.h"
-#include <SDL.h>
-#include <SDL_thread.h>
+#include <atomic>
+#include <condition_variable>
+#include <cstdint>
+#include <mutex>
+#include <thread>
 
-namespace SDL
+namespace MultiThreading
 {
-    class Thread
+    class AsyncManager
     {
     public:
-        Thread();
-        ~Thread();
-        Thread( const Thread & );
+        AsyncManager() = default;
+        AsyncManager( const AsyncManager & ) = delete;
 
-        Thread & operator=( const Thread & );
+        virtual ~AsyncManager() = default;
 
-        void Create( int ( * )( void * ), void * param = nullptr );
-        int Wait( void );
-        void Kill( void );
+        AsyncManager & operator=( const AsyncManager & ) = delete;
 
-        bool IsRun( void ) const;
+        // Create the worker thread if it doesn't exist yet. Both createWorker() and stopWorker() are not
+        // designed to be executed concurrently.
+        void createWorker();
 
-        u32 GetID( void ) const;
+        // Stop and join the worker thread. This cannot be done in the destructor (directly or indirectly) due
+        // to the potential race on the vptr since this class has virtual methods that could be called from the
+        // worker thread.
+        void stopWorker();
+
+    protected:
+        std::mutex _mutex;
+
+        // Notify the worker thread about a new task. The _mutex should be acquired while calling this method.
+        void notifyWorker();
+
+        // Prepare a task which requires mutex lock. Returns true if more tasks are available.
+        virtual bool prepareTask() = 0;
+
+        // Task execution is done in non-thread safe mode! No mutex lock for any means of synchronizations are
+        // done for this call.
+        virtual void executeTask() = 0;
 
     private:
-        SDL_Thread * thread;
-    };
+        std::unique_ptr<std::thread> _worker;
 
-    class Timer
-    {
-    public:
-        Timer();
+        std::condition_variable _masterNotification;
+        std::condition_variable _workerNotification;
 
-        bool IsValid( void ) const;
+        std::atomic<bool> _exitFlag{ false };
+        bool _runFlag{ false };
 
-        void Run( u32, u32 ( * )( u32, void * ), void * param = nullptr );
-        void Remove( void );
-
-    private:
-        SDL_TimerID id;
+        static void _workerThread( AsyncManager * manager );
     };
 }
-
-#endif

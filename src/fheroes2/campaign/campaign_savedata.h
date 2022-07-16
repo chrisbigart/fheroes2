@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2021                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2021 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,39 +21,42 @@
 #ifndef H2CAMPAIGN_SAVEDATA_H
 #define H2CAMPAIGN_SAVEDATA_H
 
-#include "army.h"
-#include "campaign_data.h"
+#include "army_troop.h"
 #include "campaign_scenariodata.h"
+
+class Troops;
 
 namespace Campaign
 {
+    struct CampaignAwardData;
+
     class CampaignSaveData
     {
     public:
         CampaignSaveData();
 
-        const ScenarioBonusData & getCurrentScenarioBonus() const
-        {
-            return _currentScenarioBonus;
-        }
-
-        const std::vector<int> & getFinishedMaps() const
+        const std::vector<ScenarioInfoId> & getFinishedMaps() const
         {
             return _finishedMaps;
         }
 
         int getCampaignID() const
         {
-            return _campaignID;
+            return _currentScenarioInfoId.campaignId;
         }
 
         int getCurrentScenarioID() const
         {
-            return _currentScenarioID;
+            return _currentScenarioInfoId.scenarioId;
+        }
+
+        const ScenarioInfoId & getCurrentScenarioInfoId() const
+        {
+            return _currentScenarioInfoId;
         }
 
         // Make sure that this is not the first scenario in the campaign. Please call isStarting to verify this.
-        int getLastCompletedScenarioID() const;
+        const ScenarioInfoId & getLastCompletedScenarioInfoID() const;
 
         bool isStarting() const
         {
@@ -70,31 +73,45 @@ namespace Campaign
             return _carryOverTroops;
         }
 
-        const std::vector<Campaign::CampaignAwardData> getObtainedCampaignAwards() const;
+        std::vector<Campaign::CampaignAwardData> getObtainedCampaignAwards() const;
 
         void setCurrentScenarioBonus( const ScenarioBonusData & bonus );
-        void setCurrentScenarioID( const int scenarioID );
-        void setCampaignID( const int campaignID );
+        void setCurrentScenarioInfoId( const ScenarioInfoId & scenarioInfoId );
         void addCurrentMapToFinished();
         void addCampaignAward( const int awardID );
         void setCarryOverTroops( const Troops & troops );
         void reset();
         void addDaysPassed( const uint32_t days );
+        void removeCampaignAward( const int awardID );
+
+        void removeAllAwards()
+        {
+            _obtainedCampaignAwards.clear();
+        }
 
         static CampaignSaveData & Get();
+
+        static void loadOldSaveSata( StreamBase & msg, CampaignSaveData & data );
 
     private:
         friend StreamBase & operator<<( StreamBase & msg, const CampaignSaveData & data );
         friend StreamBase & operator>>( StreamBase & msg, CampaignSaveData & data );
 
-        std::vector<int> _finishedMaps;
+        std::vector<ScenarioInfoId> _finishedMaps;
         std::vector<int> _obtainedCampaignAwards;
         std::vector<Troop> _carryOverTroops;
-        int _currentScenarioID;
-        int _campaignID;
+
+        ScenarioInfoId _currentScenarioInfoId;
+
         uint32_t _daysPassed;
         ScenarioBonusData _currentScenarioBonus;
     };
+
+    // Call this function only when playing campaign scenario.
+    ScenarioVictoryCondition getCurrentScenarioVictoryCondition();
+
+    // Call this function only when playing campaign scenario.
+    ScenarioLossCondition getCurrentScenarioLossCondition();
 }
 
 #endif

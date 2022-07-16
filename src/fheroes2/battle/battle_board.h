@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2012 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2012 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,15 +24,18 @@
 #ifndef H2BATTLE_BOARD_H
 #define H2BATTLE_BOARD_H
 
-#include <functional>
 #include <random>
 
-#include "battle.h"
 #include "battle_cell.h"
 
 #define ARENAW 11
 #define ARENAH 9
 #define ARENASIZE ARENAW * ARENAH
+
+namespace Maps
+{
+    class Tiles;
+}
 
 namespace Battle
 {
@@ -50,14 +54,17 @@ namespace Battle
     {
     public:
         Board();
+        Board( const Board & ) = delete;
 
-        void Reset( void );
+        Board & operator=( const Board & ) = delete;
+
+        void Reset();
 
         void SetArea( const fheroes2::Rect & );
 
-        s32 GetIndexAbsPosition( const fheroes2::Point & ) const;
+        int32_t GetIndexAbsPosition( const fheroes2::Point & ) const;
         std::vector<Unit *> GetNearestTroops( const Unit * startUnit, const std::vector<Unit *> & blackList );
-        Indexes GetAStarPath( const Unit & unit, const Position & destination, const bool debug = true ) const;
+        Indexes GetPath( const Unit & unit, const Position & destination, const bool debug = true ) const;
 
         void SetEnemyQuality( const Unit & ) const;
         void SetPositionQuality( const Unit & ) const;
@@ -66,52 +73,50 @@ namespace Battle
         void SetCobjObjects( const Maps::Tiles & tile, std::mt19937 & gen );
         void SetCovrObjects( int icn );
 
-        static std::string GetMoatInfo( void );
+        static std::string GetMoatInfo();
 
-        static Cell * GetCell( s32, int = CENTER );
-        static bool isNearIndexes( s32, s32 );
-        static bool isValidIndex( s32 );
-        static bool isCastleIndex( s32 );
-        static bool isMoatIndex( s32 index, const Unit & b );
-        static bool isBridgeIndex( s32 index, const Unit & b );
-        static bool isImpassableIndex( s32 );
-        static bool isOutOfWallsIndex( s32 );
-        static bool isReflectDirection( int );
+        static Cell * GetCell( int32_t position, int dir = CENTER );
+        static bool isNearIndexes( int32_t, int32_t );
+        static bool isValidIndex( int32_t );
+        static bool isCastleIndex( int32_t );
+        static bool isMoatIndex( int32_t index, const Unit & b );
+        static bool isBridgeIndex( int32_t index, const Unit & b );
+        static bool isOutOfWallsIndex( int32_t );
         static bool IsLeftDirection( const int32_t startCellId, const int32_t endCellId, const bool prevLeftDirection );
-        static bool isNegativeDistance( s32 index1, s32 index2 );
+        static bool isNegativeDistance( int32_t index1, int32_t index2 );
         static int DistanceFromOriginX( int32_t index, bool reflect );
         static int GetReflectDirection( int );
-        static int GetDirection( s32, s32 );
+        static int GetDirection( int32_t, int32_t );
         static int32_t DoubleCellAttackValue( const Unit & attacker, const Unit & target, const int32_t from, const int32_t targetCell );
         static int32_t OptimalAttackTarget( const Unit & attacker, const Unit & target, const int32_t from );
         static int32_t OptimalAttackValue( const Unit & attacker, const Unit & target, const int32_t from );
-        static uint32_t GetDistance( s32, s32 );
-        static bool isValidDirection( s32, int );
-        static s32 GetIndexDirection( s32, int );
-        static Indexes GetDistanceIndexes( s32, u32 );
-        static Indexes GetAroundIndexes( s32 center, s32 ignore = -1 );
-        static Indexes GetAroundIndexes( const Unit & );
-        static Indexes GetMoveWideIndexes( s32, bool reflect );
-        static bool isValidMirrorImageIndex( s32, const Unit * );
+        static uint32_t GetDistance( int32_t, int32_t );
+        static bool isValidDirection( int32_t, int );
+        static int32_t GetIndexDirection( int32_t, int );
+        static Indexes GetDistanceIndexes( int32_t, uint32_t );
+        static Indexes GetAroundIndexes( int32_t center, int32_t ignore = -1 );
+        static Indexes GetAroundIndexes( const Unit & unit );
+        static Indexes GetAroundIndexes( const Position & position );
+        static Indexes GetMoveWideIndexes( int32_t, bool reflect );
+        static bool isValidMirrorImageIndex( const int32_t index, const Unit * unit );
+
+        // Checks that the current unit (to which the current passability information relates) is able (in principle)
+        // to attack from the cell with the given index
+        static bool CanAttackUnitFromCell( const Unit & currentUnit, const int32_t from );
+        // Checks that the current unit (to which the current passability information relates) is able to attack the
+        // target from the position which corresponds to the given index
+        static bool CanAttackUnitFromPosition( const Unit & currentUnit, const Unit & target, const int32_t dst );
 
         static Indexes GetAdjacentEnemies( const Unit & unit );
 
-        enum
-        {
-            CATAPULT_POS = 77,
-            CASTLE_GATE_POS = 50,
-            CASTLE_FIRST_TOP_WALL_POS = 8,
-            CASTLE_SECOND_TOP_WALL_POS = 29,
-            CASTLE_THIRD_TOP_WALL_POS = 73,
-            CASTLE_FORTH_TOP_WALL_POS = 96,
-            CASTLE_TOP_ARCHER_TOWER_POS = 19,
-            CASTLE_BOTTOM_ARCHER_TOWER_POS = 85,
-            CASTLE_TOP_GATE_TOWER_POS = 40,
-            CASTLE_BOTTOM_GATE_TOWER_POS = 62
-        };
-
     private:
         void SetCobjObject( const int icn, const int32_t dst );
+
+        bool GetPathForUnit( const Unit & unit, const Position & destination, const uint32_t remainingSteps, const int32_t currentCellId,
+                             std::vector<bool> & visitedCells, Indexes & result ) const;
+        bool GetPathForWideUnit( const Unit & unit, const Position & destination, const uint32_t remainingSteps, const int32_t currentHeadCellId,
+                                 const int32_t prevHeadCellId, std::vector<bool> & visitedCells, Indexes & result ) const;
+        void StraightenPathForUnit( const int32_t currentCellId, Indexes & path ) const;
     };
 }
 

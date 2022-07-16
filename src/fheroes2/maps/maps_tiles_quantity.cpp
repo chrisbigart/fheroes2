@@ -1,8 +1,9 @@
 /***************************************************************************
- *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2019 - 2022                                             *
  *                                                                         *
- *   Part of the Free Heroes2 Engine:                                      *
- *   http://sourceforge.net/projects/fheroes2                              *
+ *   Free Heroes2 Engine: http://sourceforge.net/projects/fheroes2         *
+ *   Copyright (C) 2011 by Andrey Afletdinov <fheroes2@gmail.com>          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,16 +22,17 @@
  ***************************************************************************/
 
 #include "rand.h"
+#include "settings.h"
 #include "world.h"
 
-bool Maps::Tiles::QuantityIsValid( void ) const
+bool Maps::Tiles::QuantityIsValid() const
 {
     switch ( GetObject( false ) ) {
     case MP2::OBJ_ARTIFACT:
     case MP2::OBJ_RESOURCE:
     case MP2::OBJ_CAMPFIRE:
     case MP2::OBJ_FLOTSAM:
-    case MP2::OBJ_SHIPWRECKSURVIROR:
+    case MP2::OBJ_SHIPWRECKSURVIVOR:
     case MP2::OBJ_TREASURECHEST:
     case MP2::OBJ_WATERCHEST:
     case MP2::OBJ_ABANDONEDMINE:
@@ -64,12 +66,12 @@ bool Maps::Tiles::QuantityIsValid( void ) const
     return false;
 }
 
-int Maps::Tiles::QuantityVariant( void ) const
+int Maps::Tiles::QuantityVariant() const
 {
     return quantity2 >> 4;
 }
 
-int Maps::Tiles::QuantityExt( void ) const
+int Maps::Tiles::QuantityExt() const
 {
     return 0x0f & quantity2;
 }
@@ -86,7 +88,7 @@ void Maps::Tiles::QuantitySetExt( int ext )
     quantity2 |= ( 0x0f & ext );
 }
 
-Skill::Secondary Maps::Tiles::QuantitySkill( void ) const
+Skill::Secondary Maps::Tiles::QuantitySkill() const
 {
     switch ( GetObject( false ) ) {
     case MP2::OBJ_ARTIFACT:
@@ -122,7 +124,7 @@ void Maps::Tiles::QuantitySetSkill( int skill )
     }
 }
 
-Spell Maps::Tiles::QuantitySpell( void ) const
+Spell Maps::Tiles::QuantitySpell() const
 {
     switch ( GetObject( false ) ) {
     case MP2::OBJ_ARTIFACT:
@@ -157,7 +159,7 @@ void Maps::Tiles::QuantitySetSpell( int spell )
     }
 }
 
-Artifact Maps::Tiles::QuantityArtifact( void ) const
+Artifact Maps::Tiles::QuantityArtifact() const
 {
     switch ( GetObject( false ) ) {
     case MP2::OBJ_WAGON:
@@ -167,7 +169,7 @@ Artifact Maps::Tiles::QuantityArtifact( void ) const
     case MP2::OBJ_DAEMONCAVE:
     case MP2::OBJ_WATERCHEST:
     case MP2::OBJ_TREASURECHEST:
-    case MP2::OBJ_SHIPWRECKSURVIROR:
+    case MP2::OBJ_SHIPWRECKSURVIVOR:
     case MP2::OBJ_SHIPWRECK:
     case MP2::OBJ_GRAVEYARD:
         return Artifact( quantity1 );
@@ -193,13 +195,13 @@ void Maps::Tiles::QuantitySetArtifact( int art )
     quantity1 = art;
 }
 
-void Maps::Tiles::QuantitySetResource( int res, u32 count )
+void Maps::Tiles::QuantitySetResource( int res, uint32_t count )
 {
     quantity1 = res;
     quantity2 = res == Resource::GOLD ? count / 100 : count;
 }
 
-u32 Maps::Tiles::QuantityGold( void ) const
+uint32_t Maps::Tiles::QuantityGold() const
 {
     switch ( GetObject( false ) ) {
     case MP2::OBJ_ARTIFACT:
@@ -232,7 +234,6 @@ u32 Maps::Tiles::QuantityGold( void ) const
     case MP2::OBJ_DAEMONCAVE:
         switch ( QuantityVariant() ) {
         case 2:
-        case 3:
         case 4:
             return 2500;
         default:
@@ -245,6 +246,8 @@ u32 Maps::Tiles::QuantityGold( void ) const
         case 1:
             return 1000;
         case 2:
+        case 4:
+            // Case 4 gives 2000 gold and an artifact.
             return 2000;
         case 3:
             return 5000;
@@ -259,7 +262,7 @@ u32 Maps::Tiles::QuantityGold( void ) const
     return 0;
 }
 
-ResourceCount Maps::Tiles::QuantityResourceCount( void ) const
+ResourceCount Maps::Tiles::QuantityResourceCount() const
 {
     switch ( GetObject( false ) ) {
     case MP2::OBJ_ARTIFACT:
@@ -267,9 +270,9 @@ ResourceCount Maps::Tiles::QuantityResourceCount( void ) const
         case 1:
             return ResourceCount( Resource::GOLD, QuantityGold() );
         case 2:
-            return ResourceCount( Resource::FromIndexSprite2( QuantityExt() - 1 ), 3 );
+            return ResourceCount( Resource::getResourceTypeFromIconIndex( QuantityExt() - 1 ), 3 );
         case 3:
-            return ResourceCount( Resource::FromIndexSprite2( QuantityExt() - 1 ), 5 );
+            return ResourceCount( Resource::getResourceTypeFromIconIndex( QuantityExt() - 1 ), 5 );
         default:
             break;
         }
@@ -289,7 +292,7 @@ ResourceCount Maps::Tiles::QuantityResourceCount( void ) const
     return ResourceCount( quantity1, Resource::GOLD == quantity1 ? QuantityGold() : quantity2 );
 }
 
-Funds Maps::Tiles::QuantityFunds( void ) const
+Funds Maps::Tiles::QuantityFunds() const
 {
     const ResourceCount & rc = QuantityResourceCount();
 
@@ -341,7 +344,7 @@ void Maps::Tiles::QuantitySetColor( int col )
     }
 }
 
-int Maps::Tiles::QuantityColor( void ) const
+int Maps::Tiles::QuantityColor() const
 {
     switch ( GetObject( false ) ) {
     case MP2::OBJ_BARRIER:
@@ -353,7 +356,7 @@ int Maps::Tiles::QuantityColor( void ) const
     }
 }
 
-Monster Maps::Tiles::QuantityMonster( void ) const
+Monster Maps::Tiles::QuantityMonster() const
 {
     switch ( GetObject( false ) ) {
     case MP2::OBJ_WATCHTOWER:
@@ -417,13 +420,14 @@ Monster Maps::Tiles::QuantityMonster( void ) const
     return MP2::isCaptureObject( GetObject( false ) ) ? Monster( world.GetCapturedObject( GetIndex() ).GetTroop().GetID() ) : Monster( Monster::UNKNOWN );
 }
 
-Troop Maps::Tiles::QuantityTroop( void ) const
+Troop Maps::Tiles::QuantityTroop() const
 {
     return MP2::isCaptureObject( GetObject( false ) ) ? world.GetCapturedObject( GetIndex() ).GetTroop() : Troop( QuantityMonster(), MonsterCount() );
 }
 
-void Maps::Tiles::QuantityReset( void )
+void Maps::Tiles::QuantityReset()
 {
+    // TODO: don't modify first 2 bits of quantity1.
     quantity1 = 0;
     quantity2 = 0;
 
@@ -431,7 +435,7 @@ void Maps::Tiles::QuantityReset( void )
     case MP2::OBJ_SKELETON:
     case MP2::OBJ_WAGON:
     case MP2::OBJ_ARTIFACT:
-    case MP2::OBJ_SHIPWRECKSURVIROR:
+    case MP2::OBJ_SHIPWRECKSURVIVOR:
     case MP2::OBJ_WATERCHEST:
     case MP2::OBJ_TREASURECHEST:
     case MP2::OBJ_SHIPWRECK:
@@ -450,21 +454,22 @@ void Maps::Tiles::QuantityReset( void )
 
 void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
 {
+    // TODO: don't modify first 2 bits of quantity1.
     switch ( GetObject( false ) ) {
     case MP2::OBJ_WITCHSHUT:
         QuantitySetSkill( Skill::Secondary::RandForWitchsHut() );
         break;
 
     case MP2::OBJ_SHRINE1:
-        QuantitySetSpell( Rand::Get( 1 ) ? Spell::RandCombat( 1 )() : Spell::RandAdventure( 1 )() );
+        QuantitySetSpell( Rand::Get( 1 ) ? Spell::RandCombat( 1 ).GetID() : Spell::RandAdventure( 1 ).GetID() );
         break;
 
     case MP2::OBJ_SHRINE2:
-        QuantitySetSpell( Rand::Get( 1 ) ? Spell::RandCombat( 2 )() : Spell::RandAdventure( 2 )() );
+        QuantitySetSpell( Rand::Get( 1 ) ? Spell::RandCombat( 2 ).GetID() : Spell::RandAdventure( 2 ).GetID() );
         break;
 
     case MP2::OBJ_SHRINE3:
-        QuantitySetSpell( Rand::Get( 1 ) ? Spell::RandCombat( 3 )() : Spell::RandAdventure( 3 )() );
+        QuantitySetSpell( Rand::Get( 1 ) ? Spell::RandCombat( 3 ).GetID() : Spell::RandAdventure( 3 ).GetID() );
         break;
 
     case MP2::OBJ_SKELETON: {
@@ -478,7 +483,8 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
             QuantitySetArtifact( Artifact::Rand( Artifact::ART_LEVEL123 ) );
         else
             QuantityReset();
-    } break;
+        break;
+    }
 
     case MP2::OBJ_WAGON: {
         quantity2 = 0;
@@ -496,13 +502,14 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
             QuantitySetArtifact( Artifact::Rand( Rand::Get( 1 ) ? Artifact::ART_LEVEL1 : Artifact::ART_LEVEL2 ) );
             break;
         case 2:
-            QuantitySetResource( Resource::Rand(), Rand::Get( 2, 5 ) );
+            QuantitySetResource( Resource::Rand( false ), Rand::Get( 2, 5 ) );
             break;
         default:
             QuantityReset();
             break;
         }
-    } break;
+        break;
+    }
 
     case MP2::OBJ_ARTIFACT: {
         const int art = Artifact::FromMP2IndexSprite( objectIndex ).GetID();
@@ -524,15 +531,18 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
                 QuantitySetVariant( cond );
                 QuantitySetArtifact( art );
 
-                if ( cond == 2 || cond == 3 )
-                    QuantitySetExt( Resource::GetIndexSprite2( Resource::Rand() ) + 1 );
+                if ( cond == 2 || cond == 3 ) {
+                    // TODO: why do we use icon ICN index instead of map ICN index?
+                    QuantitySetExt( Resource::getIconIcnIndex( Resource::Rand( false ) ) + 1 );
+                }
             }
         }
-    } break;
+        break;
+    }
 
     case MP2::OBJ_RESOURCE: {
         const int res = Resource::FromIndexSprite( objectIndex );
-        u32 count = 0;
+        uint32_t count = 0;
 
         switch ( res ) {
         case Resource::GOLD:
@@ -548,12 +558,13 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
         }
 
         QuantitySetResource( res, count );
-    } break;
+        break;
+    }
 
-    case MP2::OBJ_CAMPFIRE: {
+    case MP2::OBJ_CAMPFIRE:
         // 4-6 rnd resource and + 400-600 gold
-        QuantitySetResource( Resource::Rand(), Rand::Get( 4, 6 ) );
-    } break;
+        QuantitySetResource( Resource::Rand( false ), Rand::Get( 4, 6 ) );
+        break;
 
     case MP2::OBJ_MAGICGARDEN:
         // 5 gems or 500 gold
@@ -570,17 +581,18 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
 
     case MP2::OBJ_WINDMILL: {
         int res = Resource::WOOD;
-        // except: wood, bugs: #3117478
-        while ( res == Resource::WOOD )
-            res = Resource::Rand();
+        while ( res == Resource::WOOD ) {
+            res = Resource::Rand( false );
+        }
 
         // 2 rnd resource
         QuantitySetResource( res, 2 );
-    } break;
+        break;
+    }
 
     case MP2::OBJ_LEANTO:
         // 1-4 rnd resource
-        QuantitySetResource( Resource::Rand(), Rand::Get( 1, 4 ) );
+        QuantitySetResource( Resource::Rand( false ), Rand::Get( 1, 4 ) );
         break;
 
     case MP2::OBJ_FLOTSAM: {
@@ -603,9 +615,10 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
             quantity1 = 5;
             break;
         }
-    } break;
+        break;
+    }
 
-    case MP2::OBJ_SHIPWRECKSURVIROR: {
+    case MP2::OBJ_SHIPWRECKSURVIVOR: {
         Rand::Queue percents( 3 );
         // 55%: artifact 1
         percents.Push( 1, 55 );
@@ -626,7 +639,8 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
             QuantitySetArtifact( Artifact::Rand( Artifact::ART_LEVEL3 ) );
             break;
         }
-    } break;
+        break;
+    }
 
     case MP2::OBJ_WATERCHEST: {
         Rand::Queue percents( 3 );
@@ -638,7 +652,7 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
         percents.Push( 2, 10 );
 
         int art = Artifact::UNKNOWN;
-        u32 gold = 0;
+        uint32_t gold = 0;
 
         // variant
         switch ( percents.Get() ) {
@@ -655,7 +669,8 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
 
         QuantitySetResource( Resource::GOLD, gold );
         QuantitySetArtifact( art );
-    } break;
+        break;
+    }
 
     case MP2::OBJ_TREASURECHEST:
         if ( isWater() ) {
@@ -674,7 +689,7 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
             percents.Push( 4, 5 );
 
             int art = Artifact::UNKNOWN;
-            u32 gold = 0;
+            uint32_t gold = 0;
 
             // variant
             switch ( percents.Get() ) {
@@ -716,7 +731,8 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
 
         QuantitySetVariant( cond );
         QuantitySetArtifact( cond == 4 ? Artifact::Rand( Artifact::ART_LEVEL123 ) : Artifact::UNKNOWN );
-    } break;
+        break;
+    }
 
     case MP2::OBJ_GRAVEYARD:
         // 1000 gold + art
@@ -727,15 +743,17 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
     case MP2::OBJ_PYRAMID: {
         // random spell level 5
         const Spell & spell = Rand::Get( 1 ) ? Spell::RandCombat( 5 ) : Spell::RandAdventure( 5 );
-        QuantitySetSpell( spell() );
-    } break;
+        QuantitySetSpell( spell.GetID() );
+        break;
+    }
 
     case MP2::OBJ_DAEMONCAVE: {
         // 1000 exp or 1000 exp + 2500 gold or 1000 exp + art or (-2500 or remove hero)
-        int cond = Rand::Get( 1, 4 );
+        const int cond = Rand::Get( 1, 4 );
         QuantitySetVariant( cond );
         QuantitySetArtifact( cond == 3 ? Artifact::Rand( Artifact::ART_LEVEL123 ) : Artifact::UNKNOWN );
-    } break;
+        break;
+    }
 
     case MP2::OBJ_TREEKNOWLEDGE:
         // variant: 10 gems, 2000 gold or free
@@ -751,13 +769,13 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
         }
         break;
 
-    case MP2::OBJ_BARRIER: {
+    case MP2::OBJ_BARRIER:
         QuantitySetColor( Tiles::ColorFromBarrierSprite( objectTileset, objectIndex ) );
-    } break;
+        break;
 
-    case MP2::OBJ_TRAVELLERTENT: {
+    case MP2::OBJ_TRAVELLERTENT:
         QuantitySetColor( Tiles::ColorFromTravellerTentSprite( objectTileset, objectIndex ) );
-    } break;
+        break;
 
     case MP2::OBJ_ALCHEMYLAB:
         QuantitySetResource( Resource::MERCURY, 1 );
@@ -787,7 +805,8 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
         default:
             break;
         }
-    } break;
+        break;
+    }
 
     case MP2::OBJ_ABANDONEDMINE: {
         Troop & troop = world.GetCapturedObject( GetIndex() ).GetTroop();
@@ -796,7 +815,8 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
         troop.Set( Monster::GHOST, 3 * Rand::Get( 13, 15 ) );
 
         QuantitySetResource( Resource::GOLD, 1000 );
-    } break;
+        break;
+    }
 
     case MP2::OBJ_BOAT:
         objectTileset = 27;
@@ -870,8 +890,7 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
         break;
 
     case MP2::OBJ_BARROWMOUNDS:
-        if ( !Settings::Get().ExtWorldDisableBarrowMounds() )
-            UpdateDwellingPopulation( *this, isFirstLoad );
+        UpdateDwellingPopulation( *this, isFirstLoad );
         break;
 
     default:
@@ -879,54 +898,37 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
     }
 }
 
-int Maps::Tiles::MonsterJoinCondition( void ) const
+int Maps::Tiles::MonsterJoinCondition() const
 {
     return mp2_object == MP2::OBJ_MONSTER ? ( 0x03 & quantity3 ) : 0;
 }
 
 void Maps::Tiles::MonsterSetJoinCondition( int cond )
 {
+    // TODO: why are we doing this? Simplify the logic.
     quantity3 &= 0xFC;
     quantity3 |= ( cond & 0x03 );
 }
 
-void Maps::Tiles::MonsterSetFixedCount( void )
-{
-    quantity3 |= 0x80;
-}
-
-bool Maps::Tiles::MonsterFixedCount( void ) const
-{
-    return mp2_object == MP2::OBJ_MONSTER ? ( quantity3 & 0x80 ) != 0 : false;
-}
-
-bool Maps::Tiles::MonsterJoinConditionSkip( void ) const
+bool Maps::Tiles::MonsterJoinConditionSkip() const
 {
     return Monster::JOIN_CONDITION_SKIP == MonsterJoinCondition();
 }
 
-bool Maps::Tiles::MonsterJoinConditionMoney( void ) const
-{
-    return Monster::JOIN_CONDITION_MONEY == MonsterJoinCondition();
-}
-
-bool Maps::Tiles::MonsterJoinConditionFree( void ) const
+bool Maps::Tiles::MonsterJoinConditionFree() const
 {
     return Monster::JOIN_CONDITION_FREE == MonsterJoinCondition();
 }
 
-bool Maps::Tiles::MonsterJoinConditionForce( void ) const
+uint32_t Maps::Tiles::MonsterCount() const
 {
-    return Monster::JOIN_CONDITION_FORCE == MonsterJoinCondition();
+    // TODO: avoid this hacky way of storing data.
+    return ( static_cast<uint32_t>( quantity1 ) << 8 ) | quantity2;
 }
 
-u32 Maps::Tiles::MonsterCount( void ) const
+void Maps::Tiles::MonsterSetCount( uint32_t count )
 {
-    return ( static_cast<u32>( quantity1 ) << 8 ) | quantity2;
-}
-
-void Maps::Tiles::MonsterSetCount( u32 count )
-{
+    // TODO: avoid this hacky way of storing data.
     quantity1 = count >> 8;
     quantity2 = 0x00FF & count;
 }
@@ -935,8 +937,9 @@ void Maps::Tiles::PlaceMonsterOnTile( Tiles & tile, const Monster & mons, const 
 {
     tile.SetObject( MP2::OBJ_MONSTER );
 
-    // if there was another sprite here (shadow for example) push it down to Addons
-    if ( tile.objectTileset != 0 && tile.objectIndex != 255 ) {
+    // if there was another sprite here (shadow for example) push it down to Addons,
+    // except when there is already MONS32.ICN here (a random monster for example)
+    if ( tile.objectTileset != 0 && tile.objectTileset != 48 && tile.objectIndex != 255 ) {
         tile.AddonsPushLevel1( TilesAddon( 0, tile.uniq, tile.objectTileset, tile.objectIndex ) );
     }
     // replace sprite with the one for the new monster
@@ -944,23 +947,25 @@ void Maps::Tiles::PlaceMonsterOnTile( Tiles & tile, const Monster & mons, const 
     tile.objectTileset = 48; // MONS32.ICN
     tile.objectIndex = mons.GetSpriteIndex();
 
-    if ( count ) {
-        tile.MonsterSetFixedCount();
+    const bool setDefinedCount = ( count > 0 );
+
+    if ( setDefinedCount ) {
         tile.MonsterSetCount( count );
     }
     else {
         tile.MonsterSetCount( mons.GetRNDSize( true ) );
     }
 
-    // skip join
-    if ( mons.GetID() == Monster::GHOST || mons.isElemental() )
+    if ( mons.GetID() == Monster::GHOST || mons.isElemental() ) {
+        // Ghosts and elementals never join hero's army.
         tile.MonsterSetJoinCondition( Monster::JOIN_CONDITION_SKIP );
-    else
-        // fixed count: for money
-        if ( tile.MonsterFixedCount() ||
-             // month of monster
-             ( world.GetWeekType().GetType() == Week::MONSTERS && world.GetWeekType().GetMonster() == mons.GetID() ) )
+    }
+    else if ( setDefinedCount || ( world.GetWeekType().GetType() == WeekName::MONSTERS && world.GetWeekType().GetMonster() == mons.GetID() ) ) {
+        // Wandering monsters with the number of units specified by the map designer are always considered as "hostile" and always join only for money.
+
+        // Monsters will be willing to join for some amount of money.
         tile.MonsterSetJoinCondition( Monster::JOIN_CONDITION_MONEY );
+    }
     else {
         // 20% chance for join
         if ( 3 > Rand::Get( 1, 10 ) )
@@ -1003,7 +1008,7 @@ void Maps::Tiles::UpdateMonsterInfo( Tiles & tile )
         tile.objectIndex = mons.GetID() - 1; // ICN::MONS32 start from PEASANT
     }
 
-    u32 count = 0;
+    uint32_t count = 0;
 
     // update count (mp2 format)
     if ( tile.quantity1 || tile.quantity2 ) {
@@ -1019,9 +1024,9 @@ void Maps::Tiles::UpdateMonsterInfo( Tiles & tile )
 void Maps::Tiles::UpdateDwellingPopulation( Tiles & tile, bool isFirstLoad )
 {
     uint32_t count = isFirstLoad ? 0 : tile.MonsterCount();
-    const int obj = tile.GetObject( false );
+    const MP2::MapObjectType objectType = tile.GetObject( false );
 
-    switch ( obj ) {
+    switch ( objectType ) {
     // join monsters
     case MP2::OBJ_HALFLINGHOLE:
         count += isFirstLoad ? Rand::Get( 20, 40 ) : Rand::Get( 5, 10 );
@@ -1092,9 +1097,13 @@ void Maps::Tiles::UpdateDwellingPopulation( Tiles & tile, bool isFirstLoad )
 void Maps::Tiles::UpdateMonsterPopulation( Tiles & tile )
 {
     const Troop & troop = tile.QuantityTroop();
+    const uint32_t troopCount = troop.GetCount();
 
-    if ( 0 == troop.GetCount() )
+    if ( troopCount == 0 ) {
         tile.MonsterSetCount( troop.GetRNDSize( false ) );
-    else if ( !tile.MonsterFixedCount() )
-        tile.MonsterSetCount( troop.GetCount() * 8 / 7 );
+    }
+    else {
+        const uint32_t bonusUnit = ( Rand::Get( 1, 7 ) <= ( troopCount % 7 ) ) ? 1 : 0;
+        tile.MonsterSetCount( troopCount * 8 / 7 + bonusUnit );
+    }
 }

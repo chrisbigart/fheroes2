@@ -1,6 +1,6 @@
 /***************************************************************************
- *   Free Heroes of Might and Magic II: https://github.com/ihhub/fheroes2  *
- *   Copyright (C) 2020                                                    *
+ *   fheroes2: https://github.com/ihhub/fheroes2                           *
+ *   Copyright (C) 2020 - 2022                                             *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -19,6 +19,7 @@
  ***************************************************************************/
 
 #include <algorithm>
+#include <cassert>
 
 #include "agg_image.h"
 #include "dialog.h"
@@ -29,6 +30,73 @@
 #include "race.h"
 #include "settings.h"
 #include "text.h"
+#include "tools.h"
+#include "translations.h"
+
+namespace
+{
+    void changeRaceToNext( Player & player )
+    {
+        switch ( player.GetRace() ) {
+        case Race::KNGT:
+            player.SetRace( Race::BARB );
+            break;
+        case Race::BARB:
+            player.SetRace( Race::SORC );
+            break;
+        case Race::SORC:
+            player.SetRace( Race::WRLK );
+            break;
+        case Race::WRLK:
+            player.SetRace( Race::WZRD );
+            break;
+        case Race::WZRD:
+            player.SetRace( Race::NECR );
+            break;
+        case Race::NECR:
+            player.SetRace( Race::RAND );
+            break;
+        case Race::RAND:
+            player.SetRace( Race::KNGT );
+            break;
+        default:
+            // Did you add a new race? Add the logic above
+            assert( 0 );
+            break;
+        }
+    }
+
+    void changeRaceToPrev( Player & player )
+    {
+        switch ( player.GetRace() ) {
+        case Race::KNGT:
+            player.SetRace( Race::RAND );
+            break;
+        case Race::BARB:
+            player.SetRace( Race::KNGT );
+            break;
+        case Race::SORC:
+            player.SetRace( Race::BARB );
+            break;
+        case Race::WRLK:
+            player.SetRace( Race::SORC );
+            break;
+        case Race::WZRD:
+            player.SetRace( Race::WRLK );
+            break;
+        case Race::NECR:
+            player.SetRace( Race::WZRD );
+            break;
+        case Race::RAND:
+            player.SetRace( Race::NECR );
+            break;
+        default:
+            // Did you add a new race? Add the logic above
+            assert( 0 );
+            break;
+        }
+    }
+}
 
 Interface::PlayersInfo::PlayersInfo( bool name, bool race, bool swap )
     : show_name( name )
@@ -171,8 +239,8 @@ void Interface::PlayersInfo::RedrawInfo( bool show_play_info ) const /* show_pla
     fheroes2::Display & display = fheroes2::Display::instance();
     const Maps::FileInfo & fi = conf.CurrentFileInfo();
 
-    const u32 humans_colors = conf.GetPlayers().GetColors( CONTROL_HUMAN, true );
-    u32 index = 0;
+    const uint32_t humans_colors = conf.GetPlayers().GetColors( CONTROL_HUMAN, true );
+    uint32_t index = 0;
 
     for ( const_iterator it = begin(); it != end(); ++it ) {
         const Player & player = *( ( *it ).player );
@@ -182,26 +250,17 @@ void Interface::PlayersInfo::RedrawInfo( bool show_play_info ) const /* show_pla
 
         // 1. redraw opponents
 
-        // current human
-        if ( humans_colors & player.GetColor() )
+        if ( humans_colors & player.GetColor() ) {
+            // Current human.
             index = 9 + Color::GetIndex( player.GetColor() );
-        else
-            // comp only
-            if ( fi.ComputerOnlyColors() & player.GetColor() ) {
-            if ( show_play_info ) {
-                index = ( player.isPlay() ? 3 : 15 ) + Color::GetIndex( player.GetColor() );
-            }
-            else
-                index = 15 + Color::GetIndex( player.GetColor() );
         }
-        else
-        // comp/human
-        {
-            if ( show_play_info ) {
-                index = ( player.isPlay() ? 3 : 15 ) + Color::GetIndex( player.GetColor() );
-            }
-            else
-                index = 3 + Color::GetIndex( player.GetColor() );
+        else if ( fi.ComputerOnlyColors() & player.GetColor() ) {
+            // Computer only.
+            index = 15 + Color::GetIndex( player.GetColor() );
+        }
+        else {
+            // Computer or human.
+            index = 3 + Color::GetIndex( player.GetColor() );
         }
 
         // wide sprite offset
@@ -282,10 +341,10 @@ void Interface::PlayersInfo::resetSelection()
     currentSelectedPlayer = nullptr;
 }
 
-bool Interface::PlayersInfo::QueueEventProcessing( void )
+bool Interface::PlayersInfo::QueueEventProcessing()
 {
     Settings & conf = Settings::Get();
-    LocalEvent & le = LocalEvent::Get();
+    const LocalEvent & le = LocalEvent::Get();
     Player * player = nullptr;
 
     if ( le.MousePressRight() ) {
@@ -302,7 +361,22 @@ bool Interface::PlayersInfo::QueueEventProcessing( void )
                 _( "This lets you change the class of a player. Classes are not always changeable. Depending on the scenario, a player may receive additional towns and/or heroes not of their primary alignment." ),
                 Font::BIG );
     }
-    // le.MouseClickLeft()
+    else if ( le.MouseWheelUp() ) {
+        player = GetFromClassClick( le.GetMouseCursor() );
+        if ( nullptr != player ) {
+            if ( conf.AllowChangeRace( player->GetColor() ) ) {
+                changeRaceToPrev( *player );
+            }
+        }
+    }
+    else if ( le.MouseWheelDn() ) {
+        player = GetFromClassClick( le.GetMouseCursor() );
+        if ( nullptr != player ) {
+            if ( conf.AllowChangeRace( player->GetColor() ) ) {
+                changeRaceToNext( *player );
+            }
+        }
+    }
     else {
         // select opponent
         if ( nullptr != ( player = GetFromOpponentClick( le.GetMouseCursor() ) ) ) {
@@ -344,31 +418,7 @@ bool Interface::PlayersInfo::QueueEventProcessing( void )
         // select class
         else if ( nullptr != ( player = GetFromClassClick( le.GetMouseCursor() ) ) ) {
             if ( conf.AllowChangeRace( player->GetColor() ) ) {
-                switch ( player->GetRace() ) {
-                case Race::KNGT:
-                    player->SetRace( Race::BARB );
-                    break;
-                case Race::BARB:
-                    player->SetRace( Race::SORC );
-                    break;
-                case Race::SORC:
-                    player->SetRace( Race::WRLK );
-                    break;
-                case Race::WRLK:
-                    player->SetRace( Race::WZRD );
-                    break;
-                case Race::WZRD:
-                    player->SetRace( Race::NECR );
-                    break;
-                case Race::NECR:
-                    player->SetRace( Race::RAND );
-                    break;
-                case Race::RAND:
-                    player->SetRace( Race::KNGT );
-                    break;
-                default:
-                    break;
-                }
+                changeRaceToNext( *player );
             }
         }
         // swap players

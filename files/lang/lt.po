@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: fheroes2\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2022-07-10 14:31+0000\n"
-"PO-Revision-Date: 2022-05-10 16:34+0200\n"
+"POT-Creation-Date: 2022-11-22 07:19+0000\n"
+"PO-Revision-Date: 2022-09-23 16:14+0200\n"
 "Last-Translator: fheroes2 team <fhomm2@gmail.com>\n"
 "Language-Team: Lithuanian <lt@li.org>\n"
 "Language: lt\n"
@@ -19,7 +19,21 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=n%10==1 && n%100!=11 ? 0 : n%10>=2 && (n"
 "%100<10 || n%100>=20) ? 1 : 2;\n"
 "X-Launchpad-Export-Date: 2014-12-05 05:56+0000\n"
-"X-Generator: Poedit 3.0.1\n"
+"X-Generator: Poedit 3.1.1\n"
+
+msgid ""
+"BATTLE\n"
+"ONLY"
+msgstr ""
+
+msgid "GIFT"
+msgstr ""
+
+msgid "DIFFICULTY"
+msgstr ""
+
+msgid "MIN"
+msgstr ""
 
 msgid "Warrior"
 msgstr ""
@@ -31,6 +45,14 @@ msgid "Explorer"
 msgstr ""
 
 msgid "None"
+msgstr ""
+
+msgid "Warning"
+msgstr ""
+
+msgid ""
+"Do you want to regain control from AI? The effect will take place only on "
+"the next turn."
 msgstr ""
 
 msgid ""
@@ -191,13 +213,19 @@ msgid ""
 "half movement rate."
 msgstr ""
 
-msgid "Speed"
-msgstr "Greitis"
-
 msgid "Speed: %{speed}"
 msgstr ""
 
+msgid "Speed"
+msgstr "Greitis"
+
 msgid "Army Order"
+msgstr ""
+
+msgid "Off"
+msgstr ""
+
+msgid "On"
 msgstr ""
 
 msgid "Auto Spell Casting"
@@ -212,10 +240,19 @@ msgstr ""
 msgid "Shadow Cursor"
 msgstr ""
 
-msgid "Off"
+msgid "Audio"
 msgstr ""
 
-msgid "On"
+msgid "Settings"
+msgstr ""
+
+msgid "Configure"
+msgstr ""
+
+msgid "Hot Keys"
+msgstr ""
+
+msgid "Damage Info"
 msgstr ""
 
 msgid "Set the speed of combat actions and animations."
@@ -243,6 +280,22 @@ msgid ""
 "Toggle on or off a shadow showing the current hex location of the mouse "
 "cursor."
 msgstr ""
+
+msgid "Change the audio settings of the game."
+msgstr ""
+
+msgid "Check and configure all the hot keys present in the game."
+msgstr ""
+
+msgid "Toggle to display damage information during the battle."
+msgstr ""
+
+#, fuzzy
+msgid "Exit this menu."
+msgstr "Šis karys palauks"
+
+msgid "Okay"
+msgstr "Gerai"
 
 msgid "The enemy has surrendered!"
 msgstr "Priešas pasidavė!"
@@ -339,6 +392,10 @@ msgstr "Atsisakyti"
 
 msgid "Hero Screen"
 msgstr ""
+
+#, fuzzy
+msgid "Captain's Options"
+msgstr "Išeiti iš pilies"
 
 msgid ""
 "Cast a magical spell. You may only cast one spell per combat round. The "
@@ -463,7 +520,13 @@ msgid ""
 "get to go again until the next round."
 msgstr ""
 
+msgid "View Captain's options"
+msgstr ""
+
 msgid "View Hero's options"
+msgstr ""
+
+msgid "View opposing Captain"
 msgstr ""
 
 msgid "View opposing Hero"
@@ -480,6 +543,11 @@ msgstr ""
 
 msgid "Shows the results of individual monster's actions."
 msgstr ""
+
+#, fuzzy
+msgid "Are you sure you want to finish the battle in auto mode?"
+msgstr ""
+"Ar tikrai norite perrašyti anksčiau tuo pačiu pavadinimu įrašytą failą?"
 
 msgid "%{name} skip their turn."
 msgstr ""
@@ -505,14 +573,8 @@ msgstr[0] ""
 msgstr[1] ""
 msgstr[2] ""
 
-msgid "Moved %{monster}: %{src}, %{dst}"
+msgid "Moved %{monster}: from [%{src}] to [%{dst}]."
 msgstr ""
-
-#, fuzzy
-msgid "Moved %{monster}"
-msgstr ""
-"Keletas\n"
-"%{monster}"
 
 msgid "The %{name} resist the spell!"
 msgstr ""
@@ -580,8 +642,10 @@ msgstr ""
 msgid "The mirror image is destroyed!"
 msgstr ""
 
-msgid "Break auto battle?"
+#, fuzzy
+msgid "Are you sure you want to interrupt the auto battle?"
 msgstr ""
+"Ar tikrai norite perrašyti anksčiau tuo pačiu pavadinimu įrašytą failą?"
 
 msgid "Error"
 msgstr ""
@@ -671,13 +735,19 @@ msgstr ""
 msgid "each with a +%{attack} bonus to their attack skill."
 msgstr ""
 
+msgid "The %{name} is destroyed."
+msgstr ""
+
 msgid ""
 "The %{artifact} artifact is in effect for this battle, disabling %{spell} "
 "spell."
 msgstr ""
 
-msgid "%{count} %{name} rise(s) from the dead!"
-msgstr ""
+msgid "%{count} %{name} rises from the dead!"
+msgid_plural "%{count} %{name} rise from the dead!"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
 
 #, fuzzy
 msgid "Dwarven Alliance"
@@ -716,14 +786,23 @@ msgstr ""
 msgid "Annexation"
 msgstr ""
 
-#, fuzzy
-msgid "Carator Mines"
-msgstr "Kristalų kasykla"
-
 msgid "Force of Arms"
 msgstr ""
 
 msgid "Save the Dwarves"
+msgstr ""
+
+#, fuzzy
+msgid "Carator Mines"
+msgstr "Kristalų kasykla"
+
+msgid "Turning Point"
+msgstr ""
+
+msgid "scenarioName|Defender"
+msgstr ""
+
+msgid "Corlagon's Defense"
 msgstr ""
 
 #, fuzzy
@@ -733,13 +812,7 @@ msgstr "Rytų miestas."
 msgid "The Gauntlet"
 msgstr ""
 
-msgid "Turning Point"
-msgstr ""
-
 msgid "Betrayal"
-msgstr ""
-
-msgid "Corlagon's Defense"
 msgstr ""
 
 msgid "Final Justice"
@@ -1756,9 +1829,6 @@ msgstr ""
 msgid "Sheltemburg"
 msgstr ""
 
-msgid "Cannot recruit - guest to guard automove error."
-msgstr ""
-
 msgid "Cannot recruit - you already have a Hero in this town."
 msgstr ""
 
@@ -2146,10 +2216,6 @@ msgid "Exit"
 msgstr "Išeiti iš miesto"
 
 #, fuzzy
-msgid "Exit this menu."
-msgstr "Šis karys palauks"
-
-#, fuzzy
 msgid "Click to show next town."
 msgstr "Rodyti kitą miestą"
 
@@ -2162,14 +2228,6 @@ msgstr "Rodyti ankstesnį miestą"
 
 msgid "Show previous town"
 msgstr "Rodyti ankstesnį miestą"
-
-msgid "Army joining"
-msgstr ""
-
-msgid ""
-"Unable to merge two armies together. Rearrange monsters manually before "
-"moving the hero to the garrison."
-msgstr ""
 
 msgid "This town may not be upgraded to a castle."
 msgstr ""
@@ -2186,12 +2244,6 @@ msgid "Exit Town"
 msgstr "Išeiti iš miesto"
 
 msgid "Show Income"
-msgstr ""
-
-msgid "Swap Heroes"
-msgstr ""
-
-msgid "Meeting Heroes"
 msgstr ""
 
 msgid "View Hero"
@@ -2269,6 +2321,13 @@ msgstr ""
 #, fuzzy
 msgid "Recruit Creatures"
 msgstr "Pasamdyti %{name}"
+
+msgid "Max"
+msgstr ""
+
+#, fuzzy
+msgid "Hire all creatures in the town."
+msgstr "Prarasti visus savo herojus bei miestus."
 
 msgid "Town Population Information and Statistics"
 msgstr "Miesto gyventojų informacija bei statistika"
@@ -2393,15 +2452,6 @@ msgstr ""
 msgid "(Rate: %{percent})"
 msgstr ""
 
-msgid "Total: "
-msgstr ""
-
-msgid "No room in"
-msgstr ""
-
-msgid "the garrison"
-msgstr ""
-
 msgid "off"
 msgstr ""
 
@@ -2439,14 +2489,14 @@ msgstr ""
 msgid "Toggle 3D effects of foreground sounds."
 msgstr ""
 
-msgid "Okay"
-msgstr "Gerai"
-
 msgid "Build a new ship:"
 msgstr "Statyti naują laivą:"
 
 msgid "Resource cost:"
 msgstr "Išteklio kaina:"
+
+msgid "Total: "
+msgstr ""
 
 msgid "Need: "
 msgstr ""
@@ -2482,25 +2532,7 @@ msgstr ""
 msgid "Language"
 msgstr ""
 
-msgid "Resolution"
-msgstr ""
-
-msgid "Experimental"
-msgstr ""
-
-msgid "Settings"
-msgstr ""
-
-msgid "Audio"
-msgstr ""
-
-msgid "settings"
-msgstr ""
-
-msgid "Hot Keys"
-msgstr ""
-
-msgid "In-game"
+msgid "Graphics"
 msgstr ""
 
 #, fuzzy
@@ -2516,57 +2548,16 @@ msgstr ""
 msgid "Text Support"
 msgstr ""
 
-msgid "Evil"
-msgstr ""
-
-msgid "Good"
-msgstr ""
-
-msgid "Interface Type"
-msgstr ""
-
-msgid "Auto Resolve"
-msgstr ""
-
-msgid "Auto, No Spells"
-msgstr ""
-
-msgid "Manual"
-msgstr ""
-
-msgid "Battles"
+msgid "Change the language of the game."
 msgstr ""
 
 msgid "Select Game Language"
 msgstr ""
 
-msgid "Change language of the game."
+msgid "Change the graphics settings of the game."
 msgstr ""
 
-msgid "Select Game Resolution"
-msgstr ""
-
-msgid "Change resolution of the game."
-msgstr ""
-
-msgid "Change audio settings of the game."
-msgstr ""
-
-msgid "Experimental game settings."
-msgstr ""
-
-msgid "Toggle instant battle mode."
-msgstr ""
-
-msgid "Check all Hot Keys used in the game."
-msgstr ""
-
-msgid "Toggle the type of interface you want to use."
-msgstr ""
-
-msgid ""
-"Toggle color cursors on/off. Color cursors look nicer, but sometimes don't "
-"move as smoothly as black and white ones."
+msgid "Toggle colored cursor on or off. This is only an esthetic choice."
 msgstr ""
 
 msgid ""
@@ -2620,9 +2611,6 @@ msgid ""
 "Conditions"
 msgstr ""
 
-msgid "Score: "
-msgstr ""
-
 msgid "First select recipients!"
 msgstr ""
 
@@ -2645,16 +2633,55 @@ msgstr ""
 msgid "Gift from %{name}"
 msgstr "Pasamdyti %{name}"
 
-msgid "Set Guardian"
+msgid "Resolution"
 msgstr ""
 
-msgid "Your army too big!"
-msgstr "Jūsų armija per didelė!"
+msgid "Fullscreen"
+msgstr ""
+
+msgid "window|Mode"
+msgstr ""
+
+msgid "Windowed"
+msgstr ""
+
+msgid "V-Sync"
+msgstr ""
+
+#, fuzzy
+msgid "on"
+msgstr "Miestelis"
+
+msgid "FPS"
+msgstr ""
+
+msgid "System Info"
+msgstr ""
+
+msgid "Change the resolution of the game."
+msgstr ""
+
+msgid "Select Game Resolution"
+msgstr ""
+
+msgid "Toggle between fullscreen and windowed modes."
+msgstr ""
+
+msgid ""
+"The V-Sync option can be enabled to resolve flickering issues on some "
+"monitors."
+msgstr ""
+
+msgid "Show extra information such as FPS and current time."
+msgstr ""
 
 msgid "Hot Keys:"
 msgstr ""
 
 msgid "Select Game Language:"
+msgstr ""
+
+msgid "Click to choose the selected language."
 msgstr ""
 
 msgid "%{name} has gained a level."
@@ -2689,9 +2716,6 @@ msgstr ""
 msgid "I can offer you 1 unit of %{resto} for %{count} units of %{resfrom}."
 msgstr ""
 
-msgid "Max"
-msgstr ""
-
 #, fuzzy
 msgid "Min"
 msgstr "Apleisti rūmai"
@@ -2711,10 +2735,10 @@ msgstr ""
 msgid "n/a"
 msgstr ""
 
-msgid "guarded by "
+msgid "guarded by %{count} %{monster}"
 msgstr ""
 
-msgid "guarded by %{count} %{monster}"
+msgid "guarded by "
 msgstr ""
 
 msgid "(available: %{count})"
@@ -2799,6 +2823,9 @@ msgstr "Yra: %{count}"
 
 msgid "Number to buy:"
 msgstr "Norimas kiekis:"
+
+msgid "Select Game Resolution:"
+msgstr ""
 
 msgid "Click to apply the selected resolution."
 msgstr ""
@@ -2914,6 +2941,9 @@ msgstr ""
 "Žemėlapis\n"
 "Sudėtingumas"
 
+msgid "N"
+msgstr ""
+
 msgid "No maps exist at that size"
 msgstr ""
 
@@ -2999,9 +3029,6 @@ msgstr ""
 msgid "Accept the choice made."
 msgstr ""
 
-msgid "Experimental Game Settings"
-msgstr ""
-
 msgid "Jump"
 msgstr ""
 
@@ -3016,7 +3043,28 @@ msgstr ""
 msgid "Enemy Speed"
 msgstr "Greitis"
 
+msgid "Slow"
+msgstr ""
+
+msgid "Normal"
+msgstr ""
+
+msgid "Fast"
+msgstr ""
+
+msgid "Very Fast"
+msgstr ""
+
 msgid "Scroll Speed"
+msgstr ""
+
+msgid "Evil"
+msgstr ""
+
+msgid "Good"
+msgstr ""
+
+msgid "Interface Type"
 msgstr ""
 
 msgid "Hide"
@@ -3026,6 +3074,18 @@ msgid "Show"
 msgstr ""
 
 msgid "Interface"
+msgstr ""
+
+msgid "Auto Resolve"
+msgstr ""
+
+msgid "Auto, No Spells"
+msgstr ""
+
+msgid "Battles"
+msgstr ""
+
+msgid "autoBattle|Manual"
 msgstr ""
 
 msgid "Change the speed at which your heroes move on the main screen."
@@ -3039,7 +3099,13 @@ msgstr ""
 msgid "Sets the speed at which you scroll the window."
 msgstr ""
 
+msgid "Toggle the type of interface you want to use."
+msgstr ""
+
 msgid "Toggle interface visibility."
+msgstr ""
+
+msgid "Toggle instant battle mode."
 msgstr ""
 
 msgid "Att."
@@ -3141,6 +3207,32 @@ msgstr ""
 msgid "and more..."
 msgstr ""
 
+#, fuzzy
+msgid "Campaign Difficulty"
+msgstr ""
+"Žemėlapis\n"
+"Sudėtingumas"
+
+msgid ""
+"Choose this difficulty if you want to prefer game story over challenge. AI "
+"is weaker in comparison with normal difficulty."
+msgstr ""
+
+msgid ""
+"Choose this difficulty to enjoy the campaign as per the original design."
+msgstr ""
+
+msgid ""
+"Choose this difficulty if you want challenge. AI is stronger in comparison "
+"with normal difficulty."
+msgstr ""
+
+msgid "Easy"
+msgstr ""
+
+msgid "Hard"
+msgstr ""
+
 msgid "Start the selected scenario."
 msgstr ""
 
@@ -3149,6 +3241,9 @@ msgid "View Intro"
 msgstr "Rodyti išteklius"
 
 msgid "View Intro videos for the current state of the campaign."
+msgstr ""
+
+msgid "Select campaign difficulty. It cannot be changed after."
 msgstr ""
 
 msgid "Restart"
@@ -3168,10 +3263,19 @@ msgstr ""
 msgid "Please make sure that campaign files are correct and present."
 msgstr ""
 
+msgid "Days spent"
+msgstr ""
+
+msgid "The number of days spent on this campaign."
+msgstr ""
+
 msgid "Project Coordination and Core Development"
 msgstr ""
 
 msgid "QA and Support"
+msgstr ""
+
+msgid "Visit us at "
 msgstr ""
 
 msgid "Development"
@@ -3180,25 +3284,28 @@ msgstr ""
 msgid "Dev and Support"
 msgstr ""
 
-msgid "Visit us at "
-msgstr ""
-
 msgid "Special Thanks to"
 msgstr ""
 
 msgid "and many other contributors!"
 msgstr ""
 
+msgid "and many-many other supporters!"
+msgstr ""
+
 msgid "Support us at"
+msgstr ""
+
+msgid "local-donation-platform|https://www.patreon.com/fheroes2"
 msgstr ""
 
 msgid "Connect with us at"
 msgstr ""
 
-msgid "Need help with the game?"
+msgid "local-social-network|https://www.facebook.com/groups/fheroes2"
 msgstr ""
 
-msgid "and many-many other supporters!"
+msgid "Need help with the game?"
 msgstr ""
 
 msgid "Original project before 0.7"
@@ -3313,6 +3420,9 @@ msgstr ""
 msgid "Recorded at Green Street Studios"
 msgstr ""
 
+msgid "credits|Manual"
+msgstr ""
+
 msgid "German Consultant"
 msgstr ""
 
@@ -3338,9 +3448,6 @@ msgid "Campaign"
 msgstr ""
 
 msgid "View High Scores for Campaigns."
-msgstr ""
-
-msgid "Warning"
 msgstr ""
 
 msgid "This file contains a save with an invalid game type."
@@ -3403,6 +3510,9 @@ msgstr ""
 msgid "Greetings!"
 msgstr ""
 
+msgid "Welcome to Heroes of Might and Magic II powered by fheroes2 engine!"
+msgstr ""
+
 msgid ""
 "Welcome to Heroes of Might and Magic II powered by fheroes2 engine! Before "
 "starting the game please choose game resolution."
@@ -3418,17 +3528,7 @@ msgid "door"
 msgstr ""
 
 msgid ""
-" on the left side of main menu.\n"
-"\n"
-"To switch between windowed and full screen modes\n"
-"press "
-msgstr ""
-
-msgid "F4"
-msgstr ""
-
-msgid ""
-" key on the keyboard.\n"
+" on the left side of main menu or by clicking on the configuration button. \n"
 "\n"
 "Enjoy the game!"
 msgstr ""
@@ -3596,6 +3696,23 @@ msgid "Run out of time. (Fail to win by a certain point.)"
 msgstr ""
 
 #, fuzzy
+msgid "You must defeat the enemy %{enemies}."
+msgid_plural "You must defeat the enemy alliance of %{enemies}."
+msgstr[0] "Prarasti miestą '%{name}'."
+msgstr[1] "Prarasti miestą '%{name}'."
+msgstr[2] "Prarasti miestą '%{name}'."
+
+msgid ""
+"The alliance consisting of %{allies} and you must defeat the enemy "
+"%{enemies}."
+msgid_plural ""
+"The alliance consisting of %{allies} and you must defeat the enemy alliance "
+"of %{enemies}."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#, fuzzy
 msgid "Capture the castle '%{name}'."
 msgstr "Užimti pilį '%{name}'"
 
@@ -3638,10 +3755,6 @@ msgstr ""
 
 msgid "%{color} player has been vanquished!"
 msgstr ""
-
-#, fuzzy
-msgid "Do you wish to continue the game?"
-msgstr "Ar norite nusipirkti vieną?"
 
 msgid "Scenario:"
 msgstr ""
@@ -3736,6 +3849,11 @@ msgid "%{color} player's turn."
 msgstr ""
 
 msgid ""
+"Do you want to transfer control from you to the AI? The effect will take "
+"place only on the next turn."
+msgstr ""
+
+msgid ""
 "%{color} player, you have lost your last town. If you do not conquer another "
 "town in next week, you will be eliminated."
 msgstr ""
@@ -3823,6 +3941,11 @@ msgid "Try looking on land!!!"
 msgstr ""
 
 msgid ""
+"Searching for the Ultimate Artifact is fruitless. Your hero could not carry "
+"it even if he found it - all his artifact slots are full."
+msgstr ""
+
+msgid ""
 "After spending many hours digging here, you have uncovered the %{artifact}."
 msgstr ""
 
@@ -3886,7 +4009,41 @@ msgid ""
 "and/or heroes not of their primary alignment."
 msgstr ""
 
+msgid "Handicap"
+msgstr ""
+
+#
+msgid ""
+"This lets you change the handicap of a particular player. Only humans may be "
+"handicapped. Handicapped players start with fewer resources and earn 15 or "
+"30% fewer resources per turn for mild and severe handicaps, respectively."
+msgstr ""
+
 msgid "%{color} player"
+msgstr ""
+
+msgid "No Handicap"
+msgstr ""
+
+msgid "No special restrictions on start resources and earning them per turn."
+msgstr ""
+
+msgid "Mild Handicap"
+msgstr ""
+
+#
+msgid ""
+"Mild handicapped players start with fewer resources and earn 15% fewer "
+"resources per turn."
+msgstr ""
+
+msgid "Severe Handicap"
+msgstr ""
+
+#
+msgid ""
+"Severe handicapped players start with fewer resources and earn 30% fewer "
+"resources per turn."
 msgstr ""
 
 msgid "View %{skill} Info"
@@ -3941,6 +4098,15 @@ msgid "Swedish"
 msgstr ""
 
 msgid "Portuguese"
+msgstr ""
+
+msgid "Turkish"
+msgstr ""
+
+msgid "Dutch"
+msgstr ""
+
+msgid "Hungarian"
 msgstr ""
 
 msgid ", FPS: "
@@ -4178,10 +4344,7 @@ msgstr ""
 msgid "two"
 msgstr ""
 
-msgid "A whirlpool engulfs your ship."
-msgstr ""
-
-msgid "Some of your army has fallen overboard."
+msgid "A whirlpool engulfs your ship. Some of your army has fallen overboard."
 msgstr ""
 
 msgid "Insulted by your refusal of their offer, the monsters attack!"
@@ -4304,11 +4467,6 @@ msgstr ""
 
 msgid ""
 "\n"
-"Unfortunately, you have no Magic Book to record the spell with."
-msgstr ""
-
-msgid ""
-"\n"
 "Unfortunately, you do not have the wisdom to understand the spell, and you "
 "are unable to learn it."
 msgstr ""
@@ -4320,6 +4478,11 @@ msgid ""
 "\n"
 "Unfortunately, you already have knowledge of this spell, so there is nothing "
 "more for them to teach you."
+msgstr ""
+
+msgid ""
+"\n"
+"Unfortunately, you have no Magic Book to record the spell with."
 msgstr ""
 
 msgid ""
@@ -5871,7 +6034,51 @@ msgstr ""
 msgid "speed|Instant"
 msgstr ""
 
-msgid "week|PLAGUE"
+msgid "week|Squirrel"
+msgstr ""
+
+msgid "week|Rabbit"
+msgstr ""
+
+msgid "week|Gopher"
+msgstr ""
+
+msgid "week|Badger"
+msgstr ""
+
+#, fuzzy
+msgid "week|Rat"
+msgstr "savait."
+
+msgid "week|Eagle"
+msgstr ""
+
+msgid "week|Weasel"
+msgstr ""
+
+msgid "week|Raven"
+msgstr ""
+
+msgid "week|Mongoose"
+msgstr ""
+
+#, fuzzy
+msgid "week|Dog"
+msgstr "savait."
+
+msgid "week|Aardvark"
+msgstr ""
+
+msgid "week|Lizard"
+msgstr ""
+
+msgid "week|Tortoise"
+msgstr ""
+
+msgid "week|Hedgehog"
+msgstr ""
+
+msgid "week|Condor"
 msgstr ""
 
 msgid "week|Ant"
@@ -5904,43 +6111,10 @@ msgstr ""
 msgid "week|Beetle"
 msgstr ""
 
-msgid "week|Squirrel"
+msgid "week|PLAGUE"
 msgstr ""
 
-msgid "week|Rabbit"
-msgstr ""
-
-msgid "week|Gopher"
-msgstr ""
-
-msgid "week|Badger"
-msgstr ""
-
-msgid "week|Eagle"
-msgstr ""
-
-msgid "week|Weasel"
-msgstr ""
-
-msgid "week|Raven"
-msgstr ""
-
-msgid "week|Mongoose"
-msgstr ""
-
-msgid "week|Aardvark"
-msgstr ""
-
-msgid "week|Lizard"
-msgstr ""
-
-msgid "week|Tortoise"
-msgstr ""
-
-msgid "week|Hedgehog"
-msgstr ""
-
-msgid "week|Condor"
+msgid "week|Unnamed"
 msgstr ""
 
 msgid "Desert"
@@ -8580,60 +8754,6 @@ msgstr ""
 msgid ""
 "This spell controls up to\n"
 "%{hp} HP."
-msgstr ""
-
-msgid "game: remember last focus"
-msgstr ""
-
-msgid "battle: show damage info"
-msgstr ""
-
-msgid "world: show terrain penalty"
-msgstr ""
-
-msgid "world: Scouting skill shows extended content info"
-msgstr ""
-
-msgid "world: allow to set guardian to objects"
-msgstr ""
-
-msgid "world: Neutral armies scale with game difficulty"
-msgstr ""
-
-msgid "world: Windmills, Water Wheels and Magic Gardens can be captured"
-msgstr ""
-
-msgid "castle: allow guardians"
-msgstr ""
-
-msgid "heroes: allow buy a spellbook from Shrines"
-msgstr ""
-
-msgid "heroes: remember movement points when retreating or surrendering"
-msgstr ""
-
-msgid "heroes: allow to choose any primary skill in Arena"
-msgstr ""
-
-msgid "battle: allow soft wait for troops"
-msgstr ""
-
-msgid "battle: deterministic events"
-msgstr ""
-
-msgid "game: show system info"
-msgstr ""
-
-msgid "game: autosave will be made at the beginning of the day"
-msgstr ""
-
-msgid "game: use evil interface"
-msgstr ""
-
-msgid "game: hide interface"
-msgstr ""
-
-msgid "game: offer to continue the game after victory condition"
 msgstr ""
 
 msgid "The ultimate artifact is really the %{name}."

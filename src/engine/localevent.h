@@ -24,15 +24,22 @@
 #ifndef H2LOCALEVENT_H
 #define H2LOCALEVENT_H
 
+#include <cstddef>
 #include <cstdint>
-#include <map>
-#include <set>
+#include <functional>
 #include <string>
+#include <utility>
+
+#include <SDL_events.h>
+#include <SDL_version.h>
+
+#if SDL_VERSION_ATLEAST( 2, 0, 0 )
+#include <SDL_gamecontroller.h>
+#include <SDL_touch.h>
+#endif
 
 #include "math_base.h"
 #include "timing.h"
-
-#include <SDL.h>
 
 namespace fheroes2
 {
@@ -153,13 +160,22 @@ namespace fheroes2
         LAST_KEY
     };
 
+    // Key modifier is used for key combination detection.
+    enum KeyModifier : int32_t
+    {
+        KEY_MODIFIER_NONE = 0,
+        KEY_MODIFIER_CTRL = 0x1,
+        KEY_MODIFIER_SHIFT = 0x2,
+        KEY_MODIFIER_ALT = 0x4,
+        KEY_MODIFIER_CAPS = 0x8,
+        KEY_MODIFIER_NUM = 0x10
+    };
+
     const char * KeySymGetName( const Key key );
 
     bool PressIntKey( uint32_t max, uint32_t & result );
 
     size_t InsertKeySym( std::string & res, size_t pos, const Key key, const int32_t mod );
-
-    Key getKeyFromSDL( const int sdlKey );
 }
 
 class LocalEvent
@@ -168,17 +184,17 @@ public:
     static LocalEvent & Get();
     static LocalEvent & GetClean(); // reset all previous event statuses and return a reference for events
 
-    void SetGlobalFilterMouseEvents( void ( *pf )( int32_t, int32_t ) )
+    void SetMouseMotionGlobalHook( void ( *pf )( int32_t, int32_t ) )
     {
-        redraw_cursor_func = pf;
+        mouse_motion_hook_func = pf;
     }
 
-    void SetGlobalFilterKeysEvents( void ( *pf )( int, int ) )
+    void setGlobalKeyDownEventHook( std::function<void( const fheroes2::Key, const int32_t )> hook )
     {
-        keyboard_filter_func = pf;
+        _globalKeyDownEventHook = std::move( hook );
     }
 
-    static void SetStateDefaults();
+    static void setEventProcessingStates();
 
     bool HandleEvents( bool delay = true, bool allowExit = false );
 
@@ -233,13 +249,6 @@ public:
         return MouseReleaseLeft() && ( rt & mouse_rl );
     }
 
-    bool MouseReleaseRight() const;
-
-    bool MouseReleaseRight( const fheroes2::Rect & rt ) const
-    {
-        return MouseReleaseRight() && ( rt & mouse_rr );
-    }
-
     bool MouseWheelUp( const fheroes2::Rect & rt ) const
     {
         return MouseWheelUp() && ( rt & mouse_cu );
@@ -275,7 +284,7 @@ public:
         return key_value;
     }
 
-    int KeyMod() const;
+    static int32_t getCurrentKeyModifiers();
 
     static void RegisterCycling( void ( *preRenderDrawing )() = nullptr, void ( *postRenderDrawing )() = nullptr );
 
@@ -304,8 +313,6 @@ public:
 private:
     LocalEvent();
 
-    static void SetState( const uint32_t type, const bool enable );
-
     void HandleMouseMotionEvent( const SDL_MouseMotionEvent & );
     void HandleMouseButtonEvent( const SDL_MouseButtonEvent & );
     void HandleKeyboardEvent( const SDL_KeyboardEvent & );
@@ -314,30 +321,28 @@ private:
     static void ResumeSounds();
 
 #if SDL_VERSION_ATLEAST( 2, 0, 0 )
-    static int GlobalFilterEvents( void *, SDL_Event * );
-
     void HandleMouseWheelEvent( const SDL_MouseWheelEvent & );
     void HandleControllerAxisEvent( const SDL_ControllerAxisEvent & motion );
     void HandleControllerButtonEvent( const SDL_ControllerButtonEvent & button );
-    void ProcessControllerAxisMotion();
     void HandleTouchEvent( const SDL_TouchFingerEvent & event );
 
-    static void OnSdl2WindowEvent( const SDL_Event & event );
-#else
-    static int GlobalFilterEvents( const SDL_Event * );
+    static void HandleWindowEvent( const SDL_WindowEvent & event );
+    static void HandleRenderDeviceResetEvent();
 
-    void OnActiveEvent( const SDL_Event & event );
+    void ProcessControllerAxisMotion();
+#else
+    static void HandleActiveEvent( const SDL_ActiveEvent & event );
 #endif
 
     enum flag_t
     {
-        KEY_PRESSED = 0x0001,
-        MOUSE_MOTION = 0x0002,
+        KEY_PRESSED = 0x0001, // key on the keyboard has been pressed
+        MOUSE_MOTION = 0x0002, // mouse cursor has been moved
         MOUSE_PRESSED = 0x0004, // mouse button is currently pressed
         MOUSE_RELEASED = 0x0008, // mouse button has just been released
         MOUSE_CLICKED = 0x0010, // mouse button has been clicked
-        MOUSE_WHEEL = 0x0020,
-        KEY_HOLD = 0x0040
+        MOUSE_WHEEL = 0x0020, // mouse wheel has been rotated
+        KEY_HOLD = 0x0040 // key on the keyboard is currently being held down
     };
 
     void SetModes( flag_t f )
@@ -366,8 +371,9 @@ private:
 
     fheroes2::Point mouse_wm; // wheel movement
 
-    void ( *redraw_cursor_func )( int32_t, int32_t );
-    void ( *keyboard_filter_func )( int, int );
+    void ( *mouse_motion_hook_func )( int32_t, int32_t );
+
+    std::function<void( const fheroes2::Key, const int32_t )> _globalKeyDownEventHook;
 
     uint32_t loop_delay;
 
@@ -389,13 +395,13 @@ private:
 
     SDL_GameController * _gameController = nullptr;
     SDL_FingerID _firstFingerId = 0;
+    SDL_FingerID _secondFingerId = 0;
     fheroes2::Time _controllerTimer;
     int16_t _controllerLeftXAxis = 0;
     int16_t _controllerLeftYAxis = 0;
     int16_t _controllerRightXAxis = 0;
     int16_t _controllerRightYAxis = 0;
     bool _controllerScrollActive = false;
-    bool _touchpadAvailable = false;
     int16_t _numTouches = 0;
 #endif
 };

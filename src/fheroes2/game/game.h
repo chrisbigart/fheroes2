@@ -28,8 +28,6 @@
 #include <string>
 
 #include "game_mode.h"
-#include "mp2.h"
-#include "mus.h"
 
 class Players;
 class Heroes;
@@ -119,38 +117,11 @@ namespace Game
     std::string GetSaveFileExtension();
     std::string GetSaveFileExtension( const int gameType );
 
-    namespace ObjectFadeAnimation
-    {
-        struct FadeTask
-        {
-            FadeTask();
-
-            FadeTask( MP2::MapObjectType object_, uint32_t objectIndex_, uint32_t animationIndex_, int32_t fromIndex_, int32_t toIndex_, uint8_t alpha_, bool fadeOut_,
-                      bool fadeIn_, uint8_t objectTileset_ );
-
-            MP2::MapObjectType object;
-            uint32_t objectIndex;
-            uint32_t animationIndex;
-            int32_t fromIndex;
-            int32_t toIndex;
-            uint8_t alpha;
-            bool fadeOut;
-            bool fadeIn;
-            uint8_t objectTileset;
-        };
-
-        const FadeTask & GetFadeTask();
-
-        void PrepareFadeTask( const MP2::MapObjectType object, int32_t fromTile, int32_t toTile, bool fadeOut, bool fadeIn );
-        void PerformFadeTask();
-    }
-
     int32_t GetStep4Player( const int32_t currentId, const int32_t width, const int32_t totalCount );
-    std::string CountThievesGuild( uint32_t monsterCount, int guildCount );
 
-    // Returns the string representation of the monster count, formatted according to the scouting level (possibly in
-    // abbreviated form), suitable for use with the WORLD_SCOUTING_EXTENDED option. See the implementation for details.
-    std::string formatMonsterCount( const uint32_t count, const int scoutingLevel, const bool abbreviateNumber = false );
+    // Returns the string representation of the monster count. If a detailed view is requested, the exact number is returned
+    // (unless the abbreviated number is requested), otherwise, a qualitative estimate is returned (Few, Several, etc).
+    std::string formatMonsterCount( const uint32_t count, const bool isDetailedView, const bool abbreviateNumber = false );
 }
 
 #endif

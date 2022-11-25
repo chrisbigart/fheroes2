@@ -18,12 +18,14 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#include "image.h"
-#include "image_palette.h"
-
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <type_traits>
+
+#include "image.h"
+#include "image_palette.h"
 
 namespace
 {
@@ -785,7 +787,7 @@ namespace fheroes2
 
         const uint8_t behindValue = 255 - alphaValue;
 
-        const uint8_t * gamePalette = fheroes2::getGamePalette();
+        const uint8_t * gamePalette = getGamePalette();
 
         if ( flip ) {
             const int32_t offsetInY = inY * widthIn + widthIn - 1 - inX;
@@ -914,7 +916,7 @@ namespace fheroes2
     {
         std::vector<uint8_t> palette( 256 );
 
-        const uint8_t * value = fheroes2::getGamePalette();
+        const uint8_t * value = getGamePalette();
 
         for ( uint32_t i = 0; i < 256; ++i ) {
             const uint32_t red = static_cast<uint32_t>( *value ) * alpha / 255;
@@ -1186,7 +1188,7 @@ namespace fheroes2
         uint8_t * imageOutY = out.image();
         const uint8_t * imageIn = in.image();
 
-        const uint8_t * gamePalette = fheroes2::getGamePalette();
+        const uint8_t * gamePalette = getGamePalette();
 
         for ( int32_t y = 0; y < height; ++y, imageOutY += width ) {
             uint8_t * imageOutX = imageOutY;
@@ -1523,6 +1525,64 @@ namespace fheroes2
         DrawLine( image, { roi.x, roi.y + roi.height - 1 }, { roi.x + roi.width, roi.y + roi.height - 1 }, value, roi );
     }
 
+    void DivideImageBySquares( const Point & spriteOffset, const Image & original, const int32_t squareSize, const bool flip,
+                               std::vector<std::pair<Point, Sprite>> & output )
+    {
+        if ( original.empty() ) {
+            return;
+        }
+
+        if ( squareSize <= 0 ) {
+            assert( 0 );
+            return;
+        }
+
+        Point offset{ spriteOffset.x / squareSize, spriteOffset.y / squareSize };
+
+        // The start of a square must be before image offset so in case of negative offset we need to decrease the ID of the start square.
+        if ( ( spriteOffset.x < 0 ) && ( offset.x * squareSize != spriteOffset.x ) ) {
+            --offset.x;
+        }
+
+        if ( ( spriteOffset.y < 0 ) && ( offset.y * squareSize != spriteOffset.y ) ) {
+            --offset.y;
+        }
+
+        const Point spriteRelativeOffset{ spriteOffset.x - offset.x * squareSize, spriteOffset.y - offset.y * squareSize };
+        const Point stepPerDirection{ ( original.width() + spriteRelativeOffset.x + squareSize - 1 ) / squareSize,
+                                      ( original.height() + spriteRelativeOffset.y + squareSize - 1 ) / squareSize };
+        assert( stepPerDirection.x > 0 && stepPerDirection.y > 0 );
+
+        const Rect relativeROI( spriteRelativeOffset.x, spriteRelativeOffset.y, original.width(), original.height() );
+
+        for ( int32_t y = 0; y < stepPerDirection.y; ++y ) {
+            for ( int32_t x = 0; x < stepPerDirection.x; ++x ) {
+                const Rect roi( x * squareSize, y * squareSize, squareSize, squareSize );
+                const Rect intersection = relativeROI ^ roi;
+                assert( intersection.width > 0 && intersection.height > 0 );
+
+                if ( flip ) {
+                    Sprite cropped( intersection.width, intersection.height );
+                    Flip( original, original.width() - intersection.x + spriteRelativeOffset.x - intersection.width, intersection.y - spriteRelativeOffset.y, cropped, 0,
+                          0, intersection.width, intersection.height, true, false );
+
+                    assert( !cropped.empty() );
+                    cropped.setPosition( intersection.x - roi.x, intersection.y - roi.y );
+
+                    output.emplace_back( offset + Point( x, y ), std::move( cropped ) );
+                }
+                else {
+                    Sprite cropped
+                        = Crop( original, intersection.x - spriteRelativeOffset.x, intersection.y - spriteRelativeOffset.y, intersection.width, intersection.height );
+                    assert( !cropped.empty() );
+                    cropped.setPosition( intersection.x - roi.x, intersection.y - roi.y );
+
+                    output.emplace_back( offset + Point( x, y ), std::move( cropped ) );
+                }
+            }
+        }
+    }
+
     Image ExtractCommonPattern( const std::vector<const Image *> & input )
     {
         if ( input.empty() )
@@ -1698,14 +1758,31 @@ namespace fheroes2
             return out;
         }
 
-        uint8_t * imageOutY = out.image();
-        uint8_t * transformOutY = out.transform();
-        const uint8_t * imageOutYEnd = imageOutY + width * height;
+        Flip( in, 0, 0, out, 0, 0, width, height, horizontally, vertically );
+        return out;
+    }
+
+    void Flip( const Image & in, int32_t inX, int32_t inY, Image & out, int32_t outX, int32_t outY, int32_t width, int32_t height, bool horizontally, bool vertically )
+    {
+        if ( !Verify( in, inX, inY, out, outX, outY, width, height ) ) {
+            return;
+        }
+
+        const int32_t widthIn = in.width();
+        const int32_t widthOut = out.width();
+
+        const int32_t offsetOut = outY * widthOut + outX;
+        const int32_t offsetIn = inY * widthIn + inX;
+
+        uint8_t * imageOutY = out.image() + offsetOut;
+        uint8_t * transformOutY = out.transform() + offsetOut;
+        const uint8_t * imageOutYEnd = imageOutY + widthOut * height;
 
         if ( horizontally && !vertically ) {
-            const uint8_t * imageInY = in.image() + width - 1;
-            const uint8_t * transformInY = in.transform() + width - 1;
-            for ( ; imageOutY != imageOutYEnd; imageOutY += width, transformOutY += width, imageInY += width, transformInY += width ) {
+            const uint8_t * imageInY = in.image() + offsetIn + width - 1;
+            const uint8_t * transformInY = in.transform() + offsetIn + width - 1;
+
+            for ( ; imageOutY != imageOutYEnd; imageOutY += widthOut, transformOutY += widthOut, imageInY += widthIn, transformInY += widthIn ) {
                 uint8_t * imageOutX = imageOutY;
                 uint8_t * transformOutX = transformOutY;
                 const uint8_t * imageOutXEnd = imageOutX + width;
@@ -1719,19 +1796,19 @@ namespace fheroes2
             }
         }
         else if ( !horizontally && vertically ) {
-            const int32_t offsetIn = ( height - 1 ) * width;
-            const uint8_t * imageInY = in.image() + offsetIn;
-            const uint8_t * transformInY = in.transform() + offsetIn;
-            for ( ; imageOutY != imageOutYEnd; imageOutY += width, transformOutY += width, imageInY -= width, transformInY -= width ) {
+            const uint8_t * imageInY = in.image() + offsetIn + ( height - 1 ) * widthIn;
+            const uint8_t * transformInY = in.transform() + offsetIn + ( height - 1 ) * widthIn;
+
+            for ( ; imageOutY != imageOutYEnd; imageOutY += widthOut, transformOutY += widthOut, imageInY -= widthIn, transformInY -= widthIn ) {
                 memcpy( imageOutY, imageInY, static_cast<size_t>( width ) );
                 memcpy( transformOutY, transformInY, static_cast<size_t>( width ) );
             }
         }
         else {
-            const int32_t offsetIn = ( height - 1 ) * width + width - 1;
-            const uint8_t * imageInY = in.image() + offsetIn;
-            const uint8_t * transformInY = in.transform() + offsetIn;
-            for ( ; imageOutY != imageOutYEnd; imageOutY += width, transformOutY += width, imageInY -= width, transformInY -= width ) {
+            const uint8_t * imageInY = in.image() + offsetIn + ( height - 1 ) * widthIn + widthIn - 1;
+            const uint8_t * transformInY = in.transform() + offsetIn + ( height - 1 ) * widthIn + widthIn - 1;
+
+            for ( ; imageOutY != imageOutYEnd; imageOutY += widthOut, transformOutY += widthOut, imageInY -= widthIn, transformInY -= widthIn ) {
                 uint8_t * imageOutX = imageOutY;
                 uint8_t * transformOutX = transformOutY;
                 const uint8_t * imageOutXEnd = imageOutX + width;
@@ -1744,8 +1821,6 @@ namespace fheroes2
                 }
             }
         }
-
-        return out;
     }
 
     Rect GetActiveROI( const Image & image, const uint8_t minTransformValue )
@@ -1833,7 +1908,7 @@ namespace fheroes2
         return GetPALColorId( red / 4, green / 4, blue / 4 );
     }
 
-    std::vector<uint8_t> getTransformTable( const fheroes2::Image & in, const fheroes2::Image & out, int32_t x, int32_t y, int32_t width, int32_t height )
+    std::vector<uint8_t> getTransformTable( const Image & in, const Image & out, int32_t x, int32_t y, int32_t width, int32_t height )
     {
         std::vector<uint8_t> table( 256 );
         for ( size_t i = 0; i < table.size(); ++i ) {
@@ -1916,6 +1991,32 @@ namespace fheroes2
         return out;
     }
 
+    void MaskTransformLayer( const Image & mask, int32_t maskX, int32_t maskY, Image & out, int32_t outX, int32_t outY, int32_t width, int32_t height )
+    {
+        if ( !Verify( mask, maskX, maskY, out, outX, outY, width, height ) ) {
+            return;
+        }
+
+        const int32_t widthMask = mask.width();
+        const int32_t widthOut = out.width();
+
+        const uint8_t * imageMaskY = mask.transform() + maskY * widthMask + maskX;
+        uint8_t * imageOutY = out.transform() + outY * widthOut + outX;
+        const uint8_t * imageMaskYEnd = imageMaskY + height * widthMask;
+
+        for ( ; imageMaskY != imageMaskYEnd; imageMaskY += widthMask, imageOutY += widthOut ) {
+            const uint8_t * imageMaskX = imageMaskY;
+            uint8_t * imageOutX = imageOutY;
+            const uint8_t * imageMaskXEnd = imageMaskX + width;
+
+            for ( ; imageMaskX != imageMaskXEnd; ++imageMaskX, ++imageOutX ) {
+                if ( *imageMaskX == 0 ) {
+                    *imageOutX = 1;
+                }
+            }
+        }
+    }
+
     void ReplaceColorId( Image & image, uint8_t oldColorId, uint8_t newColorId )
     {
         if ( image.empty() )
@@ -1986,7 +2087,7 @@ namespace fheroes2
             for ( int32_t y = 0; y < heightRoiOut; ++y )
                 positionY[y] = static_cast<double>( y * heightRoiIn ) / heightRoiOut;
 
-            const uint8_t * gamePalette = fheroes2::getGamePalette();
+            const uint8_t * gamePalette = getGamePalette();
 
             if ( in.singleLayer() && out.singleLayer() ) {
                 for ( int32_t y = 0; y < heightRoiOut; ++y, imageOutY += widthOut ) {
@@ -2262,16 +2363,31 @@ namespace fheroes2
 
     void updateShadow( Image & image, const Point & shadowOffset, const uint8_t transformId )
     {
-        if ( image.empty() || shadowOffset.x > 0 || shadowOffset.y < 0 || ( -shadowOffset.x >= image.width() ) || ( shadowOffset.y >= image.height() ) )
+        if ( image.empty() || ( std::abs( shadowOffset.x ) >= image.width() ) || ( std::abs( shadowOffset.y ) >= image.height() ) || shadowOffset == Point() )
             return;
 
-        const int32_t width = image.width() + shadowOffset.x;
-        const int32_t height = image.height() - shadowOffset.y;
+        const int32_t width = image.width() - std::abs( shadowOffset.x );
+        const int32_t height = image.height() - std::abs( shadowOffset.y );
 
         const int32_t imageWidth = image.width();
 
-        const uint8_t * transformInY = image.transform() - shadowOffset.x;
-        uint8_t * transformOutY = image.transform() + imageWidth * shadowOffset.y;
+        const uint8_t * transformInY = image.transform();
+        uint8_t * transformOutY = image.transform();
+
+        if ( shadowOffset.x > 0 ) {
+            transformOutY += shadowOffset.x;
+        }
+        else {
+            transformInY -= shadowOffset.x;
+        }
+
+        if ( shadowOffset.y > 0 ) {
+            transformOutY += imageWidth * shadowOffset.y;
+        }
+        else {
+            transformInY -= imageWidth * shadowOffset.y;
+        }
+
         const uint8_t * transformOutYEnd = transformOutY + imageWidth * height;
 
         for ( ; transformOutY != transformOutYEnd; transformInY += imageWidth, transformOutY += imageWidth ) {

@@ -23,17 +23,20 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <ctime>
+#include <ostream>
 
 #include "campaign_savedata.h"
+#include "campaign_scenariodata.h"
 #include "dialog.h"
 #include "game.h"
 #include "game_io.h"
 #include "game_over.h"
-#include "game_static.h"
 #include "logging.h"
-#include "monster.h"
+#include "maps_fileinfo.h"
 #include "save_format_version.h"
+#include "serialize.h"
 #include "settings.h"
 #include "system.h"
 #include "translations.h"
@@ -91,7 +94,7 @@ namespace
 
 bool Game::AutoSave()
 {
-    return Game::Save( System::ConcatePath( GetSaveDir(), "AUTOSAVE" + GetSaveFileExtension() ) );
+    return Game::Save( System::concatPath( GetSaveDir(), "AUTOSAVE" + GetSaveFileExtension() ) );
 }
 
 bool Game::Save( const std::string & fn )
@@ -237,13 +240,7 @@ fheroes2::GameMode Game::Load( const std::string & fn )
 
     if ( conf.isCampaignGameType() ) {
         Campaign::CampaignSaveData & saveData = Campaign::CampaignSaveData::Get();
-        static_assert( LAST_SUPPORTED_FORMAT_VERSION < FORMAT_VERSION_0912_RELEASE, "Remove the usage of loadOldSaveSata method." );
-        if ( binver < FORMAT_VERSION_0912_RELEASE ) {
-            Campaign::CampaignSaveData::loadOldSaveSata( fz, saveData );
-        }
-        else {
-            fz >> saveData;
-        }
+        fz >> saveData;
 
         if ( !saveData.isStarting() && saveData.getCurrentScenarioInfoId() == saveData.getLastCompletedScenarioInfoID() ) {
             // This is the end of the current scenario. We should show next scenario selection.
@@ -320,7 +317,7 @@ bool Game::LoadSAV2FileInfo( const std::string & fn, Maps::FileInfo & finfo )
 
 std::string Game::GetSaveDir()
 {
-    return System::ConcatePath( System::ConcatePath( System::GetDataDirectory( "fheroes2" ), "files" ), "save" );
+    return System::concatPath( System::concatPath( System::GetDataDirectory( "fheroes2" ), "files" ), "save" );
 }
 
 std::string Game::GetSaveFileBaseName()
@@ -362,5 +359,5 @@ std::string Game::GetSaveFileExtension( const int gameType )
 
 bool Game::SaveCompletedCampaignScenario()
 {
-    return Save( System::ConcatePath( GetSaveDir(), GetSaveFileBaseName() ) + "_Complete" + GetSaveFileExtension() );
+    return Save( System::concatPath( GetSaveDir(), GetSaveFileBaseName() ) + "_Complete" + GetSaveFileExtension() );
 }

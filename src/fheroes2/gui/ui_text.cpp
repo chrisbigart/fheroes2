@@ -19,11 +19,17 @@
  ***************************************************************************/
 
 #include "ui_text.h"
+
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <deque>
+#include <memory>
+#include <utility>
+
 #include "agg_image.h"
 #include "image.h"
-
-#include <cassert>
-#include <deque>
+#include "math_base.h"
 
 namespace
 {
@@ -60,6 +66,8 @@ namespace
         case fheroes2::FontSize::NORMAL:
             return 6;
         case fheroes2::FontSize::LARGE:
+        case fheroes2::FontSize::BUTTON_RELEASED:
+        case fheroes2::FontSize::BUTTON_PRESSED:
             return 12;
         default:
             assert( 0 ); // Did you add a new font size? Please add implementation.
@@ -77,11 +85,21 @@ namespace
             return 13 + 3 + 1;
         case fheroes2::FontSize::LARGE:
             return 26 + 6 + 1;
+        case fheroes2::FontSize::BUTTON_RELEASED:
+        case fheroes2::FontSize::BUTTON_PRESSED:
+            return 16;
         default:
             assert( 0 ); // Did you add a new font size? Please add implementation.
         }
 
         return 0;
+    }
+
+    int32_t getCharWidth( const uint8_t character, const fheroes2::FontType & fontType )
+    {
+        const fheroes2::Sprite & image = fheroes2::AGG::getChar( character, fontType );
+        assert( ( fontType.size != fheroes2::FontSize::BUTTON_RELEASED && fontType.size != fheroes2::FontSize::BUTTON_PRESSED && image.x() >= 0 ) || image.x() < 0 );
+        return image.x() + image.width();
     }
 
     int32_t getLineWidth( const uint8_t * data, const int32_t size, const fheroes2::FontType & fontType )
@@ -95,13 +113,13 @@ namespace
         const uint8_t * dataEnd = data + size;
         while ( data != dataEnd ) {
             if ( validator.isValid( *data ) ) {
-                width += fheroes2::AGG::getChar( *data, fontType ).width();
+                width += getCharWidth( *data, fontType );
             }
             else if ( isSpaceChar( *data ) ) {
                 width += getSpaceCharWidth( fontType.size );
             }
             else {
-                width += fheroes2::AGG::getChar( invalidChar, fontType ).width();
+                width += getCharWidth( invalidChar, fontType );
             }
             ++data;
         }
@@ -122,13 +140,13 @@ namespace
         const uint8_t * dataEnd = data + size;
         while ( data != dataEnd ) {
             if ( validator.isValid( *data ) ) {
-                width += fheroes2::AGG::getChar( *data, fontType ).width();
+                width += getCharWidth( *data, fontType );
             }
             else if ( isSpaceChar( *data ) ) {
                 width += getSpaceCharWidth( fontType.size );
             }
             else {
-                width += fheroes2::AGG::getChar( invalidChar, fontType ).width();
+                width += getCharWidth( invalidChar, fontType );
             }
 
             if ( width > maxWidth ) {
@@ -163,10 +181,10 @@ namespace
                 spaceWidth = 0;
 
                 if ( validator.isValid( *data ) ) {
-                    width += fheroes2::AGG::getChar( *data, fontType ).width();
+                    width += getCharWidth( *data, fontType );
                 }
                 else {
-                    width += fheroes2::AGG::getChar( invalidChar, fontType ).width();
+                    width += getCharWidth( invalidChar, fontType );
                 }
             }
             ++data;
@@ -216,7 +234,7 @@ namespace
                 ++lineLength;
                 if ( validator.isValid( *character ) ) {
                     ++lastWordLength;
-                    lineWidth += fheroes2::AGG::getChar( *character, fontType ).width();
+                    lineWidth += getCharWidth( *character, fontType );
                 }
                 else if ( isSpaceChar( *character ) ) {
                     lastWordLength = 0;
@@ -224,7 +242,7 @@ namespace
                 }
                 else {
                     ++lastWordLength;
-                    lineWidth += fheroes2::AGG::getChar( invalidChar, fontType ).width();
+                    lineWidth += getCharWidth( invalidChar, fontType );
                 }
 
                 if ( offset->x + lineWidth > maxWidth ) {
@@ -350,7 +368,7 @@ namespace
                 ++lineLength;
                 if ( validator.isValid( *character ) ) {
                     ++lastWordLength;
-                    lineWidth += fheroes2::AGG::getChar( *character, fontType ).width();
+                    lineWidth += getCharWidth( *character, fontType );
                 }
                 else if ( isSpaceChar( *character ) ) {
                     lastWordLength = 0;
@@ -358,7 +376,7 @@ namespace
                 }
                 else {
                     ++lastWordLength;
-                    lineWidth += fheroes2::AGG::getChar( invalidChar, fontType ).width();
+                    lineWidth += getCharWidth( invalidChar, fontType );
                 }
 
                 if ( offset->x + lineWidth > maxWidth ) {
@@ -529,6 +547,12 @@ namespace fheroes2
                 endWidth = currentWidth;
             }
 
+            xOffset = ( maxWidth - correctedWidth ) / 2;
+        }
+        else {
+            // This is a single-line message. Find its length and center it according to the maximum width.
+            correctedWidth = width();
+            assert( correctedWidth <= maxWidth );
             xOffset = ( maxWidth - correctedWidth ) / 2;
         }
 
@@ -742,6 +766,12 @@ namespace fheroes2
 
             xOffset = ( maxWidth - correctedWidth ) / 2;
         }
+        else {
+            // This is a single-line message. Find its length and center it according to the maximum width.
+            correctedWidth = width();
+            assert( correctedWidth <= maxWidth );
+            xOffset = ( maxWidth - correctedWidth ) / 2;
+        }
 
         for ( Point & point : offsets ) {
             point.x = ( correctedWidth - point.x ) / 2;
@@ -767,5 +797,32 @@ namespace fheroes2
         }
 
         return output;
+    }
+
+    bool isFontAvailable( const std::string & text, const FontType fontType )
+    {
+        if ( text.empty() ) {
+            return true;
+        }
+
+        const CharValidator validator( fontType.size );
+
+        for ( const char letter : text ) {
+            const uint8_t character = static_cast<uint8_t>( letter );
+
+            if ( character == lineSeparator ) {
+                continue;
+            }
+
+            if ( isSpaceChar( character ) ) {
+                continue;
+            }
+
+            if ( !validator.isValid( character ) ) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

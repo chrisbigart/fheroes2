@@ -24,9 +24,13 @@
 #ifndef H2ARMYTROOP_H
 #define H2ARMYTROOP_H
 
+#include <cstdint>
 #include <string>
 
 #include "monster.h"
+#include "payment.h"
+
+class StreamBase;
 
 class Army;
 
@@ -46,7 +50,7 @@ public:
 
     bool isMonster( int ) const;
     const char * GetName() const;
-    virtual uint32_t GetCount() const;
+    uint32_t GetCount() const;
     uint32_t GetHitPoints() const;
     Monster GetMonster() const;
 

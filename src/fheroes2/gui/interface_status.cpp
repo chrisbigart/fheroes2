@@ -22,16 +22,25 @@
  ***************************************************************************/
 
 #include <cassert>
+#include <string>
 
 #include "agg_image.h"
 #include "army.h"
 #include "castle.h"
+#include "color.h"
+#include "dialog.h"
 #include "game_interface.h"
+#include "gamedefs.h"
 #include "heroes.h"
 #include "icn.h"
+#include "image.h"
 #include "interface_status.h"
 #include "kingdom.h"
+#include "localevent.h"
+#include "math_base.h"
+#include "players.h"
 #include "resource.h"
+#include "screen.h"
 #include "settings.h"
 #include "text.h"
 #include "tools.h"
@@ -314,7 +323,7 @@ void Interface::StatusWindow::DrawArmyInfo( int oh ) const
 
     if ( armies ) {
         const fheroes2::Rect & pos = GetArea();
-        Army::DrawMonsterLines( *armies, pos.x + 4, pos.y + 1 + oh, 138, Skill::Level::EXPERT );
+        Army::drawMultipleMonsterLines( *armies, pos.x + 4, pos.y + 1 + oh, 138, true, true );
     }
 }
 

@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "math_base.h"
@@ -237,6 +238,9 @@ namespace fheroes2
 
     void DrawRect( Image & image, const Rect & roi, uint8_t value );
 
+    void DivideImageBySquares( const Point & spriteOffset, const Image & original, const int32_t squareSize, const bool flip,
+                               std::vector<std::pair<Point, Sprite>> & output );
+
     // Every image in the array must be the same size. Make sure that pointers aren't nullptr!
     Image ExtractCommonPattern( const std::vector<const Image *> & input );
 
@@ -250,6 +254,7 @@ namespace fheroes2
     bool FitToRoi( const Image & in, Point & inPos, const Image & out, Point & outPos, Size & outputSize, const Rect & outputRoi );
 
     Image Flip( const Image & in, bool horizontally, bool vertically );
+    void Flip( const Image & in, int32_t inX, int32_t inY, Image & out, int32_t outX, int32_t outY, int32_t width, int32_t height, bool horizontally, bool vertically );
 
     // Return ROI with pixels which are not skipped and not used for shadow creation. 1 is to skip, 2 - 5 types of shadows
     Rect GetActiveROI( const Image & image, const uint8_t minTransformValue = 6 );
@@ -257,9 +262,11 @@ namespace fheroes2
     // Returns a closest color ID from the original game's palette
     uint8_t GetColorId( uint8_t red, uint8_t green, uint8_t blue );
 
-    std::vector<uint8_t> getTransformTable( const fheroes2::Image & in, const fheroes2::Image & out, int32_t x, int32_t y, int32_t width, int32_t height );
+    std::vector<uint8_t> getTransformTable( const Image & in, const Image & out, int32_t x, int32_t y, int32_t width, int32_t height );
 
     Sprite makeShadow( const Sprite & in, const Point & shadowOffset, const uint8_t transformId );
+
+    void MaskTransformLayer( const Image & mask, int32_t maskX, int32_t maskY, Image & out, int32_t outX, int32_t outY, int32_t width, int32_t height );
 
     // This function does NOT check transform layer. If you intent to replace few colors at the same image please use ApplyPalette to be more efficient.
     void ReplaceColorId( Image & image, uint8_t oldColorId, uint8_t newColorId );

@@ -654,8 +654,8 @@ namespace ICN
         SWAPWIN,
         SWORDSM2,
         SWORDSMN,
-        SYSTEME,
-        SYSTEM,
+        SYSTEME, // contains an empty evil interface button in the last two sprites
+        SYSTEM, // contains an empty good interface button in the last two sprites
         TAVWIN,
         TENT,
         TERRAINS,
@@ -912,7 +912,6 @@ namespace ICN
         BATTLESKIP,
         BATTLEWAIT,
         BUYMAX,
-        BTNCONFIG,
         BTNBATTLEONLY,
         BTNGIFT_GOOD,
         BTNGIFT_EVIL,
@@ -980,13 +979,27 @@ namespace ICN
         GOOD_CAMPAIGN_BUTTONS,
         EVIL_CAMPAIGN_BUTTONS,
 
+        MINI_MONSTER_IMAGE,
+        MINI_MONSTER_SHADOW,
+
+        BUTTON_GOOD_FONT_RELEASED,
+        BUTTON_GOOD_FONT_PRESSED,
+        BUTTON_EVIL_FONT_RELEASED,
+        BUTTON_EVIL_FONT_PRESSED,
+
+        BUTTON_DIFFICULTY_ARCHIBALD,
+        BUTTON_DIFFICULTY_ROLAND,
+        BUTTON_DIFFICULTY_POL,
+
+        EMPTY_GOOD_BUTTON,
+        EMPTY_EVIL_BUTTON,
+
         // IMPORTANT! Put any new entry just above this one.
         LASTICN
     };
 
     const char * GetString( int );
     uint32_t AnimationFrame( int icn, uint32_t start, uint32_t ticket, bool quantity = false );
-    bool HighlyObjectSprite( int icn, uint32_t );
     int PORTxxxx( int heroId );
 
     int Get4Captain( int race );

@@ -24,18 +24,27 @@
 #ifndef H2BATTLE_INTERFACE_H
 #define H2BATTLE_INTERFACE_H
 
+#include <cstdint>
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "battle_animation.h"
 #include "battle_board.h"
 #include "cursor.h"
 #include "dialog.h"
+#include "image.h"
+#include "math_base.h"
 #include "spell.h"
 #include "text.h"
 #include "ui_button.h"
 
-class Settings;
+class Castle;
+class HeroBase;
+class Kingdom;
 class LocalEvent;
+class Settings;
 
 namespace fheroes2
 {
@@ -46,7 +55,6 @@ namespace Battle
 {
     class Actions;
     class Arena;
-    class Board;
     class Cell;
     class Position;
     class StatusListBox;
@@ -122,7 +130,8 @@ namespace Battle
 
         enum
         {
-            HERO_X_OFFSET = 30,
+            RIGHT_HERO_X_OFFSET = 29,
+            LEFT_HERO_X_OFFSET = 30,
             LEFT_HERO_Y_OFFSET = 183,
             RIGHT_HERO_Y_OFFSET = 148,
             CAPTAIN_X_OFFSET = 6,
@@ -150,13 +159,14 @@ namespace Battle
         Status & operator=( const Status & ) = delete;
 
         void SetPosition( int32_t, int32_t );
+
         void SetLogs( StatusListBox * logs )
         {
             listlog = logs;
         }
 
         void SetMessage( const std::string & message, bool top = false );
-        void Redraw() const;
+        void Redraw( fheroes2::Image & output ) const;
 
         const std::string & GetMessage() const
         {
@@ -182,7 +192,7 @@ namespace Battle
 
         ArmiesOrder & operator=( const ArmiesOrder & ) = delete;
 
-        void Set( const fheroes2::Rect &, const Units *, int );
+        void Set( const fheroes2::Rect & rt, const std::shared_ptr<const Units> & units, const int army2Color );
         void Redraw( const Unit * current, const uint8_t currentUnitColor, fheroes2::Image & output );
         void QueueEventProcessing( std::string & msg, const fheroes2::Point & offset );
 
@@ -204,10 +214,10 @@ namespace Battle
         void RedrawUnit( const fheroes2::Rect & pos, const Battle::Unit & unit, const bool revert, const bool isCurrentUnit, const uint8_t currentUnitColor,
                          fheroes2::Image & output ) const;
 
-        const Units * orders;
-        int army_color2;
-        fheroes2::Rect area;
-        std::vector<UnitPos> rects;
+        std::weak_ptr<const Units> _orders;
+        int _army2Color;
+        fheroes2::Rect _area;
+        std::vector<UnitPos> _rects;
     };
 
     class PopupDamageInfo : public Dialog::FrameBorder
@@ -234,7 +244,7 @@ namespace Battle
     class Interface
     {
     public:
-        Interface( Arena &, int32_t );
+        Interface( Arena & battleArena, const int32_t tileIndex );
         Interface( const Interface & ) = delete;
 
         ~Interface();
@@ -257,7 +267,7 @@ namespace Battle
         fheroes2::Point GetMouseCursor() const;
 
         void SetStatus( const std::string &, bool = false );
-        void SetArmiesOrder( const Units * );
+        void SetOrderOfUnits( const std::shared_ptr<const Units> & units );
         void FadeArena( bool clearMessageLog );
 
         void RedrawActionNewTurn() const;
@@ -344,6 +354,7 @@ namespace Battle
         void ProcessingHeroDialogResult( int, Actions & );
 
         void EventAutoSwitch( const Unit &, Actions & );
+        void EventAutoFinish( Actions & a );
         void EventShowOptions();
         void ButtonAutoAction( const Unit &, Actions & );
         void ButtonSettingsAction();
@@ -383,7 +394,7 @@ namespace Battle
         uint32_t animation_flags_frame;
         int catapult_frame;
 
-        int _breakAutoBattleForColor;
+        int _interruptAutoBattleForColor;
 
         uint8_t _contourColor;
         bool _brightLandType; // used to determine current monster contour cycling colors
@@ -400,7 +411,7 @@ namespace Battle
         int32_t teleport_src;
         fheroes2::Rect main_tower;
 
-        StatusListBox * listlog;
+        std::unique_ptr<StatusListBox> listlog;
 
         PopupDamageInfo popup;
         ArmiesOrder armies_order;

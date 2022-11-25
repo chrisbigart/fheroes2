@@ -25,9 +25,15 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <cstdlib>
 #include <iterator>
+#include <map>
+#include <memory>
+#include <ostream>
 #include <set>
+#include <utility>
 
+#include "battle.h"
 #include "battle_arena.h"
 #include "battle_army.h"
 #include "battle_board.h"
@@ -39,6 +45,7 @@
 #include "icn.h"
 #include "logging.h"
 #include "maps_tiles.h"
+#include "mp2.h"
 #include "rand.h"
 #include "tools.h"
 #include "translations.h"
@@ -104,6 +111,8 @@ void Battle::Board::Reset()
 void Battle::Board::SetPositionQuality( const Unit & b ) const
 {
     const Arena * arena = GetArena();
+    assert( arena != nullptr );
+
     Units enemies( arena->getEnemyForce( b.GetCurrentColor() ).getUnits(), true );
 
     // Make sure archers are first here, so melee unit's score won't be double counted
@@ -135,6 +144,8 @@ void Battle::Board::SetPositionQuality( const Unit & b ) const
 void Battle::Board::SetEnemyQuality( const Unit & unit ) const
 {
     const Arena * arena = GetArena();
+    assert( arena != nullptr );
+
     Units enemies( arena->getEnemyForce( unit.GetColor() ).getUnits(), true );
     if ( unit.Modes( SP_BERSERKER ) ) {
         Units allies( arena->getForce( unit.GetColor() ).getUnits(), true );
@@ -463,7 +474,7 @@ Battle::Indexes Battle::Board::GetPath( const Unit & unit, const Position & dest
 
 std::vector<Battle::Unit *> Battle::Board::GetNearestTroops( const Unit * startUnit, const std::vector<Battle::Unit *> & blackList )
 {
-    std::vector<std::pair<Battle::Unit *, uint32_t> > foundUnits;
+    std::vector<std::pair<Battle::Unit *, uint32_t>> foundUnits;
 
     for ( Cell & cell : *this ) {
         Unit * cellUnit = cell.GetUnit();
@@ -1122,7 +1133,7 @@ bool Battle::Board::isValidMirrorImageIndex( const int32_t index, const Unit * u
     return true;
 }
 
-bool Battle::Board::CanAttackUnitFromCell( const Unit & currentUnit, const int32_t from )
+bool Battle::Board::CanAttackFromCell( const Unit & currentUnit, const int32_t from )
 {
     const Cell * fromCell = GetCell( from );
     assert( fromCell != nullptr );
@@ -1158,7 +1169,7 @@ bool Battle::Board::CanAttackUnitFromCell( const Unit & currentUnit, const int32
     return false;
 }
 
-bool Battle::Board::CanAttackUnitFromPosition( const Unit & currentUnit, const Unit & target, const int32_t dst )
+bool Battle::Board::CanAttackTargetFromPosition( const Unit & currentUnit, const Unit & target, const int32_t dst )
 {
     // Get the actual position of the attacker before attacking
     const Position pos = Position::GetReachable( currentUnit, dst );
@@ -1171,7 +1182,7 @@ bool Battle::Board::CanAttackUnitFromPosition( const Unit & currentUnit, const U
             continue;
         }
 
-        if ( !CanAttackUnitFromCell( currentUnit, cell->GetIndex() ) ) {
+        if ( !CanAttackFromCell( currentUnit, cell->GetIndex() ) ) {
             continue;
         }
 

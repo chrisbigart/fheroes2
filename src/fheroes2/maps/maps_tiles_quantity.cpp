@@ -21,8 +21,20 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
+#include <cstdint>
+
+#include "army_troop.h"
+#include "artifact.h"
+#include "color.h"
+#include "maps_tiles.h"
+#include "monster.h"
+#include "mp2.h"
+#include "pairs.h"
 #include "rand.h"
-#include "settings.h"
+#include "resource.h"
+#include "skill.h"
+#include "spell.h"
+#include "week.h"
 #include "world.h"
 
 bool Maps::Tiles::QuantityIsValid() const
@@ -254,6 +266,7 @@ uint32_t Maps::Tiles::QuantityGold() const
         default:
             break;
         }
+        break;
 
     default:
         break;
@@ -898,28 +911,6 @@ void Maps::Tiles::QuantityUpdate( bool isFirstLoad )
     }
 }
 
-int Maps::Tiles::MonsterJoinCondition() const
-{
-    return mp2_object == MP2::OBJ_MONSTER ? ( 0x03 & quantity3 ) : 0;
-}
-
-void Maps::Tiles::MonsterSetJoinCondition( int cond )
-{
-    // TODO: why are we doing this? Simplify the logic.
-    quantity3 &= 0xFC;
-    quantity3 |= ( cond & 0x03 );
-}
-
-bool Maps::Tiles::MonsterJoinConditionSkip() const
-{
-    return Monster::JOIN_CONDITION_SKIP == MonsterJoinCondition();
-}
-
-bool Maps::Tiles::MonsterJoinConditionFree() const
-{
-    return Monster::JOIN_CONDITION_FREE == MonsterJoinCondition();
-}
-
 uint32_t Maps::Tiles::MonsterCount() const
 {
     // TODO: avoid this hacky way of storing data.
@@ -940,7 +931,7 @@ void Maps::Tiles::PlaceMonsterOnTile( Tiles & tile, const Monster & mons, const 
     // if there was another sprite here (shadow for example) push it down to Addons,
     // except when there is already MONS32.ICN here (a random monster for example)
     if ( tile.objectTileset != 0 && tile.objectTileset != 48 && tile.objectIndex != 255 ) {
-        tile.AddonsPushLevel1( TilesAddon( 0, tile.uniq, tile.objectTileset, tile.objectIndex ) );
+        tile.AddonsPushLevel1( TilesAddon( OBJECT_LAYER, tile.uniq, tile.objectTileset, tile.objectIndex ) );
     }
     // replace sprite with the one for the new monster
     tile.uniq = 0;
@@ -953,25 +944,27 @@ void Maps::Tiles::PlaceMonsterOnTile( Tiles & tile, const Monster & mons, const 
         tile.MonsterSetCount( count );
     }
     else {
-        tile.MonsterSetCount( mons.GetRNDSize( true ) );
+        tile.MonsterSetCount( mons.GetRNDSize() );
     }
 
     if ( mons.GetID() == Monster::GHOST || mons.isElemental() ) {
         // Ghosts and elementals never join hero's army.
-        tile.MonsterSetJoinCondition( Monster::JOIN_CONDITION_SKIP );
+        setMonsterOnTileJoinCondition( tile, Monster::JOIN_CONDITION_SKIP );
     }
     else if ( setDefinedCount || ( world.GetWeekType().GetType() == WeekName::MONSTERS && world.GetWeekType().GetMonster() == mons.GetID() ) ) {
         // Wandering monsters with the number of units specified by the map designer are always considered as "hostile" and always join only for money.
 
         // Monsters will be willing to join for some amount of money.
-        tile.MonsterSetJoinCondition( Monster::JOIN_CONDITION_MONEY );
+        setMonsterOnTileJoinCondition( tile, Monster::JOIN_CONDITION_MONEY );
     }
     else {
         // 20% chance for join
-        if ( 3 > Rand::Get( 1, 10 ) )
-            tile.MonsterSetJoinCondition( Monster::JOIN_CONDITION_FREE );
-        else
-            tile.MonsterSetJoinCondition( Monster::JOIN_CONDITION_MONEY );
+        if ( 3 > Rand::Get( 1, 10 ) ) {
+            setMonsterOnTileJoinCondition( tile, Monster::JOIN_CONDITION_FREE );
+        }
+        else {
+            setMonsterOnTileJoinCondition( tile, Monster::JOIN_CONDITION_MONEY );
+        }
     }
 }
 
@@ -1100,10 +1093,38 @@ void Maps::Tiles::UpdateMonsterPopulation( Tiles & tile )
     const uint32_t troopCount = troop.GetCount();
 
     if ( troopCount == 0 ) {
-        tile.MonsterSetCount( troop.GetRNDSize( false ) );
+        tile.MonsterSetCount( troop.GetRNDSize() );
     }
     else {
         const uint32_t bonusUnit = ( Rand::Get( 1, 7 ) <= ( troopCount % 7 ) ) ? 1 : 0;
         tile.MonsterSetCount( troopCount * 8 / 7 + bonusUnit );
+    }
+}
+
+namespace Maps
+{
+    void setSpellOnTile( Tiles & tile, const int32_t spellId )
+    {
+        tile.setAdditionalMetadata( spellId );
+    }
+
+    int32_t getSpellIdFromTile( const Tiles & tile )
+    {
+        return tile.getAdditionalMetadata();
+    }
+
+    void setMonsterOnTileJoinCondition( Tiles & tile, const int32_t condition )
+    {
+        tile.setAdditionalMetadata( condition );
+    }
+
+    bool isMonsterOnTileJoinConditionSkip( const Tiles & tile )
+    {
+        return tile.GetObject() == MP2::OBJ_MONSTER && tile.getAdditionalMetadata() == Monster::JOIN_CONDITION_SKIP;
+    }
+
+    bool isMonsterOnTileJoinConditionFree( const Tiles & tile )
+    {
+        return tile.GetObject() == MP2::OBJ_MONSTER && tile.getAdditionalMetadata() == Monster::JOIN_CONDITION_FREE;
     }
 }

@@ -22,15 +22,24 @@
  ***************************************************************************/
 
 #include "interface_icons.h"
+
 #include "agg_image.h"
+#include "dialog.h"
 #include "game.h"
 #include "game_interface.h"
+#include "gamedefs.h"
 #include "heroes.h"
+#include "heroes_base.h"
 #include "icn.h"
 #include "kingdom.h"
+#include "maps.h"
+#include "screen.h"
 #include "settings.h"
 #include "ui_castle.h"
+#include "ui_scrollbar.h"
 #include "world.h"
+
+class Castle;
 
 namespace
 {
@@ -221,13 +230,7 @@ void Interface::HeroesIcons::ActionCurrentDn()
 void Interface::HeroesIcons::ActionListDoubleClick( HEROES & item )
 {
     if ( item ) {
-        if ( item->Modes( Heroes::GUARDIAN ) ) {
-            Castle * castle = world.getCastle( item->GetCenter() );
-            if ( castle )
-                Game::OpenCastleDialog( *castle );
-        }
-        else
-            Game::OpenHeroesDialog( *item, false, true );
+        Game::OpenHeroesDialog( *item, false, true );
     }
 }
 

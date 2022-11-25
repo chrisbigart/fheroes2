@@ -21,21 +21,30 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "agg_image.h"
 #include "cursor.h"
 #include "dialog.h"
 #include "game_hotkeys.h"
 #include "icn.h"
+#include "image.h"
 #include "localevent.h"
+#include "math_base.h"
+#include "screen.h"
 #include "settings.h"
 #include "text.h"
 #include "tools.h"
 #include "translations.h"
 #include "ui_button.h"
 #include "ui_tool.h"
-
-#include <algorithm>
-#include <cassert>
 
 namespace
 {
@@ -292,7 +301,7 @@ bool Dialog::InputString( const std::string & header, std::string & res, const s
 
         if ( le.KeyPress() ) {
             if ( charLimit == 0 || charLimit > res.size() || le.KeyValue() == fheroes2::Key::KEY_BACKSPACE )
-                charInsertPos = InsertKeySym( res, charInsertPos, le.KeyValue(), le.KeyMod() );
+                charInsertPos = InsertKeySym( res, charInsertPos, le.KeyValue(), LocalEvent::getCurrentKeyModifiers() );
             redraw = true;
         }
 

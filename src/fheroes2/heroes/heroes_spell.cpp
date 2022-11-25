@@ -21,30 +21,53 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <memory>
+#include <ostream>
+#include <string>
+#include <vector>
+
 #include "agg_image.h"
+#include "army.h"
+#include "army_troop.h"
 #include "audio_manager.h"
 #include "castle.h"
+#include "color.h"
 #include "cursor.h"
-#include "game.h"
+#include "dialog.h"
+#include "direction.h"
 #include "game_interface.h"
 #include "heroes.h"
 #include "icn.h"
+#include "image.h"
+#include "interface_gamearea.h"
+#include "interface_icons.h"
 #include "interface_list.h"
 #include "kingdom.h"
+#include "localevent.h"
 #include "logging.h"
 #include "m82.h"
+#include "maps.h"
+#include "maps_tiles.h"
+#include "math_base.h"
 #include "monster.h"
+#include "mp2.h"
+#include "payment.h"
+#include "route.h"
+#include "screen.h"
 #include "settings.h"
 #include "spell.h"
 #include "spell_info.h"
 #include "text.h"
 #include "tools.h"
 #include "translations.h"
+#include "ui_button.h"
+#include "ui_scrollbar.h"
 #include "ui_window.h"
+#include "view_world.h"
 #include "world.h"
-
-#include <cassert>
-#include <memory>
 
 namespace
 {
@@ -318,8 +341,15 @@ namespace
 
             const uint32_t distance = Maps::GetStraightLineDistance( boatSource, hero.GetIndex() );
             if ( distance > 1 ) {
-                Game::ObjectFadeAnimation::PrepareFadeTask( MP2::OBJ_BOAT, boatSource, boatDestination, true, true );
-                Game::ObjectFadeAnimation::PerformFadeTask();
+                const Maps::Tiles & tileSource = world.GetTiles( boatSource );
+
+                Interface::GameArea & gameArea = Interface::Basic::Get().GetGameArea();
+                gameArea.runSingleObjectAnimation( std::make_shared<Interface::ObjectFadingOutInfo>( tileSource.GetObjectUID(), boatSource, MP2::OBJ_BOAT ) );
+
+                Maps::Tiles & tileDest = world.GetTiles( boatDestination );
+                tileDest.setBoat( Direction::RIGHT );
+
+                gameArea.runSingleObjectAnimation( std::make_shared<Interface::ObjectFadingInInfo>( tileDest.GetObjectUID(), boatDestination, MP2::OBJ_BOAT ) );
 
                 return true;
             }
@@ -376,7 +406,7 @@ namespace
             return false;
         }
 
-        if ( castle->GetHeroes().Guest() && castle->GetHeroes().Guest() != &hero ) {
+        if ( castle->GetHero() && castle->GetHero() != &hero ) {
             // The nearest town occupation must be checked before casting this spell. Something is wrong with the logic!
             assert( 0 );
             return false;
@@ -403,7 +433,7 @@ namespace
         for ( const Castle * castle : kingdom.GetCastles() ) {
             assert( castle != nullptr );
 
-            if ( !castle->GetHeroes().Guest() ) {
+            if ( !castle->GetHero() ) {
                 castles.push_back( castle->GetIndex() );
             }
         }
@@ -566,12 +596,11 @@ namespace
         const uint32_t count = fheroes2::getGuardianMonsterCount( spell, hero.GetPower(), &hero );
 
         if ( count ) {
-            assert( spell.GetID() >= 0 && spell.GetID() <= 255 );
-            tile.SetQuantity3( static_cast<uint8_t>( spell.GetID() ) );
+            Maps::setSpellOnTile( tile, spell.GetID() );
 
             if ( spell == Spell::HAUNT ) {
                 world.CaptureObject( tile.GetIndex(), Color::NONE );
-                tile.removeFlags();
+                tile.removeOwnershipFlag( MP2::OBJ_MINES );
                 hero.SetMapsObject( MP2::OBJ_ABANDONEDMINE );
             }
 

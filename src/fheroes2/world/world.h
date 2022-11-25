@@ -23,22 +23,41 @@
 #ifndef H2WORLD_H
 #define H2WORLD_H
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <list>
 #include <map>
 #include <string>
 #include <vector>
 
+#include "army_troop.h"
 #include "artifact_ultimate.h"
-#include "castle_heroes.h"
+#include "castle.h"
+#include "heroes.h"
 #include "kingdom.h"
 #include "maps.h"
 #include "maps_tiles.h"
-#include "week.h"
+#include "math_base.h"
+#include "monster.h"
+#include "mp2.h"
+#include "pairs.h"
+#include "resource.h"
 #include "world_pathfinding.h"
 #include "world_regions.h"
 
-class MapObjectSimple;
 class ActionSimple;
+class MapObjectSimple;
+class StreamBase;
+class StreamBuf;
+
 struct MapEvent;
+struct Week;
+
+namespace Route
+{
+    class Step;
+}
 
 struct ListActions : public std::list<ActionSimple *>
 {
@@ -78,16 +97,9 @@ struct CapturedObject
 {
     ObjectColor objcol;
     Troop guardians;
-    int split;
 
-    CapturedObject()
-        : split( 1 )
-    {}
+    CapturedObject() = default;
 
-    int GetSplit() const
-    {
-        return split;
-    }
     int GetColor() const
     {
         return objcol.second;
@@ -105,10 +117,6 @@ struct CapturedObject
     {
         objcol.second = col;
     }
-    void SetSplit( int spl )
-    {
-        split = spl;
-    }
 };
 
 struct CapturedObjects : std::map<int32_t, CapturedObject>
@@ -119,8 +127,6 @@ struct CapturedObjects : std::map<int32_t, CapturedObject>
     void ResetColor( int );
 
     CapturedObject & Get( int32_t );
-
-    void tributeCapturedObjects( const int playerColorId, const int objectType, Funds & funds, int & objectCount );
 
     uint32_t GetCount( int, int ) const;
     uint32_t GetCountMines( int, int ) const;
@@ -187,12 +193,46 @@ public:
         return height;
     }
 
-    const Maps::Tiles & GetTiles( const int32_t x, const int32_t y ) const;
-    Maps::Tiles & GetTiles( const int32_t x, const int32_t y );
-    const Maps::Tiles & GetTiles( const int32_t tileId ) const;
-    Maps::Tiles & GetTiles( const int32_t tileId );
+    const Maps::Tiles & GetTiles( const int32_t x, const int32_t y ) const
+    {
+#ifdef WITH_DEBUG
+        return vec_tiles.at( y * width + x );
+#else
+        return vec_tiles[y * width + x];
+#endif
+    }
 
-    void InitKingdoms();
+    Maps::Tiles & GetTiles( const int32_t x, const int32_t y )
+    {
+#ifdef WITH_DEBUG
+        return vec_tiles.at( y * width + x );
+#else
+        return vec_tiles[y * width + x];
+#endif
+    }
+
+    const Maps::Tiles & GetTiles( const int32_t tileId ) const
+    {
+#ifdef WITH_DEBUG
+        return vec_tiles.at( tileId );
+#else
+        return vec_tiles[tileId];
+#endif
+    }
+
+    Maps::Tiles & GetTiles( const int32_t tileId )
+    {
+#ifdef WITH_DEBUG
+        return vec_tiles.at( tileId );
+#else
+        return vec_tiles[tileId];
+#endif
+    }
+
+    void InitKingdoms()
+    {
+        vec_kingdoms.Init();
+    }
 
     Kingdom & GetKingdom( int color )
     {
@@ -205,18 +245,39 @@ public:
     }
 
     // Get castle based on its tile. If the tile is not a part of a castle return nullptr.
-    const Castle * getCastle( const fheroes2::Point & tilePosition ) const;
-    Castle * getCastle( const fheroes2::Point & tilePosition );
+    const Castle * getCastle( const fheroes2::Point & tilePosition ) const
+    {
+        return vec_castles.Get( tilePosition );
+    }
+
+    Castle * getCastle( const fheroes2::Point & tilePosition )
+    {
+        return vec_castles.Get( tilePosition );
+    }
 
     // Get castle based on its entrance tile. If the tile is not castle's entrance return nullptr.
     const Castle * getCastleEntrance( const fheroes2::Point & tilePosition ) const;
     Castle * getCastleEntrance( const fheroes2::Point & tilePosition );
 
-    const Heroes * GetHeroes( int id ) const;
-    Heroes * GetHeroes( int id );
+    const Heroes * GetHeroes( int id ) const
+    {
+        return vec_heroes.Get( id );
+    }
 
-    const Heroes * GetHeroes( const fheroes2::Point & ) const;
-    Heroes * GetHeroes( const fheroes2::Point & );
+    Heroes * GetHeroes( int id )
+    {
+        return vec_heroes.Get( id );
+    }
+
+    const Heroes * GetHeroes( const fheroes2::Point & center ) const
+    {
+        return vec_heroes.Get( center );
+    }
+
+    Heroes * GetHeroes( const fheroes2::Point & center )
+    {
+        return vec_heroes.Get( center );
+    }
 
     Heroes * FromJailHeroes( int32_t );
     Heroes * GetFreemanHeroes( const int race, const int heroIDToIgnore = Heroes::UNKNOWN ) const;
@@ -224,13 +285,17 @@ public:
     const Heroes * GetHeroesCondWins() const;
     const Heroes * GetHeroesCondLoss() const;
 
-    CastleHeroes GetHeroes( const Castle & ) const;
+    Heroes * GetHero( const Castle & ) const;
 
     const UltimateArtifact & GetUltimateArtifact() const;
     bool DiggingForUltimateArtifact( const fheroes2::Point & );
 
     // overall number of cells of the world map: width * height
-    size_t getSize() const;
+    size_t getSize() const
+    {
+        return vec_tiles.size();
+    }
+
     int GetDay() const;
     int GetWeek() const;
 

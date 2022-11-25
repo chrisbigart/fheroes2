@@ -25,27 +25,47 @@
 #define H2HEROES_H
 
 #include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <exception>
 #include <list>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "army.h"
+#include "artifact.h"
+#include "color.h"
+#include "direction.h"
 #include "heroes_base.h"
+#include "math_base.h"
+#include "mp2.h"
 #include "pairs.h"
 #include "route.h"
+#include "skill.h"
+#include "spell.h"
 #include "visit.h"
+
+class Castle;
+class StreamBase;
+class StreamBuf;
 
 namespace Battle
 {
     class Only;
 }
 
-namespace Interface
+namespace Maps
 {
-    class GameArea;
+    class Tiles;
 }
 
-class StreamBuf;
+namespace fheroes2
+{
+    class Image;
+    class Sprite;
+}
 
 struct HeroSeedsForLevelUp
 {
@@ -144,9 +164,6 @@ public:
         UNKNOWN
     };
 
-    static const fheroes2::Sprite & GetPortrait( int heroid, int type );
-    static const char * GetName( int heroid );
-
     enum flags_t : uint32_t
     {
         SHIPMASTER = 0x00000001,
@@ -163,10 +180,12 @@ public:
         RECRUIT = 0x00000040,
         JAIL = 0x00000080,
         ACTION = 0x00000100,
-        // Hero should remember his movement points when retreating or surrendering, related to Settings::HEROES_REMEMBER_MP_WHEN_RETREATING
+        // Hero must retain his movement points if he retreated or surrendered and was then rehired on the same day
         SAVEMP = 0x00000200,
         SLEEPER = 0x00000400,
-        GUARDIAN = 0x00000800,
+
+        // UNUSED = 0x00000800,
+
         NOTDEFAULTS = 0x00001000,
         NOTDISMISS = 0x00002000,
         VISIONS = 0x00004000,
@@ -203,13 +222,47 @@ public:
         CHAMPION
     };
 
-    struct RedrawIndex
+    // This class is used to update a flag for an AI hero to make him available to meet other heroes.
+    // Such cases happen after battles, reinforcements or collecting artifacts.
+    class AIHeroMeetingUpdater
     {
-        int32_t topOnBottom = -1;
-        int32_t topOnDirectionBottom = -1;
-        int32_t topOnDirection = -1;
-        int32_t objectsOnBottom = -1;
-        int32_t objectsOnDirectionBottom = -1;
+    public:
+        explicit AIHeroMeetingUpdater( Heroes & hero )
+            : _hero( hero )
+            , _initialArmyStrength( hero.GetArmy().GetStrength() )
+        {
+            // Do nothing.
+        }
+
+        AIHeroMeetingUpdater( const AIHeroMeetingUpdater & ) = delete;
+        AIHeroMeetingUpdater( AIHeroMeetingUpdater && ) = delete;
+
+        AIHeroMeetingUpdater & operator=( const AIHeroMeetingUpdater & ) = delete;
+        AIHeroMeetingUpdater & operator=( AIHeroMeetingUpdater && ) = delete;
+
+        ~AIHeroMeetingUpdater()
+        {
+            double currentArmyStrength = 0;
+
+            try {
+                // Army::GetStrength() could potentially throw an exception, and SonarQube complains about a potentially uncaught exception
+                // in the destructor. This is not a problem per se, because calling std::terminate() is OK, so let's just do this ourselves.
+                currentArmyStrength = _hero.GetArmy().GetStrength();
+            }
+            catch ( ... ) {
+                // This should never happen
+                assert( 0 );
+                std::terminate();
+            }
+
+            if ( std::fabs( _initialArmyStrength - currentArmyStrength ) > 0.001 ) {
+                _hero.unmarkHeroMeeting();
+            }
+        }
+
+    private:
+        Heroes & _hero;
+        const double _initialArmyStrength;
     };
 
     Heroes();
@@ -220,6 +273,9 @@ public:
     ~Heroes() override = default;
 
     Heroes & operator=( const Heroes & ) = delete;
+
+    static const fheroes2::Sprite & GetPortrait( int heroid, int type );
+    static const char * GetName( int heroid );
 
     bool isValid() const override;
     bool isFreeman() const;
@@ -391,6 +447,8 @@ public:
     // These methods are used only for AI.
     bool hasMetWithHero( int heroID ) const;
     void markHeroMeeting( int heroID );
+
+    // Do not call this method directly. It is used by AIHeroMeetingUpdater class.
     void unmarkHeroMeeting();
 
     bool Move( bool fast = false );
@@ -407,14 +465,9 @@ public:
 
     bool MayCastAdventureSpells() const;
 
-    const RedrawIndex & GetRedrawIndex() const;
-    void SetRedrawIndexes();
-    void UpdateRedrawTop( const Maps::Tiles & tile );
-    void UpdateRedrawBottom( const Maps::Tiles & tile );
-    void RedrawTop( fheroes2::Image & dst, const fheroes2::Rect & visibleTileROI, const Interface::GameArea & area ) const;
-    void RedrawBottom( fheroes2::Image & dst, const fheroes2::Rect & visibleTileROI, const Interface::GameArea & area, bool isPuzzleDraw ) const;
-    void Redraw( fheroes2::Image & dst, const int32_t dx, int32_t dy, const fheroes2::Rect & visibleTileROI, const Interface::GameArea & area ) const;
-    void RedrawShadow( fheroes2::Image & dst, const int32_t dx, int32_t dy, const fheroes2::Rect & visibleTileROI, const Interface::GameArea & area ) const;
+    // Since heroes sprite are much bigger than a tile we need to 'cut' the sprite and the shadow's sprite into pieces. Each piece is for a separate tile.
+    std::vector<std::pair<fheroes2::Point, fheroes2::Sprite>> getHeroSpritesPerTile() const;
+    std::vector<std::pair<fheroes2::Point, fheroes2::Sprite>> getHeroShadowSpritesPerTile() const;
 
     void PortraitRedraw( const int32_t px, const int32_t py, const PortraitType type, fheroes2::Image & dstsf ) const override;
 
@@ -489,6 +542,13 @@ public:
         return _aiRole;
     }
 
+    uint8_t getAlphaValue() const
+    {
+        return static_cast<uint8_t>( _alphaValue );
+    }
+
+    double getAIMininumJoiningArmyStrength() const;
+
 private:
     friend StreamBase & operator<<( StreamBase &, const Heroes & );
     friend StreamBase & operator>>( StreamBase &, Heroes & );
@@ -546,8 +606,6 @@ private:
     std::list<IndexObject> visit_object;
     uint32_t _lastGroundRegion = 0;
 
-    RedrawIndex _redrawIndex;
-
     mutable int _alphaValue;
 
     int _attackedMonsterTileIndex; // used only when hero attacks a group of wandering monsters
@@ -601,8 +659,7 @@ struct AllHeroes : public VecHeroes
         std::for_each( begin(), end(), []( Heroes * hero ) { hero->ActionNewMonth(); } );
     }
 
-    Heroes * GetGuest( const Castle & ) const;
-    Heroes * GetGuard( const Castle & ) const;
+    Heroes * GetHero( const Castle & castle ) const;
     Heroes * GetFreeman( const int race, const int heroIDToIgnore ) const;
     Heroes * FromJail( int32_t ) const;
 };

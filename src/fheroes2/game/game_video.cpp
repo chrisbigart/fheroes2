@@ -18,17 +18,23 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-#include "game_video.h"
+#include <cstddef>
+#include <cstdint>
+#include <ostream>
+#include <vector>
+
 #include "audio.h"
 #include "cursor.h"
+#include "dir.h"
 #include "game_delays.h"
+#include "game_video.h"
 #include "localevent.h"
 #include "logging.h"
+#include "math_base.h"
 #include "screen.h"
 #include "settings.h"
 #include "smk_decoder.h"
 #include "system.h"
-#include "tools.h"
 #include "ui_tool.h"
 
 #include <array>
@@ -36,7 +42,7 @@
 namespace
 {
     // Anim2 directory is used in Russian Buka version of the game.
-    std::array<std::string, 4> videoDir = { "anim", "anim2", System::ConcatePath( "heroes2", "anim" ), "data" };
+    std::array<std::string, 4> videoDir = { "anim", "anim2", System::concatPath( "heroes2", "anim" ), "data" };
 
     void playAudio( const std::vector<std::vector<uint8_t>> & audioChannels )
     {
@@ -56,7 +62,7 @@ namespace Video
     {
         for ( const std::string & rootDir : Settings::GetRootDirs() ) {
             for ( size_t dirIdx = 0; dirIdx < videoDir.size(); ++dirIdx ) {
-                const std::string fullDirPath = System::ConcatePath( rootDir, videoDir[dirIdx] );
+                const std::string fullDirPath = System::concatPath( rootDir, videoDir[dirIdx] );
 
                 if ( System::IsDirectory( fullDirPath ) ) {
                     ListFiles videoFiles;

@@ -21,6 +21,8 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
+#include <string>
+
 #include "agg_image.h"
 #include "cursor.h"
 #include "dialog.h"
@@ -29,12 +31,16 @@
 #include "game_hotkeys.h"
 #include "game_over.h"
 #include "icn.h"
+#include "image.h"
 #include "localevent.h"
 #include "maps.h"
+#include "math_base.h"
 #include "player_info.h"
+#include "screen.h"
 #include "settings.h"
 #include "translations.h"
 #include "ui_button.h"
+#include "ui_dialog.h"
 #include "ui_text.h"
 
 void Dialog::GameInfo()
@@ -47,8 +53,8 @@ void Dialog::GameInfo()
 
     const fheroes2::Sprite & box = fheroes2::AGG::GetICN( ICN::SCENIBKG, 0 );
 
-    // This is a shadow offset from the original ICN::SCENIBKG image.
-    const fheroes2::Point shadowOffset( -16, 4 );
+    // This is a shadow offset from the modified ICN::SCENIBKG image.
+    const fheroes2::Point shadowOffset( -16, 4 + 12 );
 
     fheroes2::Point pt( ( display.width() - box.width() + shadowOffset.x ) / 2, ( ( display.height() - box.height() + shadowOffset.y ) / 2 ) );
     fheroes2::ImageRestorer back( display, pt.x, pt.y, box.width(), box.height() );
@@ -92,7 +98,7 @@ void Dialog::GameInfo()
     text.set( _( "Class" ), fheroes2::FontType::smallWhite() );
     text.draw( pt.x + 52, pt.y + 227, 350, display );
 
-    Interface::PlayersInfo playersInfo( true, true, false );
+    Interface::PlayersInfo playersInfo;
 
     playersInfo.UpdateInfo( conf.GetPlayers(), fheroes2::Point( pt.x + 40, pt.y + 165 ), fheroes2::Point( pt.x + 40, pt.y + 240 ) );
     playersInfo.RedrawInfo( true );
@@ -109,15 +115,8 @@ void Dialog::GameInfo()
     text.set( GameOver::GetActualDescription( conf.ConditionLoss() ), fheroes2::FontType::smallWhite() );
     text.draw( pt.x + 130, pt.y + 398, 272, display );
 
-    text.set( _( "Score: " ) + std::to_string( Game::GetGameOverScores() ), fheroes2::FontType::smallYellow() );
-    text.draw( pt.x + 385 - text.width(), pt.y + 436, 80, display );
-
     fheroes2::Button buttonOk( pt.x + 178, pt.y + 426, ICN::REQUESTS, 1, 2 );
-    fheroes2::ButtonSprite buttonCfg
-        = fheroes2::makeButtonWithShadow( pt.x + 50, pt.y + 426, fheroes2::AGG::GetICN( ICN::BTNCONFIG, 0 ), fheroes2::AGG::GetICN( ICN::BTNCONFIG, 1 ), display );
-
     buttonOk.draw();
-    buttonCfg.draw();
 
     display.render();
 
@@ -126,14 +125,15 @@ void Dialog::GameInfo()
     // message loop
     while ( le.HandleEvents() ) {
         le.MousePressLeft( buttonOk.area() ) ? buttonOk.drawOnPress() : buttonOk.drawOnRelease();
-        le.MousePressLeft( buttonCfg.area() ) ? buttonCfg.drawOnPress() : buttonCfg.drawOnRelease();
 
         if ( le.MouseClickLeft( buttonOk.area() ) || Game::HotKeyCloseWindow() )
             break;
 
-        if ( le.MouseClickLeft( buttonCfg.area() ) ) {
-            Dialog::ExtSettings( true );
-            display.render();
+        if ( le.MousePressRight( buttonOk.area() ) ) {
+            fheroes2::showStandardTextMessage( _( "Okay" ), _( "Exit this menu." ), 0 );
+        }
+        else {
+            playersInfo.readOnlyEventProcessing();
         }
     }
 }

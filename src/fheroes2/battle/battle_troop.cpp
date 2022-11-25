@@ -23,26 +23,40 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstring>
-#include <iomanip>
+#include <ostream>
 
 #include "agg_image.h"
+#include "army.h"
+#include "artifact.h"
+#include "artifact_info.h"
 #include "battle.h"
 #include "battle_arena.h"
 #include "battle_army.h"
+#include "battle_board.h"
 #include "battle_cell.h"
+#include "battle_grave.h"
 #include "battle_interface.h"
 #include "battle_tower.h"
 #include "battle_troop.h"
+#include "castle.h"
+#include "color.h"
 #include "game_static.h"
+#include "heroes_base.h"
+#include "image.h"
 #include "logging.h"
+#include "m82.h"
+#include "monster.h"
 #include "monster_anim.h"
+#include "monster_info.h"
 #include "morale.h"
+#include "rand.h"
+#include "resource.h"
+#include "skill.h"
 #include "speed.h"
+#include "spell.h"
 #include "spell_info.h"
 #include "tools.h"
 #include "translations.h"
-#include "world.h"
 
 Battle::ModeDuration::ModeDuration( uint32_t mode, uint32_t duration )
     : std::pair<uint32_t, uint32_t>( mode, duration )
@@ -176,8 +190,10 @@ void Battle::Unit::SetReflection( bool r )
 
 void Battle::Unit::UpdateDirection()
 {
-    // set auto reflect
-    SetReflection( GetArena()->GetArmyColor1() != GetArmyColor() );
+    const Arena * arena = GetArena();
+    assert( arena != nullptr );
+
+    SetReflection( arena->GetArmy1Color() != GetArmyColor() );
 }
 
 bool Battle::Unit::UpdateDirection( const fheroes2::Rect & pos )
@@ -260,11 +276,15 @@ uint32_t Battle::Unit::GetSpeed() const
 
 int Battle::Unit::GetMorale() const
 {
+    const Arena * arena = GetArena();
+    assert( arena != nullptr );
+
     int armyTroopMorale = ArmyTroop::GetMorale();
 
     // enemy Bone dragons affect morale
-    if ( isAffectedByMorale() && GetArena()->getEnemyForce( GetArmyColor() ).HasMonster( Monster::BONE_DRAGON ) && armyTroopMorale > Morale::TREASON )
+    if ( isAffectedByMorale() && arena->getEnemyForce( GetArmyColor() ).HasMonster( Monster::BONE_DRAGON ) && armyTroopMorale > Morale::TREASON ) {
         --armyTroopMorale;
+    }
 
     return armyTroopMorale;
 }
@@ -505,13 +525,18 @@ uint32_t Battle::Unit::CalculateDamageUnit( const Unit & enemy, double dmg ) con
                 dmg += ( dmg * GetCommander()->GetSecondaryValues( Skill::Secondary::ARCHERY ) / 100 );
             }
 
+            const Arena * arena = GetArena();
+            assert( arena != nullptr );
+
             // check castle defense
-            if ( GetArena()->IsShootingPenalty( *this, enemy ) )
+            if ( arena->IsShootingPenalty( *this, enemy ) ) {
                 dmg /= 2;
+            }
 
             // check spell shield
-            if ( enemy.Modes( SP_SHIELD ) )
+            if ( enemy.Modes( SP_SHIELD ) ) {
                 dmg /= Spell( Spell::SHIELD ).ExtraValue();
+            }
         }
         else if ( !isAbilityPresent( fheroes2::MonsterAbilityType::NO_MELEE_PENALTY ) ) {
             dmg /= 2;
@@ -1158,11 +1183,6 @@ int Battle::Unit::GetControl() const
     return !GetArmy() ? CONTROL_AI : GetArmy()->GetControl();
 }
 
-bool Battle::Unit::isArchers() const
-{
-    return ArmyTroop::isArchers() && shots;
-}
-
 void Battle::Unit::SpellModesAction( const Spell & spell, uint32_t duration, const HeroBase * hero )
 {
     if ( hero ) {
@@ -1508,9 +1528,9 @@ void Battle::Unit::SpellRestoreAction( const Spell & spell, uint32_t spoint, con
         SetPosition( GetPosition() );
 
         if ( Arena::GetInterface() ) {
-            std::string str( _( "%{count} %{name} rise(s) from the dead!" ) );
+            std::string str( _n( "%{count} %{name} rises from the dead!", "%{count} %{name} rise from the dead!", resurrect ) );
             StringReplace( str, "%{count}", resurrect );
-            StringReplace( str, "%{name}", GetName() );
+            StringReplace( str, "%{name}", Monster::GetPluralName( resurrect ) );
             Arena::GetInterface()->SetStatus( str, true );
         }
         break;
@@ -1523,17 +1543,16 @@ void Battle::Unit::SpellRestoreAction( const Spell & spell, uint32_t spoint, con
 
 bool Battle::Unit::isDoubleAttack() const
 {
-    switch ( GetID() ) {
-    case Monster::ELF:
-    case Monster::GRAND_ELF:
-    case Monster::RANGER:
-        return !isHandFighting();
-
-    default:
-        break;
+    if ( isHandFighting() ) {
+        return isAbilityPresent( fheroes2::MonsterAbilityType::DOUBLE_MELEE_ATTACK );
     }
 
-    return ArmyTroop::isDoubleAttack();
+    // Archers with double shooting ability can only fire a second shot if they have enough ammo
+    if ( isAbilityPresent( fheroes2::MonsterAbilityType::DOUBLE_SHOOTING ) ) {
+        return GetShots() > 1;
+    }
+
+    return false;
 }
 
 uint32_t Battle::Unit::GetMagicResist( const Spell & spell, const uint32_t attackingArmySpellPower, const HeroBase * attackingHero ) const
@@ -1679,12 +1698,17 @@ int Battle::Unit::GetColor() const
 
 int Battle::Unit::GetCurrentColor() const
 {
-    if ( Modes( SP_BERSERKER ) )
+    if ( Modes( SP_BERSERKER ) ) {
         return -1; // be aware of unknown color
-    else if ( Modes( SP_HYPNOTIZE ) )
-        return GetArena()->GetOppositeColor( GetArmyColor() );
+    }
 
-    // default
+    if ( Modes( SP_HYPNOTIZE ) ) {
+        const Arena * arena = GetArena();
+        assert( arena != nullptr );
+
+        return arena->GetOppositeColor( GetArmyColor() );
+    }
+
     return GetColor();
 }
 
@@ -1701,15 +1725,15 @@ int Battle::Unit::GetCurrentOrArmyColor() const
 
 int Battle::Unit::GetCurrentControl() const
 {
-    if ( Modes( SP_BERSERKER ) )
+    if ( Modes( SP_BERSERKER ) ) {
         return CONTROL_AI; // let's say that it belongs to AI which is not present in the battle
+    }
 
     if ( Modes( SP_HYPNOTIZE ) ) {
-        const int color = GetCurrentColor();
-        if ( color == GetArena()->GetForce1().GetColor() )
-            return GetArena()->GetForce1().GetControl();
-        else
-            return GetArena()->GetForce2().GetControl();
+        const Arena * arena = GetArena();
+        assert( arena != nullptr );
+
+        return arena->getForce( GetCurrentColor() ).GetControl();
     }
 
     return GetControl();
@@ -1722,5 +1746,8 @@ const HeroBase * Battle::Unit::GetCommander() const
 
 const HeroBase * Battle::Unit::GetCurrentOrArmyCommander() const
 {
-    return GetArena()->getCommander( GetCurrentOrArmyColor() );
+    const Arena * arena = GetArena();
+    assert( arena != nullptr );
+
+    return arena->getCommander( GetCurrentOrArmyColor() );
 }

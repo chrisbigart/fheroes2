@@ -22,6 +22,17 @@
  ***************************************************************************/
 
 #include "game_hotkeys.h"
+
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cstring>
+#include <fstream>
+#include <map>
+#include <set>
+#include <type_traits>
+#include <utility>
+
 #include "localevent.h"
 #include "logging.h"
 #include "screen.h"
@@ -29,13 +40,6 @@
 #include "system.h"
 #include "tinyconfig.h"
 #include "tools.h"
-
-#include <array>
-#include <cassert>
-#include <fstream>
-#include <map>
-#include <set>
-#include <type_traits>
 
 namespace
 {
@@ -144,6 +148,10 @@ namespace
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::CAMPAIGN_SELECT_THIRD_BONUS )]
             = { HotKeyCategory::MAIN_GAME, "select third campaign bonus", fheroes2::Key::KEY_3 };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::CAMPAIGN_VIEW_INTRO )] = { HotKeyCategory::MAIN_GAME, "view campaign intro", fheroes2::Key::KEY_V };
+        hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::CAMPAIGN_SELECT_DIFFICULTY )]
+            = { HotKeyCategory::MAIN_GAME, "select campaign difficulty", fheroes2::Key::KEY_D };
+        hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::CAMPAIGN_RESTART_SCENARIO )]
+            = { HotKeyCategory::MAIN_GAME, "restart campaign scenario", fheroes2::Key::KEY_R };
 
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::DEFAULT_OKAY )] = { HotKeyCategory::DEFAULT_EVENTS, "default okay event", fheroes2::Key::KEY_ENTER };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::DEFAULT_CANCEL )] = { HotKeyCategory::DEFAULT_EVENTS, "default cancel event", fheroes2::Key::KEY_ESCAPE };
@@ -159,7 +167,8 @@ namespace
 
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::BATTLE_RETREAT )] = { HotKeyCategory::BATTLE, "retreat from battle", fheroes2::Key::KEY_R };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::BATTLE_SURRENDER )] = { HotKeyCategory::BATTLE, "surrender during battle", fheroes2::Key::KEY_S };
-        hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::BATTLE_AUTOSWITCH )] = { HotKeyCategory::BATTLE, "toggle battle auto mode", fheroes2::Key::KEY_A };
+        hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::BATTLE_AUTO_SWITCH )] = { HotKeyCategory::BATTLE, "toggle battle auto mode", fheroes2::Key::KEY_A };
+        hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::BATTLE_AUTO_FINISH )] = { HotKeyCategory::BATTLE, "finish the battle in auto mode", fheroes2::Key::KEY_Q };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::BATTLE_OPTIONS )] = { HotKeyCategory::BATTLE, "battle options", fheroes2::Key::KEY_O };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::BATTLE_SKIP )] = { HotKeyCategory::BATTLE, "skip turn in battle", fheroes2::Key::KEY_SPACE };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::BATTLE_WAIT )] = { HotKeyCategory::BATTLE, "wait in battle", fheroes2::Key::KEY_W };
@@ -190,6 +199,10 @@ namespace
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::SCROLL_RIGHT )] = { HotKeyCategory::WORLD_MAP, "scroll right", fheroes2::Key::KEY_KP_6 };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::SCROLL_UP )] = { HotKeyCategory::WORLD_MAP, "scroll up", fheroes2::Key::KEY_KP_8 };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::SCROLL_DOWN )] = { HotKeyCategory::WORLD_MAP, "scroll down", fheroes2::Key::KEY_KP_2 };
+
+#if defined( WITH_DEBUG )
+        hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::TRANSFER_CONTROL_TO_AI )] = { HotKeyCategory::WORLD_MAP, "transfer control to ai", fheroes2::Key::KEY_F8 };
+#endif
 
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::SPLIT_STACK_BY_HALF )] = { HotKeyCategory::MONSTER, "split stack by half", fheroes2::Key::KEY_SHIFT };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::SPLIT_STACK_BY_ONE )] = { HotKeyCategory::MONSTER, "split stack by one", fheroes2::Key::KEY_CONTROL };
@@ -332,7 +345,7 @@ void Game::HotKeysLoad( const std::string & filename )
 void Game::HotKeySave()
 {
     // Save the latest information into the file.
-    const std::string filename = System::ConcatePath( System::GetConfigDirectory( "fheroes2" ), "fheroes2.key" );
+    const std::string filename = System::concatPath( System::GetConfigDirectory( "fheroes2" ), "fheroes2.key" );
 
     std::fstream file( filename.data(), std::fstream::out | std::fstream::trunc );
     if ( !file ) {
@@ -344,15 +357,12 @@ void Game::HotKeySave()
     file.write( data.data(), data.size() );
 }
 
-void Game::KeyboardGlobalFilter( int sdlKey, int mod )
+void Game::globalKeyDownEvent( const fheroes2::Key key, const int32_t modifier )
 {
-    if ( fheroes2::getKeyFromSDL( sdlKey ) == hotKeyEventInfo[hotKeyEventToInt( HotKeyEvent::SYSTEM_FULLSCREEN )].key
-         && !( ( mod & KMOD_ALT ) || ( mod & KMOD_CTRL ) ) ) {
-        fheroes2::engine().toggleFullScreen();
-        fheroes2::Display::instance().render();
-
+    if ( key == hotKeyEventInfo[hotKeyEventToInt( HotKeyEvent::SYSTEM_FULLSCREEN )].key && !( modifier & fheroes2::KeyModifier::KEY_MODIFIER_ALT )
+         && !( modifier & fheroes2::KeyModifier::KEY_MODIFIER_CTRL ) ) {
         Settings & conf = Settings::Get();
-        conf.setFullScreen( fheroes2::engine().isFullScreen() );
+        conf.setFullScreen( !fheroes2::engine().isFullScreen() );
         conf.Save( Settings::configFileName );
     }
 }

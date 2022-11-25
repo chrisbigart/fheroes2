@@ -18,29 +18,42 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <ostream>
+#include <set>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+#include "ai.h"
 #include "ai_normal.h"
 #include "artifact.h"
+#include "artifact_info.h"
+#include "battle.h"
 #include "battle_arena.h"
 #include "battle_army.h"
+#include "battle_board.h"
 #include "battle_cell.h"
 #include "battle_command.h"
 #include "battle_tower.h"
 #include "battle_troop.h"
 #include "castle.h"
+#include "color.h"
 #include "difficulty.h"
 #include "game.h"
 #include "heroes.h"
+#include "heroes_base.h"
 #include "logging.h"
+#include "monster_info.h"
+#include "rand.h"
 #include "settings.h"
-#include "speed.h"
-
-#include <cassert>
-#include <cmath>
-#include <cstdint>
-#include <map>
-#include <set>
-#include <tuple>
-#include <utility>
 
 using namespace Battle;
 
@@ -91,7 +104,7 @@ namespace AI
             MeleeAttackOutcome current;
             current.positionValue = Board::GetCell( cell )->GetQuality();
             current.attackValue = Board::OptimalAttackValue( attacker, defender, cell );
-            current.canAttackImmediately = Board::CanAttackUnitFromPosition( attacker, defender, cell );
+            current.canAttackImmediately = Board::CanAttackTargetFromPosition( attacker, defender, cell );
 
             // Pick target if either position has improved or unit is higher value at the same position quality
             if ( IsOutcomeImproved( current, bestOutcome ) ) {
@@ -208,7 +221,7 @@ namespace AI
         const int currentColor = arena.GetCurrentColor();
 
         // Not the attacker's turn, no further checks
-        if ( currentColor != arena.GetArmyColor1() ) {
+        if ( currentColor != arena.GetArmy1Color() ) {
             return false;
         }
 
@@ -241,7 +254,7 @@ namespace AI
             if ( arena.AutoBattleInProgress() && Arena::GetInterface() != nullptr ) {
                 assert( arena.CanToggleAutoBattle() );
 
-                actions.emplace_back( CommandType::MSG_BATTLE_AUTO, currentColor );
+                actions.emplace_back( CommandType::MSG_BATTLE_AUTO_SWITCH, currentColor );
 
                 DEBUG_LOG( DBG_BATTLE, DBG_INFO, Color::String( currentColor ) << " has used up the limit of turns without deaths, auto battle is turned off" )
             }
@@ -814,7 +827,7 @@ namespace AI
                     continue;
                 }
 
-                if ( Board::CanAttackUnitFromPosition( currentUnit, *nearbyUnit, cell ) ) {
+                if ( Board::CanAttackTargetFromPosition( currentUnit, *nearbyUnit, cell ) ) {
                     targetInfo.cell = cell;
                     targetInfo.unit = nearbyUnit;
 
